@@ -3,3 +3,8 @@
 # publishable/secret API keys and JWT signing keys.
 [functions.claude]
 verify_jwt = false
+
+# The weekly digest is called by a Supabase Cron job, not a login. It checks the
+# x-digest-secret header against the DIGEST_SECRET secret itself.
+[functions.digest]
+verify_jwt = false

@@ -14,6 +14,7 @@ M&A deal tracker and banker CRM for Corporate Development, styled on the Ascot P
 | `supabase/migrations/0001_deal_desk.sql` | Supabase Postgres | Tables, roles and row-level security: every login reads, only `corpdev` logins write, anonymous visitors get nothing. |
 | `supabase/migrations/0002_merge_stages.sql` | Supabase Postgres | Optional: rewrites stored IOI stages to LOI and Signed to Closed. The page already reads them that way. |
 | `supabase/migrations/0003_history.sql` | Supabase Postgres | Change history: a trigger records who changed which deal or banker field, from what, to what. Shown in each drawer and in "What changed" on the CEO view. Run once after 0001. |
+| `supabase/functions/digest` | Supabase Edge Function | Optional weekly email digest (overdue, stalled, due this week, cold bankers, what changed), sent through Resend on a Supabase Cron schedule (`supabase/digest_schedule.sql`). |
 | `supabase/functions/claude` | Supabase Edge Function | Checks the caller is a Corp Dev login, then calls Claude with the Anthropic API key kept server side. |
 | `scripts/logins.mjs` | Your machine | Creates, resets and removes logins with the Supabase service role key. |
 | `.github/workflows/pages.yml` | GitHub Actions | Writes `web/config.js` from repository variables and publishes `web/` to Pages. |
@@ -92,6 +93,36 @@ Usernames become `username@deal-desk.local` behind the scenes; no email is ever 
 1. **Settings > Pages > Build and deployment > Source:** GitHub Actions. (Pages on a private repository needs a paid GitHub plan; on a free plan, make the repository public. The code holds no secrets.)
 2. **Settings > Secrets and variables > Actions > Variables:** add `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (and `USERNAME_DOMAIN` if you changed it). Use the publishable key, never the secret key.
 3. Push to `main`, or run the "Deploy site to GitHub Pages" workflow. The site appears at `https://YOUR_GITHUB_USER.github.io/REPO_NAME/`.
+
+### 5. Change history (recommended)
+
+In the **SQL editor**, run `supabase/migrations/0003_history.sql` once. From then on every change to a deal or banker is recorded (who, which field, from what, to what, when). It shows in each deal and banker drawer and in "What changed" on the CEO view. Logins can read the history; nobody can edit or delete it. Before you run it, the site shows recent updates only.
+
+### 6. Weekly email digest (optional)
+
+Every Monday morning the CEO and Corp Dev get an email with overdue next steps, stalled deals (no update or note in 30 days), next steps due that week, bankers not contacted in 90 days and, with the change history on, what changed. Each item links to the record on the site.
+
+1. Create an account at [resend.com](https://resend.com), verify your company's sending domain, and create an API key.
+2. Set the function's secrets. `DIGEST_SECRET` is any long random string (at least 24 characters); keep a copy for step 4.
+
+   ```bash
+   supabase secrets set DIGEST_SECRET=CHOOSE_A_LONG_RANDOM_STRING RESEND_API_KEY=re_... DIGEST_FROM="Deal desk <dealdesk@yourco.com>" DIGEST_TO="ceo@yourco.com,corpdev1@yourco.com,corpdev2@yourco.com" SITE_URL=https://YOUR_GITHUB_USER.github.io/REPO_NAME/
+   ```
+
+3. Deploy it. `--no-verify-jwt` is safe: the function refuses any call without the secret.
+
+   ```bash
+   supabase functions deploy digest --no-verify-jwt
+   ```
+
+4. Preview it without sending anything:
+
+   ```bash
+   curl -X POST "https://YOUR_PROJECT_REF.supabase.co/functions/v1/digest?dry=1" -H "x-digest-secret: YOUR_DIGEST_SECRET"
+   ```
+
+   Drop `?dry=1` to send one now.
+5. Schedule it: open `supabase/digest_schedule.sql`, replace the two placeholders (your project URL and the same `DIGEST_SECRET`), and run it in the SQL editor. It sends on Mondays at 07:17 UTC; edit the schedule line to change that.
 
 ## Running locally
 
