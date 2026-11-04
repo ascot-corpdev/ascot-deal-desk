@@ -645,7 +645,6 @@ function renderCEO(){
   const upcoming = active.filter(d=>d.nextStepDate && daysUntil(d.nextStepDate) <= 30).sort((a,b)=>a.nextStepDate.localeCompare(b.nextStepDate)).slice(0,7);
   const recent = [...notes].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,7);
   const sorted = [...active].sort((a,b)=>ACTIVE.indexOf(b.stage)-ACTIVE.indexOf(a.stage) || (+b.ev||0)-(+a.ev||0));
-  const topB = [...bankers].sort((a,b)=>(b.lastContact||"").localeCompare(a.lastContact||"")).slice(0,6);
   const lastUpd = deals.reduce((m,d)=>Math.max(m,d.updatedAt||0),0);
   const lastBy = deals.find(d=>d.updatedAt===lastUpd)?.updatedBy;
   const X = ex ? `<span class="ex">Example</span>` : "";
@@ -688,15 +687,9 @@ function renderCEO(){
     ${reasons.length?`<div class="reasons" aria-label="Why deals were dropped">${reasons.map(([r,n])=>`<div class="rr"><span>${esc(r)}</span><span class="num"><b>${n}</b></span><span class="ptrack"><i style="width:${Math.round(n/deadY.length*100)}%"></i></span></div>`).join("")}</div>`:""}
     </div>
   </section>
-  <section class="cols">
-    <div><h3 class="sec">Banker relationships</h3>
-      ${topB.length ? `<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr><th>Banker</th><th>Coverage</th><th>Relationship</th><th class="num">Live mandates</th><th class="num">Last contact</th></tr></thead><tbody>
-      ${topB.map(b=>{ const m=deals.filter(d=>isActive(d)&&(d.bankerIds||[]).includes(b.id)).length; const n=daysUntil(b.lastContact); return `<tr><td><div class="firm">${firmLogo(b,30)}<div><div class="t1">${esc(b.name)}${X}</div><div class="t2">${esc(b.firm||"")}</div><div class="t2 mob">${m} live mandate${m===1?"":"s"} · <span class="${n!=null&&n<-90?"over":""}">last contact ${b.lastContact?fmtDate(b.lastContact):"n/d"}</span></div></div></div></td><td class="c-hide">${esc(b.coverage||"")}</td><td class="c-side"><span class="pill rel-${esc(b.relationship)}">${esc(b.relationship||"n/d")}</span></td><td class="num c-hide">${m}</td><td class="num c-hide ${n!=null&&n<-90?"over":""}">${b.lastContact?fmtDate(b.lastContact):"n/d"}</td></tr>`; }).join("")}
-      </tbody></table></div>` : `<p class="t2">No bankers yet.</p>`}
-    </div>
-    <div><h3 class="sec">Latest context from the team</h3>
+  <section>
+    <h3 class="sec">Latest context from the team</h3>
       ${recent.length ? `<ul class="mlist">${recent.map(n=>{ const d=deals.find(x=>x.id===n.dealId), b=bankers.find(x=>x.id===n.bankerId); return `<li><span class="d">${n.createdAt?new Date(n.createdAt).toLocaleDateString("en-GB",{day:"numeric",month:"short"}):""}</span><div><p><b>${esc(d?d.codename:b?b.name:"General")}</b>${X}: ${esc(n.text)}</p><p class="meta">${esc(n.kind||"Update")}${n.authorId||n.authorName?` · ${esc(nameOf(n.authorId,n.authorName))}`:""}</p></div></li>`; }).join("")}</ul>` : `<p class="t2">No notes yet.</p>`}
-    </div>
   </section>
   <p class="source">Source: Corp Dev deal tracker${lastUpd?`, last updated ${esc(fmtWhen(lastUpd))} by ${esc(nameOf(lastBy, deals.find(d=>d.updatedAt===lastUpd)?.updatedByName))}`:""}. EV and GWP in $M as entered by deal teams; pipeline totals (derived).</p>`;
 }
