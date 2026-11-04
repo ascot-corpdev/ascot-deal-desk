@@ -1413,22 +1413,24 @@ function mailFirm(firm){
   toast(`Draft to ${ppl.length} ${ppl.length===1?"person":"people"} at ${firm}`);
 }
 
-/* ---------- import bankers from a pasted table ---------- */
+/* ---------- import bankers from a pasted table or a CSV file: adds new people, fills gaps for people already in the CRM ---------- */
 function importHTML(){
   const im=S.drawer.im||{};
   return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">Banker CRM</div><h2 id="drTitle">Import bankers</h2></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
   <form class="drawer-b" id="importForm" novalidate>
-    <p style="margin:0">Paste a table from Excel, Outlook or a document, with a header row. Use a <b>Name</b> column for one person per row, or a <b>People</b> column to list several people at one firm, separated by commas. Recognised columns: firm, title, email, phone, coverage, relationship, last contact, notes. Any other column is kept as a note.</p>
-    <label class="f full">Table<textarea id="im_text" rows="9" placeholder="Firm&#9;People&#9;What the emails were about">${esc(im.text||"")}</textarea></label>
+    <p style="margin:0">Paste a table from Excel, Outlook or a document, with a header row, or choose a CSV file. Use a <b>Name</b> column for one person per row, or a <b>People</b> column to list several people at one firm, separated by commas. Recognised columns: firm, title, email, phone, coverage, relationship, last contact, notes. Any other column is kept as a note.</p>
+    <p style="margin:0" class="t2">People already in the CRM are matched by name and firm and only have gaps filled: a missing email, a newer last contact date, extra notes. Nothing you've entered is overwritten.</p>
+    <label class="f full">Choose a file <em>(.csv or .txt)</em><input type="file" id="im_file" accept=".csv,.tsv,.txt,text/csv,text/plain"></label>
+    <label class="f full">Or paste a table<textarea id="im_text" rows="8" placeholder="Firm&#9;Name&#9;Email&#9;Last contact">${esc(im.text||"")}</textarea></label>
     <div class="fgrid">
       <label class="f">Relationship for new people${sel("im_rel",RELS,im.rel||"Active")}</label>
-      <label class="f">Last contact <em>(optional, for everyone)</em><input type="date" id="im_last" value="${esc(im.last||"")}"></label>
+      <label class="f">Last contact <em>(when the table has none)</em><input type="date" id="im_last" value="${esc(im.last||"")}"></label>
       <label class="f full" style="flex-direction:row;align-items:center;gap:8px;font-weight:normal"><input type="checkbox" id="im_link" style="width:auto"${im.link===false?"":" checked"}> Link people to deals whose codename appears in their notes</label>
     </div>
     <div><button type="button" class="btn" data-act="im-preview">Preview</button></div>
     <div id="imPreview"></div>
   </form>
-  <div class="drawer-f"><span class="sp"></span><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="im-save" id="imSave" disabled>Add bankers</button></div>`;
+  <div class="drawer-f"><span class="sp"></span><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="im-save" id="imSave" disabled>Import</button></div>`;
 }
 function splitCSVLine(l){ const out=[]; let cur="", q=false; for(let i=0;i<l.length;i++){ const ch=l[i];
   if(q){ if(ch==='"'&&l[i+1]==='"'){ cur+='"'; i++; } else if(ch==='"') q=false; else cur+=ch; }
@@ -1436,8 +1438,20 @@ function splitCSVLine(l){ const out=[]; let cur="", q=false; for(let i=0;i<l.len
 function splitPeople(t){ const out=[]; let cur="", depth=0;
   for(const ch of String(t||"")){ if(ch==="(") depth++; if(ch===")") depth=Math.max(0,depth-1); if((ch===","||ch===";"||ch==="\n")&&!depth){ out.push(cur); cur=""; } else cur+=ch; }
   out.push(cur); return out.map(x=>x.trim()).filter(Boolean); }
+const personKey = n => String(n||"").toLowerCase().replace(/\(.*?\)/g," ").replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+const firstWord = f => firmKey(f).split(" ")[0]||"";
+const emailDomain = e => (String(e||"").split("@")[1]||"").toLowerCase();
+/* Same person if the name matches and the firm agrees: same first word ("Howden CMA" / "Howden Capital Markets & Advisory"),
+   either side of "Marsh / Guy Carpenter", the same known website, or the same email domain. */
+function findExisting(p){
+  const k=personKey(p.name); if(!k) return null;
+  const alts=String(p.firm||"").split(/\s*\/\s*/).map(firstWord).filter(Boolean);
+  const pd=domainOf({firm:p.firm}), pe=emailDomain(p.email);
+  return S.bankers.find(b=>personKey(b.name)===k && (
+    (!p.firm && !b.firm) || alts.includes(firstWord(b.firm)) || (pd && pd===domainOf(b)) || (pe && pe===emailDomain(b.email)) )) || null;
+}
 function parseImport(text, opts){
-  const lines=String(text||"").replace(/\r/g,"").split("\n").filter(l=>l.trim());
+  const lines=String(text||"").replace(/^\uFEFF/,"").replace(/\r/g,"").split("\n").filter(l=>l.trim());
   if(lines.length<2) return {error:"Paste a header row and at least one row of people."};
   const tsv=lines[0].includes("\t"); const split=l=>tsv?l.split("\t"):splitCSVLine(l);
   const head=split(lines[0]).map(h=>h.trim()); const role={}; const extra=[];
@@ -1450,53 +1464,90 @@ function parseImport(text, opts){
       : /firm|company|bank|organi[sz]ation|employer/.test(x) ? "firm" : /name|banker|person|contact/.test(x) ? "name" : null;
     if(r && !(r in role)) role[r]={i,h}; else extra.push({i,h}); });
   if(!role.people && !role.name) return {error:"Add a Name column (one person per row) or a People column (several people per firm)."};
-  const today=TODAY(); const people=[];
+  const people=[];
   for(const l of lines.slice(1)){ const c=split(l); const get=r=>role[r]?String(c[role[r].i]??"").trim():"";
     let firm=get("firm"), coverage=get("coverage"); const fm=firm.match(/^(.*?)\s*\((.+)\)\s*$/); if(fm){ firm=fm[1].trim(); if(!coverage) coverage=fm[2].trim(); }
     const notes=[]; if(get("context")) notes.push(`${role.context.h}: ${get("context")}`);
-    extra.forEach(e=>{ const v=String(c[e.i]??"").trim(); if(v) notes.push(`${e.h}: ${v}`); });
-    const rel = RELS.find(r=>r.toLowerCase()===get("relationship").toLowerCase()) || opts.rel;
-    const lc = /^\d{4}-\d{2}-\d{2}$/.test(get("lastContact")) ? get("lastContact") : (opts.last||"");
+    let pitchOnly=false;
+    extra.forEach(e=>{ const v=String(c[e.i]??"").trim(); if(!v) return; notes.push(`${e.h}: ${v}`); if(/categor|type|group|segment/i.test(e.h) && /mass e-?mails?|pitch|newsletter|marketing/i.test(v)) pitchOnly=true; });
+    const relCol = RELS.find(r=>r.toLowerCase()===get("relationship").toLowerCase());
+    const rel = relCol || (pitchOnly ? "Dormant" : opts.rel);
+    const lcRaw=get("lastContact"); const lc = /^\d{4}-\d{2}-\d{2}/.test(lcRaw) ? lcRaw.slice(0,10) : (opts.last||"");
+    const emails = role.people ? [] : get("email").split(/[\s;,]+/).filter(isEmail);
     const names = role.people ? splitPeople(get("people")) : [get("name")].filter(Boolean);
     for(const raw of names){ const pm=raw.match(/^(.*?)\s*\((.+)\)\s*$/); const name=(pm?pm[1]:raw).replace(/\s+/g," ").trim(); if(!name) continue;
-      const ctx=[...notes, ...(pm?[`Note: ${pm[2].trim()}`]:[])].join(". ");
-      people.push({name, firm, coverage, title:role.people?"":get("title"), email:role.people?"":get("email"), phone:role.people?"":get("phone"), relationship:rel, lastContact:lc, context:ctx}); }
+      const ctx=[...notes, ...(pm?[`Note: ${pm[2].trim()}`]:[]), ...(emails.length>1?[`Other email: ${emails.slice(1).join(", ")}`]:[])].join(". ");
+      people.push({name, firm, coverage, title:role.people?"":get("title"), email:emails[0]||"", phone:role.people?"":get("phone"), relationship:rel, relFromFile:!!relCol, lastContact:lc, context:ctx}); }
   }
-  // duplicates: same name at the same firm, already in the CRM or repeated in the paste
-  const seen=new Set(S.bankers.map(b=>(b.name||"").toLowerCase()+"|"+firmKey(b.firm)));
   const inPaste=new Set();
-  for(const p of people){ const k=p.name.toLowerCase()+"|"+firmKey(p.firm);
-    p.status = seen.has(k) ? "Already in the CRM" : inPaste.has(k) ? "Repeated in the paste" : ""; p.take=!p.status; inPaste.add(k);
+  for(const p of people){
+    const k=personKey(p.name)+"|"+(String(p.firm).split(/\s*\/\s*/).map(firstWord)[0]||"");
+    const ex=findExisting(p);
     p.deals = opts.link ? S.deals.filter(d=>{ const cn=String(d.codename||"").toLowerCase().trim(); if(!cn) return false; const bare=cn.replace(/^project\s+/,"");
-      const re=new RegExp("\\b"+(bare.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"))+"\\b","i"); return bare.length>=3 && re.test(p.context); }).map(d=>d.id) : []; }
+      const re=new RegExp("\\b"+(bare.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"))+"\\b","i"); return bare.length>=3 && re.test(p.context) && !(ex && (d.bankerIds||[]).includes(ex.id)); }).map(d=>d.id) : [];
+    if(inPaste.has(k)){ p.mode="skip"; p.status="Repeated in the file"; p.take=false; continue; }
+    inPaste.add(k);
+    if(!ex){ p.mode="new"; p.status="New"; p.take=true; continue; }
+    p.mode="update"; p.target=ex.id; p.patch=updatePatch(ex,p);
+    const parts=[]; const pt=p.patch;
+    if(pt.email) parts.push("email"); if(pt.lastContact) parts.push(`last contact ${fmtDate(pt.lastContact)}`);
+    ["title","phone","coverage"].forEach(f=>{ if(pt[f]) parts.push(f); }); if(pt.context) parts.push("notes"); if(p.deals.length) parts.push("deal links");
+    p.status = parts.length ? `Update: ${parts.join(", ")}` : "Already up to date"; p.take = parts.length>0;
+    p.existingFirm = ex.firm;
+  }
   return {people};
+}
+/* Only fill what's missing or newer; never overwrite what someone typed */
+function updatePatch(b,p){
+  const out={};
+  if(p.email && !isEmail(b.email)) out.email=p.email;
+  if(p.lastContact && (!b.lastContact || p.lastContact>b.lastContact)) out.lastContact=p.lastContact;
+  ["title","phone","coverage"].forEach(f=>{ if(p[f] && !String(b[f]||"").trim()) out[f]=p[f]; });
+  if(p.relFromFile && p.relationship!==b.relationship && !b.relationship) out.relationship=p.relationship;
+  const add=String(p.context||"").split(". ").filter(x=>x && !String(b.context||"").includes(x));
+  if(add.length) out.context=[String(b.context||"").trim(), add.join(". ")].filter(Boolean).join(". ");
+  return out;
 }
 function renderImportPreview(){
   const el=document.getElementById("imPreview"); const im=S.drawer&&S.drawer.im; const btn=document.getElementById("imSave"); if(!el||!im) return;
   if(im.error){ el.innerHTML=`<p class="over" role="alert">${esc(im.error)}</p>`; if(btn) btn.disabled=true; return; }
   if(!im.people){ el.innerHTML=""; if(btn) btn.disabled=true; return; }
-  const take=im.people.filter(p=>p.take); const firms=new Set(take.map(p=>firmKey(p.firm))).size; const dup=im.people.filter(p=>p.status).length;
+  const add=im.people.filter(p=>p.take&&p.mode==="new"), upd=im.people.filter(p=>p.take&&p.mode==="update");
+  const same=im.people.filter(p=>p.mode==="update"&&!Object.keys(p.patch).length&&!p.deals.length).length, rep=im.people.filter(p=>p.mode==="skip").length;
+  const firms=new Set(add.map(p=>firmKey(p.firm))).size;
   const dealName=id=>(S.deals.find(d=>d.id===id)||{}).codename||"";
-  el.innerHTML=`<div class="imsum"><b>${take.length} ${take.length===1?"person":"people"} at ${firms} firm${firms===1?"":"s"} to add</b>${dup?`<span class="t2">${dup} skipped as duplicates</span>`:""}<span class="t2">Untick anyone you don't want.</span></div>
-    <div class="tbl-wrap" style="margin-top:8px"><table class="imtbl"><thead><tr><th><span class="sr">Add</span></th><th>Name</th><th>Firm</th><th>Coverage</th><th>Deals</th><th>Note</th></tr></thead><tbody>
-    ${im.people.map((p,i)=>`<tr class="${p.take?"":"skip"}"><td><input type="checkbox" data-imi="${i}" aria-label="Add ${esc(p.name)}"${p.take?" checked":""}></td><td><b>${esc(p.name)}</b>${p.status?`<div class="t2" style="text-decoration:none">${esc(p.status)}</div>`:""}</td><td>${esc(p.firm||"n/d")}</td><td>${esc(p.coverage)}</td><td>${esc(p.deals.map(dealName).join(", "))}</td><td class="t2">${esc(clip(p.context,90))}</td></tr>`).join("")}
+  el.innerHTML=`<div class="imsum"><b>${add.length} new ${add.length===1?"person":"people"}${add.length?` at ${firms} firm${firms===1?"":"s"}`:""}</b><b>${upd.length} to update</b>${same?`<span class="t2">${same} already up to date</span>`:""}${rep?`<span class="t2">${rep} repeated in the file</span>`:""}<span class="t2">Untick anyone you don't want.</span></div>
+    <div class="tbl-wrap" style="margin-top:8px"><table class="imtbl"><thead><tr><th><span class="sr">Include</span></th><th>Name</th><th>Firm</th><th>Email</th><th>Last contact</th><th>Relationship</th><th>Deals</th><th>What happens</th></tr></thead><tbody>
+    ${im.people.map((p,i)=>`<tr class="${p.take?"":"skip"}"><td><input type="checkbox" data-imi="${i}" aria-label="Include ${esc(p.name)}"${p.take?" checked":""}${p.mode==="skip"?" disabled":""}></td><td><b>${esc(p.name)}</b></td><td>${esc(p.mode==="update"?p.existingFirm||p.firm:p.firm||"n/d")}</td><td>${esc(p.email)}</td><td>${p.lastContact?esc(fmtDate(p.lastContact)):""}</td><td>${p.mode==="new"?esc(p.relationship):""}</td><td>${esc(p.deals.map(dealName).join(", "))}</td><td class="t2" style="text-decoration:none">${esc(p.status)}</td></tr>`).join("")}
     </tbody></table></div>`;
-  if(btn){ btn.disabled=!take.length; btn.textContent = take.length ? `Add ${take.length} banker${take.length===1?"":"s"}` : "Add bankers"; }
+  if(btn){ btn.disabled=!(add.length+upd.length);
+    btn.textContent = [add.length?`Add ${add.length}`:"", upd.length?`${add.length?"update":"Update"} ${upd.length}`:""].filter(Boolean).join(" and ") || "Import"; }
 }
 function importPreview(){
   const dr=S.drawer; dr.im={text:document.getElementById("im_text").value, rel:val("im_rel"), last:val("im_last"), link:document.getElementById("im_link").checked};
   Object.assign(dr.im, parseImport(dr.im.text, dr.im)); renderImportPreview();
 }
+async function importFile(input){
+  const f=input.files&&input.files[0]; if(!f) return;
+  if(f.size>2e6){ toast("That file is too large. Use a CSV under 2 MB."); input.value=""; return; }
+  const text=await f.text(); const ta=document.getElementById("im_text"); if(ta) ta.value=text; importPreview();
+}
 async function importSave(){
-  const im=S.drawer&&S.drawer.im; if(!im||!im.people) return; const take=im.people.filter(p=>p.take); if(!take.length) return;
-  const now=Date.now(); const meta={createdAt:now, updatedAt:now, updatedBy:S.meId||"", updatedByName:S.session?.name||""};
-  const rows=take.map(p=>{ const {take:_t,status:_s,deals:_d,...doc}=p; p.id="b"+uid(); return {id:p.id, doc:{...doc, website:"", ...meta}}; });
+  const im=S.drawer&&S.drawer.im; if(!im||!im.people) return;
+  const add=im.people.filter(p=>p.take&&p.mode==="new"), upd=im.people.filter(p=>p.take&&p.mode==="update"); if(!add.length&&!upd.length) return;
+  const now=Date.now(); const meta={updatedAt:now, updatedBy:S.meId||"", updatedByName:S.session?.name||""};
+  const rows=add.map(p=>{ const {take:_t,status:_s,deals:_d,mode:_m,relFromFile:_r,...doc}=p; p.id="b"+uid(); return {id:p.id, doc:{...doc, website:"", createdAt:now, ...meta}}; });
+  let updated=0;
   const ok=await guard(async()=>{
     for(let i=0;i<rows.length;i+=100){ const {error}=await S.sb.from("bankers").insert(rows.slice(i,i+100)); if(error) throw error; }
+    for(const p of upd){ if(!Object.keys(p.patch).length){ p.id=p.target; continue; }
+      try{ await casWrite("bankers", p.target, row=>{ const fresh=updatePatch({...row.doc}, p); return Object.keys(fresh).length ? {doc:{...row.doc, ...fresh, ...meta}} : {stop:true}; }); updated++; }
+      catch(e){ if(!(e&&e.code==="not_found")) throw e; }
+      p.id=p.target; }
     await refetch("bankers");
-    const byDeal={}; take.forEach(p=>p.deals.forEach(d=>(byDeal[d]=byDeal[d]||[]).push(p.id)));
-    for(const [dealId,ids] of Object.entries(byDeal)){ try{ await casWrite("deals", dealId, row=>({doc:{...row.doc, bankerIds:[...new Set([...(row.doc.bankerIds||[]), ...ids])], updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""}})); }catch(e){ if(!(e&&e.code==="not_found")) throw e; } }
-  }, `Added ${take.length} banker${take.length===1?"":"s"}`);
+    const byDeal={}; [...add,...upd].forEach(p=>p.deals.forEach(d=>(byDeal[d]=byDeal[d]||[]).push(p.id)));
+    for(const [dealId,ids] of Object.entries(byDeal)){ try{ await casWrite("deals", dealId, row=>({doc:{...row.doc, bankerIds:[...new Set([...(row.doc.bankerIds||[]), ...ids])], ...meta}})); }catch(e){ if(!(e&&e.code==="not_found")) throw e; } }
+  }, [add.length?`Added ${add.length} banker${add.length===1?"":"s"}`:"", upd.length?`${add.length?"updated":"Updated"} ${upd.length}`:""].filter(Boolean).join(" and "));
   if(ok){ S.bgroup=true; closeDrawer(); }
 }
 
@@ -1754,6 +1805,7 @@ document.addEventListener("input", e=>{
   if(e.target.id==="bq"){ S.bq=e.target.value; const pos=e.target.selectionStart; render(); const n=document.getElementById("bq"); n.value=S.bq; n.focus(); n.setSelectionRange(pos,pos); }
 });
 document.addEventListener("change", e=>{
+  if(e.target.id==="im_file"){ importFile(e.target); return; }
   if(e.target.matches && e.target.matches("input[data-imi]")){ const p=S.drawer&&S.drawer.im&&S.drawer.im.people[+e.target.dataset.imi]; if(p){ p.take=e.target.checked; renderImportPreview(); } return; }
   if(e.target.id==="chgDays"){ S.chgDays=+e.target.value; S.changes=null; render(); document.getElementById("chgDays")?.focus(); return; }
   if(e.target.id==="f_stage"){ const st=e.target.value, box=document.getElementById("outcomeBox"); if(!box) return;
