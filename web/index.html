@@ -195,6 +195,15 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
 .ai-f .row{display:flex;gap:8px;align-items:center}
 .ai-f .row .sp{flex:1;font-size:11px;color:var(--muted)}
 .thinking{font-size:12px;color:var(--muted)}
+.presence{margin-top:4px;font-size:12px;color:var(--blue)}
+.presence:empty{display:none}
+#drAlert:empty{display:none}
+.conflict{background:var(--tile);border-left:4px solid var(--magenta);padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.conflict h3{margin:0;font-size:15px;color:var(--magenta);font-weight:bold}
+.conflict p{margin:0}
+.conflict .cf{display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px solid var(--grid)}
+.conflict .cf .acts{display:flex;gap:8px;flex-wrap:wrap}
+.conflict .btn.on{background:var(--ink);border-color:var(--ink);color:#fff}
 .logo{--s:28px;position:relative;flex:none;width:var(--s);height:var(--s);display:inline-grid;place-items:center;overflow:hidden;
   border:1px solid var(--grid);background:#fff;color:#fff;font-size:calc(var(--s) * .36);font-weight:bold;letter-spacing:.02em;vertical-align:middle}
 .logo b{position:absolute;inset:0;display:grid;place-items:center;background:var(--lc,#262166)}
@@ -293,7 +302,8 @@ const S = {
   profiles:{}, q:"", stageFilter:"active", bq:"",
   drawer:null, sample:null, toolsOk:false, downloads:true,
   ai:{open:false, msgs:[], api:[], busy:false, ctrl:null}, proposals:{},
-  session:null, authChecked:false, started:false, channel:null, loginErr:"", loginBusy:false
+  session:null, authChecked:false, started:false, channel:null, loginErr:"", loginBusy:false,
+  presence:null, presenceReady:false, others:[], editing:null
 };
 const ROLES = {ceo:"CEO", corpdev:"Corp Dev"};
 
@@ -501,8 +511,9 @@ function renderBankers(){
 /* ---------- drawer: deal / banker ---------- */
 function renderDrawer(){
   const root=document.getElementById("drawerRoot"); const dr=S.drawer;
-  if(!dr){ if(root.innerHTML) root.innerHTML=""; return; }
-  if(dr.rendered) { refreshNotes(); return; }  // keep form inputs intact while live data arrives
+  if(!dr){ if(root.innerHTML) root.innerHTML=""; setEditing(null); return; }
+  if(dr.rendered) { refreshNotes(); return; }
+  setEditing(dr.id && (dr.kind==="deal"||dr.kind==="banker") ? dr.kind+":"+dr.id : null);  // keep form inputs intact while live data arrives
   dr.rendered=true;
   let body="";
   if(dr.kind==="view-deal") body=viewDealHTML(dr.id);
@@ -510,6 +521,7 @@ function renderDrawer(){
   else if(dr.kind==="deal") body=dealFormHTML(dr);
   else body=bankerFormHTML(dr);
   root.innerHTML=`<div class="scrim" data-act="close"></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drTitle">${body}</aside>`;
+  renderDrAlert(); renderPresence();
   const f=root.querySelector("input,textarea,select"); if(f && dr.kind!=="view-deal") f.focus();
 }
 
@@ -553,10 +565,11 @@ function noteHTML(n, editable){
 function sel(id,opts,val){ return `<select id="${id}">${opts.map(o=>`<option${o===val?" selected":""}>${esc(o)}</option>`).join("")}</select>`; }
 
 function dealFormHTML(dr){
-  const isNew=!dr.id; const d = isNew ? (dr.seed||{}) : (S.deals.find(x=>x.id===dr.id)||{});
+  const isNew=!dr.id; const d = isNew ? (dr.seed||{}) : (dr.orig||S.deals.find(x=>x.id===dr.id)||{});
   dr.links = dr.links || (d.links||[]).map(l=>({...l}));
-  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${isNew?"New deal":"Edit deal"}</div><h2 id="drTitle">${esc(d.codename||"Untitled deal")}</h2></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
+  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${isNew?"New deal":"Edit deal"}</div><h2 id="drTitle">${esc(d.codename||"Untitled deal")}</h2><div class="presence" id="drPresence" role="status"></div></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
   <form class="drawer-b" id="dealForm" novalidate>
+    <div id="drAlert" role="alert"></div>
     <div class="fgrid">
       <label class="f">Codename<input type="text" id="f_codename" required value="${esc(d.codename||"")}" placeholder="Project Harbor"></label>
       <label class="f">Target<input type="text" id="f_target" value="${esc(d.target||"")}" placeholder="Company or description"></label>
@@ -594,10 +607,11 @@ function dealFormHTML(dr){
 function linkRowsHTML(ls){ return (ls||[]).map((l,i)=>`<div class="linkrow"><input type="text" data-li="${i}" data-lf="label" value="${esc(l.label||"")}" placeholder="Label (IC memo v2)" aria-label="Link label"><input type="url" data-li="${i}" data-lf="url" value="${esc(l.url||"")}" placeholder="https://yourco.sharepoint.com/..." aria-label="Link URL"><button type="button" class="btn sm ghost" data-act="rm-link" data-i="${i}">Remove</button></div>`).join("") || `<p class="t2">No links yet.</p>`; }
 
 function bankerFormHTML(dr){
-  const isNew=!dr.id; const b = isNew ? (dr.seed||{}) : (S.bankers.find(x=>x.id===dr.id)||{});
+  const isNew=!dr.id; const b = isNew ? (dr.seed||{}) : (dr.orig||S.bankers.find(x=>x.id===dr.id)||{});
   const ds = S.deals.filter(d=>(d.bankerIds||[]).includes(b.id));
-  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${isNew?"New banker":"Banker"}</div><h2 id="drTitle" class="firm">${isNew?"":firmLogo(b,32)}<span>${esc(b.name||"New contact")}</span></h2></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
+  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${isNew?"New banker":"Banker"}</div><h2 id="drTitle" class="firm">${isNew?"":firmLogo(b,32)}<span>${esc(b.name||"New contact")}</span></h2><div class="presence" id="drPresence" role="status"></div></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
   <form class="drawer-b" id="bankerForm" novalidate>
+    <div id="drAlert" role="alert"></div>
     <div class="fgrid">
       <label class="f">Name<input type="text" id="b_name" value="${esc(b.name||"")}"></label>
       <label class="f">Firm<input type="text" id="b_firm" value="${esc(b.firm||"")}"></label>
@@ -646,36 +660,139 @@ async function guard(fn, okMsg){
 const val = id => (document.getElementById(id)?.value ?? "").trim();
 const numOrBlank = s => s==="" ? "" : (isNaN(+s) ? "" : +s);
 
-function dealPayloadFromForm(){
+function dealFormValues(){
   readLinks();
-  const links=(S.drawer.links||[]).map(l=>({label:(l.label||"").trim(), url:(l.url||"").trim()})).filter(l=>l.url);
-  const bad = links.find(l=>!safeUrl(l.url)); if(bad) return {error:`"${bad.url}" is not a web address. Paste the full https:// link.`};
-  const codename=val("f_codename"); if(!codename) return {error:"Give the deal a codename."};
-  return {codename, target:val("f_target"), type:val("f_type"), sector:val("f_sector"), stage:val("f_stage"), priority:val("f_priority"),
+  return {codename:val("f_codename"), target:val("f_target"), type:val("f_type"), sector:val("f_sector"), stage:val("f_stage"), priority:val("f_priority"),
     ev:numOrBlank(val("f_ev")), gwp:numOrBlank(val("f_gwp")), stake:numOrBlank(val("f_stake")), origin:val("f_origin"), lead:val("f_lead"),
     nextStep:val("f_nextStep"), nextStepDate:val("f_nextStepDate"), ceoSummary:val("f_ceoSummary"), keyRisks:val("f_keyRisks"),
-    bankerIds:[...document.querySelectorAll('#drawerRoot input[name=bk]:checked')].map(e=>e.value), links};
+    bankerIds:[...document.querySelectorAll('#drawerRoot input[name=bk]:checked')].map(e=>e.value),
+    links:(S.drawer.links||[]).map(l=>({label:(l.label||"").trim(), url:(l.url||"").trim()})).filter(l=>l.url)};
 }
-async function saveDeal(){
-  const p=dealPayloadFromForm(); if(p.error){ toast(p.error); return; }
-  const id=S.drawer.id||("d"+uid()); const prev=S.deals.find(d=>d.id===id);
-  const body={...p, createdAt: prev?.createdAt || Date.now(), createdBy: prev?.createdBy || S.meId || "", updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""};
-  if(await guard(()=>S.db.collection("deals").doc(id).set(body), prev?"Saved":"Deal created")) closeDrawer();
+function dealPayloadFromForm(){
+  const p=dealFormValues();
+  const bad = p.links.find(l=>!safeUrl(l.url)); if(bad) return {error:`"${bad.url}" is not a web address. Paste the full https:// link.`};
+  if(!p.codename) return {error:"Give the deal a codename."};
+  return p;
 }
+function bankerFormValues(){
+  return {name:val("b_name"), firm:val("b_firm"), website:cleanDomain(val("b_website")), title:val("b_title"), coverage:val("b_coverage"), email:val("b_email"), phone:val("b_phone"),
+    relationship:val("b_relationship"), lastContact:val("b_lastContact"), context:val("b_context")};
+}
+
+/* ---------- concurrent editing ----------
+   The drawer keeps the record as it was when opened (dr.orig) and the form as first shown (dr.base).
+   A save sends only the fields this user changed, merged onto the latest row, and writes only if
+   nobody saved in between (compare-and-set on updated_at). */
+const META_KEYS=["id","_v","_by"];
+function stripMeta(o){ const r={...(o||{})}; META_KEYS.forEach(k=>delete r[k]); return r; }
+const normV = v => v==null ? "" : v;
+function same(a,b){ a=normV(a); b=normV(b); return (typeof a==="object"||typeof b==="object") ? JSON.stringify(a)===JSON.stringify(b) : String(a)===String(b); }
+async function latestRow(table,id){
+  const {data,error}=await S.sb.from(table).select("id,doc,updated_at,updated_by").eq("id",id).maybeSingle();
+  if(error) throw error; return data||null;
+}
+/* build(row) returns {doc} to write, or {stop:true,...} to write nothing. One retry if someone saves in between. */
+async function casWrite(table,id,build){
+  let last=null;
+  for(let i=0;i<2;i++){
+    const row=await latestRow(table,id); if(!row){ await refetch(table); throw {code:"not_found"}; }
+    const r=build(row); if(!r||r.stop) return r||{stop:true};
+    const {data,error}=await S.sb.from(table).update({doc:stripMeta(r.doc)}).eq("id",id).eq("updated_at",row.updated_at).select("id");
+    if(error) throw error;
+    if(data&&data.length){ await refetch(table); return {ok:true}; }
+    last=row;
+  }
+  const now=await latestRow(table,id);
+  if(now && last && now.updated_at===last.updated_at) throw {code:"denied"};
+  throw {message:"someone else keeps saving this record. Wait a moment and try again"};
+}
+function whoChanged(row){ const d=row.doc||{}; return (row.updated_by && d.updatedBy && d.updatedBy!==row.updated_by) ? nameOf(row.updated_by) : nameOf(row.updated_by, d.updatedByName); }
+const FIELD_LABELS={codename:"Codename",target:"Target",type:"Deal type",sector:"Sector",stage:"Stage",priority:"Priority",ev:"Enterprise value",gwp:"Target GWP",stake:"Stake",
+  origin:"Origin",lead:"Deal lead",nextStep:"Next step",nextStepDate:"Next step date",ceoSummary:"CEO summary",keyRisks:"Key risks",bankerIds:"Bankers",links:"Decks and files",
+  name:"Name",firm:"Firm",website:"Firm website",title:"Title",coverage:"Coverage",email:"Email",phone:"Phone",relationship:"Relationship",lastContact:"Last contact",context:"Relationship context"};
+function showVal(k,v){
+  if(k==="bankerIds"){ const a=Array.isArray(v)?v:[]; return a.map(i=>(S.bankers.find(b=>b.id===i)||{}).name||"a removed banker").join(", ")||"none"; }
+  if(k==="links"){ const a=Array.isArray(v)?v:[]; return a.map(l=>l.label||l.url).join(", ")||"none"; }
+  v=normV(v); if(v==="") return "blank";
+  if(/Date$|lastContact/.test(k)) return fmtDate(v);
+  v=String(v); return v.length>140 ? v.slice(0,140)+"…" : v;
+}
+function setFormField(k,v){
+  const dr=S.drawer;
+  if(k==="links"){ dr.links=(Array.isArray(v)?v:[]).map(l=>({...l})); const el=document.getElementById("linkRows"); if(el) el.innerHTML=linkRowsHTML(dr.links); return; }
+  if(k==="bankerIds"){ const a=Array.isArray(v)?v:[]; document.querySelectorAll('#drawerRoot input[name=bk]').forEach(e=>e.checked=a.includes(e.value)); return; }
+  const e=document.getElementById((dr.kind==="deal"?"f_":"b_")+k); if(e) e.value=normV(v);
+}
+function openEditor(kind,id){
+  const rec=(kind==="deal"?S.deals:S.bankers).find(x=>x.id===id); if(!rec) return;
+  S.drawer={kind, id, orig:JSON.parse(JSON.stringify(rec))}; renderDrawer(); refreshNotes();
+  S.drawer.base = kind==="deal" ? dealFormValues() : bankerFormValues();
+}
+function renderDrAlert(){
+  const el=document.getElementById("drAlert"); const dr=S.drawer; if(!el||!dr) return;
+  const noun=dr.kind==="deal"?"deal":"banker";
+  if(dr.gone){ el.innerHTML=`<div class="conflict"><h3>This ${noun} was deleted by someone else</h3><p>Your changes are still in the form. Recreate the ${noun} with them, or discard them.</p>
+    <div class="acts" style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn sm primary" data-act="gone-recreate">Recreate it</button><button type="button" class="btn sm" data-act="close">Discard my changes</button></div></div>`; return; }
+  if(dr.conflicts && dr.conflicts.length){
+    el.innerHTML=`<div class="conflict"><h3>Someone else saved this ${noun} while you were editing</h3><p>Choose which value to keep for each field, then save. Their other changes are kept.</p>
+    ${dr.conflicts.map((c,i)=>`<div class="cf"><div>${esc(c.who)} changed <b>${esc(FIELD_LABELS[c.k]||c.k)}</b> to <b>${esc(showVal(c.k,c.theirs))}</b> while you were editing; you have <b>${esc(showVal(c.k,c.mine))}</b>.</div>
+      <div class="acts"><button type="button" class="btn sm${c.choice==="theirs"?" on":""}" data-act="cf-pick" data-i="${i}" data-c="theirs" aria-pressed="${c.choice==="theirs"}">Keep theirs</button><button type="button" class="btn sm${c.choice==="mine"?" on":""}" data-act="cf-pick" data-i="${i}" data-c="mine" aria-pressed="${c.choice==="mine"}">Use mine</button></div></div>`).join("")}
+    <div><button type="button" class="btn sm primary" data-act="save-${dr.kind}">Save</button></div></div>`;
+    return; }
+  el.innerHTML="";
+}
+async function saveRecord(kind){
+  const dr=S.drawer; if(!dr) return; const table=kind==="deal"?"deals":"bankers";
+  const read=()=>kind==="deal"?dealFormValues():bankerFormValues();
+  if(kind==="deal"){ const p=dealPayloadFromForm(); if(p.error){ toast(p.error); return; } }
+  else if(!val("b_name")){ toast("Add the banker's name."); return; }
+  const meta={updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""};
+  if(!dr.id){
+    const id=(kind==="deal"?"d":"b")+uid();
+    const body={...read(), createdAt:Date.now(), ...(kind==="deal"?{createdBy:S.meId||""}:{}), ...meta};
+    if(await guard(()=>S.db.collection(table).doc(id).set(body), kind==="deal"?"Deal created":"Banker added")) closeDrawer();
+    return;
+  }
+  if(dr.gone){ toast("Choose Recreate it or Discard my changes."); return; }
+  if(dr.conflicts){
+    if(dr.conflicts.some(c=>!c.choice)){ toast("Choose Keep theirs or Use mine for each field."); return; }
+    for(const c of dr.conflicts){ dr.orig[c.k]=c.theirs; if(c.choice==="theirs") setFormField(c.k,c.theirs); }
+    const now=read(); for(const c of dr.conflicts) if(c.choice==="theirs") dr.base[c.k]=now[c.k];
+    dr.conflicts=null; renderDrAlert();
+  }
+  const mine=read();
+  const changed=Object.keys(mine).filter(k=>!same(mine[k],dr.base[k]));
+  if(!changed.length){ toast("No changes to save"); closeDrawer(); return; }
+  try{
+    const r=await casWrite(table, dr.id, row=>{
+      const latest=row.doc||{};
+      const cs=changed.filter(k=>!same(latest[k],dr.orig[k]) && !same(mine[k],latest[k])).map(k=>({k, theirs:latest[k], mine:mine[k], who:whoChanged(row)}));
+      if(cs.length) return {stop:true, conflicts:cs};
+      return {doc:{...stripMeta(latest), ...Object.fromEntries(changed.map(k=>[k,mine[k]])), ...meta}};
+    });
+    if(r.conflicts){ if(S.drawer===dr){ dr.conflicts=r.conflicts; renderDrAlert(); document.getElementById("drAlert")?.scrollIntoView({block:"nearest"}); } return; }
+    toast("Saved"); if(S.drawer===dr) closeDrawer();
+  }catch(e){
+    if(e&&e.code==="not_found"){ if(S.drawer===dr){ dr.gone=true; renderDrAlert(); } return; }
+    await guard(()=>{ throw e; });
+  }
+}
+async function recreateRecord(){
+  const dr=S.drawer; if(!dr||!dr.gone) return; const kind=dr.kind; const table=kind==="deal"?"deals":"bankers";
+  if(kind==="deal"){ const p=dealPayloadFromForm(); if(p.error){ toast(p.error); return; } }
+  else if(!val("b_name")){ toast("Add the banker's name."); return; }
+  const body={...stripMeta(dr.orig), ...(kind==="deal"?dealFormValues():bankerFormValues()), updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""};
+  if(await guard(()=>S.db.collection(table).doc(dr.id).set(body), kind==="deal"?"Deal recreated":"Banker recreated")) closeDrawer();
+}
+const saveDeal = () => saveRecord("deal");
+const saveBanker = () => saveRecord("banker");
 async function deleteDeal(id){
   const ns=S.notes.filter(n=>n.dealId===id);
   if(await guard(async()=>{ await S.db.collection("deals").doc(id).delete(); for(const n of ns) await S.db.collection("notes").doc(n.id).delete(); }, "Deal deleted")) closeDrawer();
 }
-async function saveBanker(){
-  const name=val("b_name"); if(!name){ toast("Add the banker's name."); return; }
-  const id=S.drawer.id||("b"+uid()); const prev=S.bankers.find(b=>b.id===id);
-  const body={name, firm:val("b_firm"), website:cleanDomain(val("b_website")), title:val("b_title"), coverage:val("b_coverage"), email:val("b_email"), phone:val("b_phone"), relationship:val("b_relationship"), lastContact:val("b_lastContact"), context:val("b_context"),
-    createdAt:prev?.createdAt||Date.now(), updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""};
-  if(await guard(()=>S.db.collection("bankers").doc(id).set(body), prev?"Saved":"Banker added")) closeDrawer();
-}
 async function deleteBanker(id){
   const linked=S.deals.filter(d=>(d.bankerIds||[]).includes(id));
-  if(await guard(async()=>{ await S.db.collection("bankers").doc(id).delete(); for(const d of linked) await S.db.collection("deals").doc(d.id).update({bankerIds:(d.bankerIds||[]).filter(x=>x!==id)}); }, "Banker deleted")) closeDrawer();
+  if(await guard(async()=>{ await S.db.collection("bankers").doc(id).delete(); for(const d of linked){ try{ await casWrite("deals", d.id, row=>({doc:{...row.doc, bankerIds:(row.doc.bankerIds||[]).filter(x=>x!==id)}})); }catch(e){ if(!(e&&e.code==="not_found")) throw e; } } }, "Banker deleted")) closeDrawer();
 }
 async function addNote(target, kind, text){
   const body={kind, text, createdAt:Date.now(), authorId:S.meId||"", authorName:S.session?.name||""}; body[target.kind==="deal"?"dealId":"bankerId"]=target.id;
@@ -857,9 +974,9 @@ document.addEventListener("click", async e=>{
     case "change-pw": S.drawer={kind:"password"}; renderDrawer(); break;
     case "save-pw": t.disabled=true; await savePassword(); t.disabled=false; break;
     case "view-deal": S.drawer={kind:"view-deal",id}; renderDrawer(); break;
-    case "edit-deal": if(!canEditNow()||demoMode()) return; S.drawer={kind:"deal",id}; renderDrawer(); refreshNotes(); break;
+    case "edit-deal": if(!canEditNow()||demoMode()) return; openEditor("deal",id); break;
     case "new-deal": if(!canEditNow()) return; S.drawer={kind:"deal",id:null,links:[{label:"",url:""}]}; renderDrawer(); break;
-    case "edit-banker": if(!canEditNow()||demoMode()) return; S.drawer={kind:"banker",id}; renderDrawer(); refreshNotes(); break;
+    case "edit-banker": if(!canEditNow()||demoMode()) return; openEditor("banker",id); break;
     case "new-banker": if(!canEditNow()) return; S.drawer={kind:"banker",id:null}; renderDrawer(); break;
     case "add-link": readLinks(); S.drawer.links.push({label:"",url:""}); document.getElementById("linkRows").innerHTML=linkRowsHTML(S.drawer.links); break;
     case "rm-link": readLinks(); S.drawer.links.splice(+t.dataset.i,1); document.getElementById("linkRows").innerHTML=linkRowsHTML(S.drawer.links); break;
@@ -869,8 +986,12 @@ document.addEventListener("click", async e=>{
     case "del-deal-yes": await deleteDeal(S.drawer.id); break;
     case "del-banker-yes": await deleteBanker(S.drawer.id); break;
     case "save-banker": t.disabled=true; await saveBanker(); t.disabled=false; break;
+    case "cf-pick": { const c=S.drawer&&S.drawer.conflicts&&S.drawer.conflicts[+t.dataset.i]; if(c){ c.choice=t.dataset.c; renderDrAlert(); } break; }
+    case "gone-recreate": t.disabled=true; await recreateRecord(); t.disabled=false; break;
     case "add-note": { const txt=val("n_text"); if(!txt){ toast("Write the note first."); return; } t.disabled=true;
-      if(await addNote({kind:S.drawer.kind,id:S.drawer.id}, val("n_kind"), txt)) document.getElementById("n_text").value=""; t.disabled=false; break; }
+      const dr=S.drawer; if(await addNote({kind:dr.kind,id:dr.id}, val("n_kind"), txt)){ document.getElementById("n_text").value="";
+        if(dr.kind==="banker" && S.drawer===dr){ const e=document.getElementById("b_lastContact"); if(e && dr.base && e.value===normV(dr.base.lastContact)){ e.value=TODAY(); dr.base.lastContact=TODAY(); } if(dr.orig) dr.orig.lastContact=TODAY(); } }
+      t.disabled=false; break; }
     case "del-note": if(S.drawer.confirmNote===id){ S.drawer.confirmNote=null; await guard(()=>S.db.collection("notes").doc(id).delete(),"Note deleted"); } else { S.drawer.confirmNote=id; refreshNotes(); } break;
     case "export": exportCSV(); break;
     case "ai-open": S.ai.open=true; renderAI(); document.getElementById("aiInput")?.focus(); break;
@@ -902,20 +1023,16 @@ const TABLES = ["deals","bankers","notes"];
 function makeDb(sb){
   return { collection(table){ return { doc(id){ return {
     async set(body){ const {error}=await sb.from(table).upsert({id, doc:body}); if(error) throw error; await refetch(table); },
-    async update(patch){
-      const cur=(S[table]||[]).find(r=>r.id===id); if(!cur){ await refetch(table); throw {code:"not_found"}; }
-      const {id:_drop, ...rest}=cur;
-      const {data, error}=await sb.from(table).update({doc:{...rest, ...patch}}).eq("id", id).select("id");
-      if(error) throw error; if(!data||!data.length) throw {code:"denied"}; await refetch(table); },
+    async update(patch){ await casWrite(table, id, row=>({doc:{...(row.doc||{}), ...patch}})); },
     async delete(){ const {data, error}=await sb.from(table).delete().eq("id", id).select("id"); if(error) throw error; if(!data||!data.length) throw {code:"denied"}; await refetch(table); }
   }; } }; } };
 }
 async function refetch(table){
-  let q=S.sb.from(table).select("id,doc");
+  let q=S.sb.from(table).select("id,doc,updated_at,updated_by");
   if(table==="notes") q=q.order("updated_at",{ascending:false}).limit(1000);
   const {data, error}=await q;
   if(error){ if(!S.loaded[table]) toast("Couldn't load the tracker: "+error.message); return; }
-  S[table]=(data||[]).map(r=>({...(r.doc||{}), id:r.id}));
+  S[table]=(data||[]).map(r=>({...(r.doc||{}), id:r.id, _v:r.updated_at, _by:r.updated_by}));
   S.loaded[table]=true; if(table==="deals") clearTimeout(startData.timer);
   if(S.drawer && S.drawer.kind==="view-deal") S.drawer.rendered=false;
   render();
@@ -925,8 +1042,30 @@ async function loadProfiles(){
   const {data}=await S.sb.from("profiles").select("id,display_name");
   (data||[]).forEach(p=>{ S.profiles[p.id]={name:p.display_name}; });
 }
+/* "Also editing" notice: Realtime presence, one entry per open tab */
+const TAB_ID=uid();
+function startPresence(){
+  if(S.presence || !S.sb || !S.sb.channel) return;
+  const ch=S.sb.channel("deal-desk-presence",{config:{presence:{key:TAB_ID}}});
+  ch.on("presence",{event:"sync"},()=>{ S.others=Object.values(ch.presenceState()||{}).flat(); renderPresence(); });
+  ch.subscribe(st=>{ if(st==="SUBSCRIBED"){ S.presenceReady=true; trackPresence(); } });
+  S.presence=ch;
+}
+function trackPresence(){ if(!S.presence||!S.presenceReady||!S.session) return; Promise.resolve().then(()=>S.presence&&S.presence.track({id:S.meId, name:S.session.name, editing:S.editing||null})).catch(()=>{}); }
+function setEditing(key){ key=key||null; if(S.editing===key) return; S.editing=key; trackPresence(); }
+function stopPresence(){
+  const ch=S.presence; S.presence=null; S.presenceReady=false; S.others=[]; S.editing=null;
+  if(ch){ Promise.resolve().then(()=>ch.untrack()).catch(()=>{}).finally(()=>{ try{ S.sb.removeChannel(ch); }catch{} }); }
+}
+function renderPresence(){
+  const el=document.getElementById("drPresence"); const dr=S.drawer; if(!el) return;
+  const key = dr && dr.id && (dr.kind==="deal"||dr.kind==="banker") ? dr.kind+":"+dr.id : null;
+  const names = key ? [...new Set((S.others||[]).filter(p=>p.editing===key && p.id!==S.meId).map(p=>p.name||"A teammate"))] : [];
+  el.textContent = names.length ? `${names.join(" and ")} ${names.length>1?"are":"is"} editing this ${dr.kind}` : "";
+}
 function startData(){
   if(S.started) return; S.started=true;
+  startPresence();
   startData.timer=setTimeout(()=>{ S.stale=true; render(); }, 10000);
   loadProfiles().then(render);
   TABLES.forEach(refetch);
@@ -936,6 +1075,7 @@ function startData(){
 }
 function stopData(){
   if(S.channel){ S.sb.removeChannel(S.channel); S.channel=null; }
+  stopPresence();
   S.started=false; TABLES.forEach(t=>{ S[t]=[]; S.loaded[t]=false; });
 }
 
