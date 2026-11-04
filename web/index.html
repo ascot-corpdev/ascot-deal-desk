@@ -139,6 +139,17 @@ th[aria-sort="none"] .sorth:is(:hover,:focus-visible) .ar::before{content:"↕";
 .fchip .sw.st-done{background:var(--teal)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .mob{display:none}
+tr.firmrow td{background:var(--tile)!important;border-top:2px solid var(--ink);padding:10px}
+tr.firmrow .t1{font-size:15px}
+tr.firmrow .rowacts{align-items:center}
+tr.inrow td:first-child{padding-left:24px}
+.btn[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.imtbl{font-size:12px}
+.imtbl td,.imtbl th{padding:5px 7px}
+.imtbl tr.skip td{color:var(--muted);text-decoration:line-through}
+.imsum{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;font-size:13px}
+.colleagues{display:flex;flex-wrap:wrap;gap:6px}
+.colleagues a{font-size:13px}
 .ceohead{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-start;justify-content:space-between}
 .ceohead>div:first-child{flex:1 1 420px;min-width:0}
 .ceoacts{display:flex;gap:8px;flex-wrap:wrap}
@@ -338,6 +349,9 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
   table.cards td.c-hide{display:none!important}
   table.cards td[data-label]::before{content:attr(data-label);display:block;font-size:11px;font-weight:bold;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
   table.cards .mob{display:block;margin-top:2px}
+  table.cards tr.firmrow{display:block;border:0;border-top:2px solid var(--ink);padding:10px 0 6px;margin:14px 0 8px;background:transparent}
+  table.cards tr.firmrow td{display:block;background:transparent!important;border:0;padding:0}
+  table.cards tr.inrow td:first-child{padding-left:0}
   .firm{gap:8px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
@@ -454,10 +468,17 @@ const FIRM_DOMAINS = {
   "raymond james":"raymondjames.com","barclays":"barclays.com","citi":"citigroup.com","citigroup":"citigroup.com","bank of america":"bankofamerica.com",
   "bofa":"bankofamerica.com","ubs":"ubs.com","deutsche bank":"db.com","rbc":"rbccm.com","rbc capital markets":"rbccm.com","bmo":"bmo.com",
   "wells fargo":"wellsfargo.com","hsbc":"hsbc.com","nomura":"nomura.com","mizuho":"mizuhogroup.com","truist":"truist.com","stifel":"stifel.com",
-  "william blair":"williamblair.com","deloitte":"deloitte.com","pwc":"pwc.com","ey":"ey.com","kpmg":"kpmg.com","milliman":"milliman.com"
+  "william blair":"williamblair.com","cavendish":"cavendish.com","chardan":"chardan.com","howden capital markets & advisory":"howdengroup.com","deloitte":"deloitte.com","pwc":"pwc.com","ey":"ey.com","kpmg":"kpmg.com","milliman":"milliman.com"
 };
 function cleanDomain(v){ return String(v||"").trim().toLowerCase().replace(/^https?:\/\//,"").replace(/^www\./,"").split(/[\/?#\s]/)[0]; }
-function domainOf(b){ return cleanDomain(b && b.website) || FIRM_DOMAINS[String((b&&b.firm)||"").trim().toLowerCase()] || ""; }
+/* Firm names as typed ("Guy Carpenter Capital & Advisory", "Marsh (CMA team)") match the known firm they start with */
+function firmKey(f){ return String(f||"").toLowerCase().replace(/\(.*?\)/g," ").replace(/[.,]/g,"").replace(/\s+/g," ").trim(); }
+const FIRM_KEYS = Object.keys(FIRM_DOMAINS).map(k=>[firmKey(k),FIRM_DOMAINS[k]]).sort((a,b)=>b[0].length-a[0].length);
+function domainOf(b){
+  const w=cleanDomain(b && b.website); if(w) return w;
+  const k=firmKey(b && b.firm); if(!k) return "";
+  const m=FIRM_KEYS.find(([x])=>k===x || k.startsWith(x+" ")); return m ? m[1] : "";
+}
 function initialsOf(t){ const w=String(t||"?").replace(/[^A-Za-z0-9 &]/g," ").trim().split(/\s+/).filter(x=>x&&x!=="&"); const a=w[0]||"?"; return (w[1] ? a[0]+w[1][0] : a.slice(0,2)).toUpperCase(); }
 const LOGO_COLORS=["#262166","#00539E","#944599","#00857C","#0081C3","#EB008C"];
 function firmLogo(b, size){
@@ -780,18 +801,33 @@ function renderBankers(){
     return `<li${edit&&!ex?` class="click" data-act="edit-banker" data-id="${esc(b.id)}" tabindex="0"`:""}><span class="d over">${b.lastContact?`${-n} days`:"Never"}</span><div><p><b>${esc(b.name)}</b>${X} · ${esc(b.firm||"")}</p><p class="meta">${esc(b.relationship)} relationship · last contact ${b.lastContact?fmtDate(b.lastContact):"not recorded"} · ${m} live mandate${m===1?"":"s"}</p></div></li>`; }).join("")}</ul></section>`:""}
   <section class="toolbar">
     <div class="grow"><input type="search" id="bq" placeholder="Search bankers and their notes" aria-label="Search bankers and their notes"></div>
-    ${edit?`<button class="btn primary" data-act="new-banker">Add banker</button>`:""}
+    <button type="button" class="btn" data-act="bgroup" aria-pressed="${S.bgroup!==false}">Group by firm</button>
+    ${edit?`<button type="button" class="btn" data-act="import-open">Import</button><button class="btn primary" data-act="new-banker">Add banker</button>`:""}
   </section>
   ${bankerChipsHTML(base)}
   <section>${rows.length?`<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr>${sortTh("Banker","name","","b")}<th class="opt">Coverage</th>${sortTh("Relationship","rel","","b")}${sortTh("Deals shown to us","deals","","b")}${sortTh("Last contact","last","num","b")}<th><span class="sr">Actions</span></th></tr></thead><tbody>
-    ${rows.map(b=>{ const ds=deals.filter(d=>(d.bankerIds||[]).includes(b.id)); const n=daysUntil(b.lastContact); return `<tr class="click" data-act="${ex?"":"edit-banker"}" data-id="${esc(b.id)}" tabindex="0">
-      <td><div class="firm">${firmLogo(b,34)}<div><div class="t1">${esc(b.name)}${X}</div><div class="t2">${esc([b.firm,b.title].filter(Boolean).join(" · "))}</div><div class="t2 mob">${esc(b.coverage||"")}</div><div class="t2 mob${n!=null&&n<-90?" over":""}">Last contact ${b.lastContact?fmtDate(b.lastContact):"n/d"}</div>${S.bHits&&S.bHits[b.id]?`<div class="t2 hit">In a note: ${S.bHits[b.id]}</div>`:""}</div></div></td><td class="c-hide opt">${esc(b.coverage||"")}</td>
+    ${bankerRows(rows, deals, ex, edit, X)}
+  </tbody></table></div>`:`<div class="empty"><p>No bankers match.</p></div>`}</section>
+  <p class="source">Source: Corp Dev banker CRM. Last contact in red when older than 90 days.</p>`;
+}
+function bankerRows(rows, deals, ex, edit, X){
+  const grouped = S.bgroup!==false;
+  const row = b => { const ds=deals.filter(d=>(d.bankerIds||[]).includes(b.id)); const n=daysUntil(b.lastContact); return `<tr class="click${grouped?" inrow":""}" data-act="${ex?"":"edit-banker"}" data-id="${esc(b.id)}" tabindex="0">
+      <td><div class="firm">${grouped?"":firmLogo(b,34)}<div><div class="t1">${esc(b.name)}${X}</div><div class="t2">${esc((grouped?[b.title]:[b.firm,b.title]).filter(Boolean).join(" · "))}</div><div class="t2 mob">${esc(b.coverage||"")}</div><div class="t2 mob${n!=null&&n<-90?" over":""}">Last contact ${b.lastContact?fmtDate(b.lastContact):"n/d"}</div>${S.bHits&&S.bHits[b.id]?`<div class="t2 hit">In a note: ${S.bHits[b.id]}</div>`:""}</div></div></td><td class="c-hide opt">${esc(b.coverage||"")}</td>
       <td class="c-side"><span class="pill rel-${esc(b.relationship)}">${esc(b.relationship||"n/d")}</span></td>
       <td class="c-full" data-label="Deals shown to us">${ds.length?ds.map(d=>`${esc(d.codename)} <span class="t2">(${esc(d.stage)})</span>`).join("<br>"):'<span class="t2">None yet</span>'}</td>
       <td class="num c-hide ${n!=null&&n<-90?"over":""}">${b.lastContact?fmtDate(b.lastContact):"n/d"}</td>
-      <td class="c-hide"><div class="rowacts">${edit&&!ex?`<button class="btn sm" data-act="edit-banker" data-id="${esc(b.id)}">Edit</button>`:""}</div></td></tr>`; }).join("")}
-  </tbody></table></div>`:`<div class="empty"><p>No bankers match.</p></div>`}</section>
-  <p class="source">Source: Corp Dev banker CRM. Last contact in red when older than 90 days.</p>`;
+      <td class="c-hide"><div class="rowacts">${edit&&!ex?`<button class="btn sm" data-act="edit-banker" data-id="${esc(b.id)}">Edit</button>`:""}</div></td></tr>`; };
+  if(!grouped) return rows.map(row).join("");
+  const groups=new Map();
+  for(const b of rows){ const k=firmKey(b.firm)||"~"; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(b); }
+  // With a column sort, firms follow their top person under that sort; otherwise alphabetical
+  const keys = S.bsort ? [...groups.keys()] : [...groups.keys()].sort((a,b)=>a==="~"?1:b==="~"?-1:a.localeCompare(b));
+  return keys.map(k=>{ const ppl=groups.get(k); const firm=k==="~"?"No firm recorded":ppl[0].firm;
+    const live=deals.filter(d=>isActive(d)&&(d.bankerIds||[]).some(id=>ppl.some(p=>p.id===id))).length;
+    const last=ppl.map(p=>p.lastContact||"").sort().pop();
+    return `<tr class="firmrow"><td colspan="5"><div class="firm">${k==="~"?"":firmLogo({firm, website:(ppl.find(p=>p.website)||{}).website},34)}<div><div class="t1">${esc(firm)}</div><div class="t2">${ppl.length} ${ppl.length===1?"person":"people"} · ${live} live mandate${live===1?"":"s"} · last contact ${last?fmtDate(last):"not recorded"}</div></div></div></td>
+      <td class="c-hide"><div class="rowacts">${edit&&!ex&&k!=="~"?`<button class="btn sm ghost" data-act="new-banker" data-firm="${esc(firm)}" aria-label="Add a person at ${esc(firm)}">Add person</button>`:""}</div></td></tr>${ppl.map(row).join("")}`; }).join("");
 }
 
 /* ---------- drawer: deal / banker ---------- */
@@ -805,6 +841,7 @@ function renderDrawer(){
   if(dr.kind==="view-deal") body=viewDealHTML(dr.id);
   else if(dr.kind==="password") body=passwordFormHTML();
   else if(dr.kind==="deal") body=dealFormHTML(dr);
+  else if(dr.kind==="import") body=importHTML();
   else body=bankerFormHTML(dr);
   root.innerHTML=`<div class="scrim" data-act="close"></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drTitle">${body}</aside>`;
   renderDrAlert(); renderPresence(); renderHistory(); loadHistory(histKey(dr));
@@ -926,6 +963,7 @@ function bankerFormHTML(dr){
       <label class="f full">Relationship context<textarea id="b_context" rows="3">${esc(b.context||"")}</textarea></label>
     </div></div>
     ${isNew?"":`<div><h3 class="sec">Deals shown to us</h3>${ds.length?ds.map(d=>`<div>${esc(d.codename)} ${stagePill(d.stage)}</div>`).join(""):'<p class="t2">None linked yet. Link bankers from a deal.</p>'}</div>
+    ${(()=>{ const mates=b.firm?S.bankers.filter(x=>x.id!==b.id && firmKey(x.firm)===firmKey(b.firm)):[]; return mates.length?`<div><h3 class="sec">Others at ${esc(b.firm)}</h3><div class="colleagues">${mates.map(m=>`<a href="#banker/${encodeURIComponent(m.id)}" data-act="open-mate" data-id="${esc(m.id)}">${esc(m.name)}</a>${m.title?` <span class="t2">${esc(m.title)}</span>`:""}`).join("<span class=\"t2\">·</span>")}</div></div>`:""; })()}
     <div><h3 class="sec">Interactions</h3>
       <div class="addnote">${sel("n_kind",NOTE_KINDS,"Call")}<textarea id="n_text" rows="2" placeholder="What was discussed; logging updates last contact"></textarea><button type="button" class="btn sm primary" data-act="add-note">Log interaction</button></div>
       <div class="notes" id="noteList"></div></div>
@@ -1322,6 +1360,93 @@ async function exportBoardPack(){
   toast("Board pack downloaded");
 }
 
+/* ---------- import bankers from a pasted table ---------- */
+function importHTML(){
+  const im=S.drawer.im||{};
+  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">Banker CRM</div><h2 id="drTitle">Import bankers</h2></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
+  <form class="drawer-b" id="importForm" novalidate>
+    <p style="margin:0">Paste a table from Excel, Outlook or a document, with a header row. Use a <b>Name</b> column for one person per row, or a <b>People</b> column to list several people at one firm, separated by commas. Recognised columns: firm, title, email, phone, coverage, relationship, last contact, notes. Any other column is kept as a note.</p>
+    <label class="f full">Table<textarea id="im_text" rows="9" placeholder="Firm&#9;People&#9;What the emails were about">${esc(im.text||"")}</textarea></label>
+    <div class="fgrid">
+      <label class="f">Relationship for new people${sel("im_rel",RELS,im.rel||"Active")}</label>
+      <label class="f">Last contact <em>(optional, for everyone)</em><input type="date" id="im_last" value="${esc(im.last||"")}"></label>
+      <label class="f full" style="flex-direction:row;align-items:center;gap:8px;font-weight:normal"><input type="checkbox" id="im_link" style="width:auto"${im.link===false?"":" checked"}> Link people to deals whose codename appears in their notes</label>
+    </div>
+    <div><button type="button" class="btn" data-act="im-preview">Preview</button></div>
+    <div id="imPreview"></div>
+  </form>
+  <div class="drawer-f"><span class="sp"></span><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="im-save" id="imSave" disabled>Add bankers</button></div>`;
+}
+function splitCSVLine(l){ const out=[]; let cur="", q=false; for(let i=0;i<l.length;i++){ const ch=l[i];
+  if(q){ if(ch==='"'&&l[i+1]==='"'){ cur+='"'; i++; } else if(ch==='"') q=false; else cur+=ch; }
+  else if(ch==='"') q=true; else if(ch===","){ out.push(cur); cur=""; } else cur+=ch; } out.push(cur); return out; }
+function splitPeople(t){ const out=[]; let cur="", depth=0;
+  for(const ch of String(t||"")){ if(ch==="(") depth++; if(ch===")") depth=Math.max(0,depth-1); if((ch===","||ch===";"||ch==="\n")&&!depth){ out.push(cur); cur=""; } else cur+=ch; }
+  out.push(cur); return out.map(x=>x.trim()).filter(Boolean); }
+function parseImport(text, opts){
+  const lines=String(text||"").replace(/\r/g,"").split("\n").filter(l=>l.trim());
+  if(lines.length<2) return {error:"Paste a header row and at least one row of people."};
+  const tsv=lines[0].includes("\t"); const split=l=>tsv?l.split("\t"):splitCSVLine(l);
+  const head=split(lines[0]).map(h=>h.trim()); const role={}; const extra=[];
+  head.forEach((h,i)=>{ const x=h.toLowerCase();
+    const r = /^(people|names|contacts|bankers)$/.test(x) ? "people"
+      : /last\s*(contact|contacted|email|met|spoke)/.test(x) ? "lastContact"
+      : /about|note|context|topic|subject|comment/.test(x) ? "context"
+      : /e-?mail/.test(x) ? "email" : /phone|mobile|tel/.test(x) ? "phone" : /title|role|position/.test(x) ? "title"
+      : /coverage|sector|team|focus/.test(x) ? "coverage" : /relationship|strength/.test(x) ? "relationship"
+      : /firm|company|bank|organi[sz]ation|employer/.test(x) ? "firm" : /name|banker|person|contact/.test(x) ? "name" : null;
+    if(r && !(r in role)) role[r]={i,h}; else extra.push({i,h}); });
+  if(!role.people && !role.name) return {error:"Add a Name column (one person per row) or a People column (several people per firm)."};
+  const today=TODAY(); const people=[];
+  for(const l of lines.slice(1)){ const c=split(l); const get=r=>role[r]?String(c[role[r].i]??"").trim():"";
+    let firm=get("firm"), coverage=get("coverage"); const fm=firm.match(/^(.*?)\s*\((.+)\)\s*$/); if(fm){ firm=fm[1].trim(); if(!coverage) coverage=fm[2].trim(); }
+    const notes=[]; if(get("context")) notes.push(`${role.context.h}: ${get("context")}`);
+    extra.forEach(e=>{ const v=String(c[e.i]??"").trim(); if(v) notes.push(`${e.h}: ${v}`); });
+    const rel = RELS.find(r=>r.toLowerCase()===get("relationship").toLowerCase()) || opts.rel;
+    const lc = /^\d{4}-\d{2}-\d{2}$/.test(get("lastContact")) ? get("lastContact") : (opts.last||"");
+    const names = role.people ? splitPeople(get("people")) : [get("name")].filter(Boolean);
+    for(const raw of names){ const pm=raw.match(/^(.*?)\s*\((.+)\)\s*$/); const name=(pm?pm[1]:raw).replace(/\s+/g," ").trim(); if(!name) continue;
+      const ctx=[...notes, ...(pm?[`Note: ${pm[2].trim()}`]:[])].join(". ");
+      people.push({name, firm, coverage, title:role.people?"":get("title"), email:role.people?"":get("email"), phone:role.people?"":get("phone"), relationship:rel, lastContact:lc, context:ctx}); }
+  }
+  // duplicates: same name at the same firm, already in the CRM or repeated in the paste
+  const seen=new Set(S.bankers.map(b=>(b.name||"").toLowerCase()+"|"+firmKey(b.firm)));
+  const inPaste=new Set();
+  for(const p of people){ const k=p.name.toLowerCase()+"|"+firmKey(p.firm);
+    p.status = seen.has(k) ? "Already in the CRM" : inPaste.has(k) ? "Repeated in the paste" : ""; p.take=!p.status; inPaste.add(k);
+    p.deals = opts.link ? S.deals.filter(d=>{ const cn=String(d.codename||"").toLowerCase().trim(); if(!cn) return false; const bare=cn.replace(/^project\s+/,"");
+      const re=new RegExp("\\b"+(bare.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"))+"\\b","i"); return bare.length>=3 && re.test(p.context); }).map(d=>d.id) : []; }
+  return {people};
+}
+function renderImportPreview(){
+  const el=document.getElementById("imPreview"); const im=S.drawer&&S.drawer.im; const btn=document.getElementById("imSave"); if(!el||!im) return;
+  if(im.error){ el.innerHTML=`<p class="over" role="alert">${esc(im.error)}</p>`; if(btn) btn.disabled=true; return; }
+  if(!im.people){ el.innerHTML=""; if(btn) btn.disabled=true; return; }
+  const take=im.people.filter(p=>p.take); const firms=new Set(take.map(p=>firmKey(p.firm))).size; const dup=im.people.filter(p=>p.status).length;
+  const dealName=id=>(S.deals.find(d=>d.id===id)||{}).codename||"";
+  el.innerHTML=`<div class="imsum"><b>${take.length} ${take.length===1?"person":"people"} at ${firms} firm${firms===1?"":"s"} to add</b>${dup?`<span class="t2">${dup} skipped as duplicates</span>`:""}<span class="t2">Untick anyone you don't want.</span></div>
+    <div class="tbl-wrap" style="margin-top:8px"><table class="imtbl"><thead><tr><th><span class="sr">Add</span></th><th>Name</th><th>Firm</th><th>Coverage</th><th>Deals</th><th>Note</th></tr></thead><tbody>
+    ${im.people.map((p,i)=>`<tr class="${p.take?"":"skip"}"><td><input type="checkbox" data-imi="${i}" aria-label="Add ${esc(p.name)}"${p.take?" checked":""}></td><td><b>${esc(p.name)}</b>${p.status?`<div class="t2" style="text-decoration:none">${esc(p.status)}</div>`:""}</td><td>${esc(p.firm||"n/d")}</td><td>${esc(p.coverage)}</td><td>${esc(p.deals.map(dealName).join(", "))}</td><td class="t2">${esc(clip(p.context,90))}</td></tr>`).join("")}
+    </tbody></table></div>`;
+  if(btn){ btn.disabled=!take.length; btn.textContent = take.length ? `Add ${take.length} banker${take.length===1?"":"s"}` : "Add bankers"; }
+}
+function importPreview(){
+  const dr=S.drawer; dr.im={text:document.getElementById("im_text").value, rel:val("im_rel"), last:val("im_last"), link:document.getElementById("im_link").checked};
+  Object.assign(dr.im, parseImport(dr.im.text, dr.im)); renderImportPreview();
+}
+async function importSave(){
+  const im=S.drawer&&S.drawer.im; if(!im||!im.people) return; const take=im.people.filter(p=>p.take); if(!take.length) return;
+  const now=Date.now(); const meta={createdAt:now, updatedAt:now, updatedBy:S.meId||"", updatedByName:S.session?.name||""};
+  const rows=take.map(p=>{ const {take:_t,status:_s,deals:_d,...doc}=p; p.id="b"+uid(); return {id:p.id, doc:{...doc, website:"", ...meta}}; });
+  const ok=await guard(async()=>{
+    for(let i=0;i<rows.length;i+=100){ const {error}=await S.sb.from("bankers").insert(rows.slice(i,i+100)); if(error) throw error; }
+    await refetch("bankers");
+    const byDeal={}; take.forEach(p=>p.deals.forEach(d=>(byDeal[d]=byDeal[d]||[]).push(p.id)));
+    for(const [dealId,ids] of Object.entries(byDeal)){ try{ await casWrite("deals", dealId, row=>({doc:{...row.doc, bankerIds:[...new Set([...(row.doc.bankerIds||[]), ...ids])], updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""}})); }catch(e){ if(!(e&&e.code==="not_found")) throw e; } }
+  }, `Added ${take.length} banker${take.length===1?"":"s"}`);
+  if(ok){ S.bgroup=true; closeDrawer(); }
+}
+
 /* ---------- CSV export ---------- */
 async function exportCSV(){
   const {bankers}=D(); const rows=filteredDeals();
@@ -1497,7 +1622,7 @@ document.addEventListener("click", async e=>{
   if(S.menuOpen && !e.target.closest("#whoMenu,#whoDot")) setMenu(false);
   const t=e.target.closest("[data-act]"); if(!t) return; const a=t.dataset.act, id=t.dataset.id;
   if(t.closest("#whoMenu")) setMenu(false);
-  if(["new-deal","new-banker","change-pw"].includes(a)) S.lastFocusEl = t.closest("#whoMenu") ? document.getElementById("whoDot") : t;
+  if(["new-deal","new-banker","change-pw","import-open"].includes(a)) S.lastFocusEl = t.closest("#whoMenu") ? document.getElementById("whoDot") : t;
   if(t.tagName==="TR" && e.target.closest("button,a")) return;
   switch(a){
     case "close": closeDrawer(); break;
@@ -1514,7 +1639,12 @@ document.addEventListener("click", async e=>{
     case "bfilter": S.bfilter=t.dataset.v; render(); document.querySelector(`.fchip[data-act="bfilter"][data-v="${CSS.escape(t.dataset.v)}"]`)?.focus(); break;
     case "new-deal": if(!canEditNow()) return; S.drawer={kind:"deal",id:null,links:[{label:"",url:""}]}; renderDrawer(); break;
     case "edit-banker": if(!canEditNow()||demoMode()) return; goRecord("banker",id,"edit"); break;
-    case "new-banker": if(!canEditNow()) return; S.drawer={kind:"banker",id:null}; renderDrawer(); break;
+    case "new-banker": if(!canEditNow()) return; S.drawer={kind:"banker",id:null,seed:t.dataset.firm?{firm:t.dataset.firm}:undefined}; renderDrawer(); break;
+    case "open-mate": e.preventDefault(); history.replaceState(null,"","#banker/"+encodeURIComponent(id)); S.lastFocusId=id; openRoute({kind:"banker",id}); break;
+    case "bgroup": S.bgroup = S.bgroup===false; render(); document.querySelector('[data-act="bgroup"]')?.focus(); break;
+    case "import-open": if(!canEditNow()) return; S.lastFocusEl=t; S.drawer={kind:"import"}; renderDrawer(); break;
+    case "im-preview": importPreview(); break;
+    case "im-save": t.disabled=true; await importSave(); if(t.isConnected) t.disabled=false; break;
     case "add-link": readLinks(); S.drawer.links.push({label:"",url:""}); document.getElementById("linkRows").innerHTML=linkRowsHTML(S.drawer.links); break;
     case "rm-link": readLinks(); S.drawer.links.splice(+t.dataset.i,1); document.getElementById("linkRows").innerHTML=linkRowsHTML(S.drawer.links); break;
     case "save-deal": t.disabled=true; await saveDeal(); t.disabled=false; break;
@@ -1567,6 +1697,7 @@ document.addEventListener("input", e=>{
   if(e.target.id==="bq"){ S.bq=e.target.value; const pos=e.target.selectionStart; render(); const n=document.getElementById("bq"); n.value=S.bq; n.focus(); n.setSelectionRange(pos,pos); }
 });
 document.addEventListener("change", e=>{
+  if(e.target.matches && e.target.matches("input[data-imi]")){ const p=S.drawer&&S.drawer.im&&S.drawer.im.people[+e.target.dataset.imi]; if(p){ p.take=e.target.checked; renderImportPreview(); } return; }
   if(e.target.id==="chgDays"){ S.chgDays=+e.target.value; S.changes=null; render(); document.getElementById("chgDays")?.focus(); return; }
   if(e.target.id==="f_stage"){ const st=e.target.value, box=document.getElementById("outcomeBox"); if(!box) return;
     const done=["Closed","Dead"].includes(st); box.hidden=!done; document.getElementById("reasonWrap").hidden = st!=="Dead";
