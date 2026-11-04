@@ -139,6 +139,22 @@ th[aria-sort="none"] .sorth:is(:hover,:focus-visible) .ar::before{content:"↕";
 .fchip .sw.st-done{background:var(--teal)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .mob{display:none}
+.stall{display:inline-block;font-size:10px;font-weight:bold;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border:1px dashed var(--muted);padding:0 5px;margin-left:6px;vertical-align:1px}
+.age{margin-top:4px;white-space:nowrap}
+.hit{margin-top:3px;font-style:italic}
+.hit b{font-style:normal;background:var(--tile);color:var(--ink)}
+.fchip.stale{color:var(--muted);border-style:dashed}
+.fchip.stale[aria-pressed="true"]{background:var(--muted);border-color:var(--muted);color:#fff}
+.fchip .sw.rel{border:1px solid currentColor;background:transparent}
+.mlist li.click{cursor:pointer}
+.mlist li.click:hover p b{color:var(--magenta)}
+.outc{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}
+.reasons{display:flex;flex-direction:column;gap:6px}
+.reasons .rr{display:grid;grid-template-columns:minmax(0,1.3fr) 28px minmax(0,1fr);gap:10px;align-items:center;font-size:13px}
+.reasons .ptrack i{background:var(--muted)}
+/* Optional columns give way when space is short (narrow windows, or the Claude panel docked) */
+@media (min-width:701px) and (max-width:1100px){table .opt{display:none}}
+@media (min-width:1200px) and (max-width:1640px){body.ai-docked table .opt{display:none}}
 /* Pills and chips */
 .pill{display:inline-block;padding:2px 8px;font-size:11px;font-weight:bold;border:1px solid currentColor;white-space:nowrap}
 /* Stages: one colour step per stage plus a progress marker, so how far a deal has got reads at a glance */
@@ -432,6 +448,24 @@ function stagePill(st){
   const steps = n ? `<span class="stp" aria-hidden="true">${ACTIVE.map((_,i)=>`<i${i<n?' class="on"':""}></i>`).join("")}</span>` : "";
   return `<span class="pill ${STAGE_CLASS[st]||"st-hold"}"${n?` title="Step ${n} of ${ACTIVE.length}"`:""}>${steps}${esc(st||"n/d")}</span>`;
 }
+const DAY_MS=86400000, STALL_DAYS=30;
+const DEAD_REASONS=["Price / valuation","Lost to another buyer","Strategic fit","Diligence findings","Seller withdrew","Timing / capacity","Other"];
+function daysSince(ms){ return ms ? Math.floor((Date.now()-ms)/DAY_MS) : null; }
+function stageAge(d){ if(d.stageSince) return {n:daysSince(d.stageSince), exact:true}; if(d.createdAt>1e11) return {n:daysSince(d.createdAt), exact:false}; return null; }
+function ageHTML(d){
+  if(!isActive(d)) return ""; const a=stageAge(d); if(!a||a.n==null) return "";
+  return `<div class="t2 age"${a.exact?"":` title="Stage start not recorded; counted from when the deal was added"`}>${a.n}${a.exact?"":"+"} day${a.n===1?"":"s"} in stage</div>`;
+}
+function lastNoteAt(kind,id){
+  const {notes}=D(); if(lastNoteAt.src!==notes){ lastNoteAt.src=notes; lastNoteAt.m={}; for(const n of notes){ const k=n.dealId?"d:"+n.dealId:n.bankerId?"b:"+n.bankerId:""; if(k) lastNoteAt.m[k]=Math.max(lastNoteAt.m[k]||0, n.createdAt||0); } }
+  return lastNoteAt.m[(kind==="deal"?"d:":"b:")+id]||0;
+}
+function lastActivity(d){ return Math.max(d.updatedAt||0, d.createdAt>1e11?d.createdAt:0, lastNoteAt("deal",d.id)); }
+function isStalled(d){ const la=lastActivity(d); return isActive(d) && !!la && daysSince(la)>=STALL_DAYS; }
+function stallTag(d){ return isStalled(d) ? `<span class="stall" title="No updates or notes in ${daysSince(lastActivity(d))} days">Stalled</span>` : ""; }
+function snippet(t,q){ t=String(t||""); const i=t.toLowerCase().indexOf(q); if(i<0) return esc(t.slice(0,90));
+  const a=Math.max(0,i-40), b=Math.min(t.length,i+q.length+60);
+  return (a?"…":"")+esc(t.slice(a,i))+"<b>"+esc(t.slice(i,i+q.length))+"</b>"+esc(t.slice(i+q.length,b))+(b<t.length?"…":""); }
 function isOverdue(d){ const n=daysUntil(d.nextStepDate); return isActive(d) && n!=null && n<0; }
 function fmtAgo(ms){ if(!ms) return ""; const m=Math.round((Date.now()-ms)/60000); if(m<1) return "just now"; if(m<60) return `${m} min ago`; const h=Math.round(m/60); if(h<24) return `${h} h ago`; return fmtWhen(ms); }
 function savedLine(r){
@@ -455,8 +489,50 @@ function canEditNow(){ return !!S.db && !S.writeLocked && !!S.session && S.sessi
 function isCEO(){ return S.session && S.session.role==="ceo"; }
 
 /* ---------- routing ---------- */
-function route(){ const h=(location.hash||"").replace("#",""); let v = ["ceo","deals","bankers"].includes(h) ? h : "ceo";
-  if(v==="deals" && isCEO()) v="ceo"; S.view=v; render(); }
+/* Links: #ceo, #deals, #bankers, or #deal/<id> and #banker/<id> to open a record. Back closes the drawer. */
+function parseHash(){ let h=(location.hash||"").replace(/^#/,""); try{ h=decodeURIComponent(h); }catch{} const m=h.match(/^(deal|banker)\/(.+)$/); return m?{kind:m[1],id:m[2]}:{view:h}; }
+function route(){
+  const r=parseHash();
+  if(r.kind){
+    S.view = r.kind==="banker" ? "bankers" : isCEO() ? "ceo" : (S.routed && S.view==="ceo") ? "ceo" : "deals";
+    S.routed=true; render(); openRoute(r); return;
+  }
+  S.pushed=false;
+  if(S.drawer && S.drawer.id && ["deal","view-deal","banker"].includes(S.drawer.kind)) S.drawer=null;
+  let v = ["ceo","deals","bankers"].includes(r.view) ? r.view : "ceo";
+  if(v==="deals" && isCEO()) v="ceo"; S.view=v; S.routed=true; render(); focusBack();
+}
+function openRoute(r){
+  const tbl = r.kind==="deal" ? "deals" : "bankers";
+  if(!S.session || !S.loaded[tbl]){ S.pendingRoute=r; return; }
+  S.pendingRoute=null;
+  const dr=S.drawer;
+  if(dr && dr.id===r.id && (r.kind==="banker" ? dr.kind==="banker" : (dr.kind==="deal"||dr.kind==="view-deal"))) return;
+  const rec=D()[tbl].find(x=>x.id===r.id);
+  if(!rec){ toast(r.kind==="deal" ? "That deal isn't in the tracker. It may have been deleted." : "That banker isn't in the CRM. They may have been deleted."); history.replaceState(null,"","#"+S.view); S.pushed=false; return; }
+  const mode=S.wantMode; S.wantMode=null; S.lastFocusId=S.lastFocusId||r.id;
+  if(r.kind==="deal"){
+    if(mode!=="view" && canEditNow() && !demoMode() && !S.dbMissing) openEditor("deal",r.id);
+    else { S.drawer={kind:"view-deal",id:r.id}; renderDrawer(); }
+  } else if(canEditNow() && !demoMode()) openEditor("banker",r.id);
+  else { history.replaceState(null,"","#bankers"); S.pushed=false; }
+}
+function goRecord(kind,id,mode){
+  S.wantMode=mode||null; S.lastFocusId=id;
+  const h="#"+kind+"/"+encodeURIComponent(id);
+  if(location.hash===h) openRoute({kind,id}); else { S.pushed=true; location.hash=h; }
+}
+function focusBack(){
+  if(S.drawer) return;
+  const el=S.lastFocusEl, id=S.lastFocusId; S.lastFocusEl=null; S.lastFocusId=null;
+  if(el && el.isConnected){ el.focus(); return; }
+  if(id){ const q=CSS.escape(id); (document.querySelector(`tr[data-id="${q}"]`)||document.querySelector(`li[data-id="${q}"]`)||document.querySelector(`[data-id="${q}"]`))?.focus(); }
+}
+async function copyLink(kind,id){
+  const url=location.origin+location.pathname+"#"+kind+"/"+encodeURIComponent(id);
+  try{ await navigator.clipboard.writeText(url); toast("Link copied"); }catch{ toast("Copy this link: "+url); }
+}
+const linkBtn = (kind,id) => `<button type="button" class="btn sm ghost" data-act="copy-link" data-k="${kind}" data-id="${esc(id)}">Copy link</button>`;
 window.addEventListener("hashchange", route);
 
 /* ---------- render ---------- */
@@ -497,6 +573,11 @@ function renderCEO(){
   const ev = active.reduce((s,d)=>s+(+d.ev||0),0), lateEv = late.reduce((s,d)=>s+(+d.ev||0),0);
   const engaged = bankers.filter(b => b.lastContact && daysUntil(b.lastContact) >= -90).length;
   const overdue = active.filter(d => d.nextStepDate && daysUntil(d.nextStepDate) < 0);
+  const stalled = active.filter(isStalled);
+  const yr = new Date().getFullYear();
+  const outYear = d => d.outcomeDate ? +String(d.outcomeDate).slice(0,4) : new Date(d.stageSince||d.updatedAt||0).getFullYear();
+  const closedY = deals.filter(d=>d.stage==="Closed" && outYear(d)===yr), deadY = deals.filter(d=>d.stage==="Dead" && outYear(d)===yr);
+  const reasons = Object.entries(deadY.reduce((m,d)=>{ const r=d.deadReason||"No reason recorded"; m[r]=(m[r]||0)+1; return m; },{})).sort((a,b)=>b[1]-a[1]);
   const title = `${active.length} active deal${active.length===1?"":"s"}; ${late.length} at LOI or later worth ${money(lateEv)} EV`;
   const byStage = ACTIVE.map(st => { const ds=active.filter(d=>d.stage===st); return {st, n:ds.length, ev:ds.reduce((s,d)=>s+(+d.ev||0),0)}; });
   const maxEv = Math.max(1,...byStage.map(b=>b.ev));
@@ -510,7 +591,7 @@ function renderCEO(){
 
   return `
   <section><h2 class="action-title">${esc(title)}</h2>
-    <p class="sub">${overdue.length ? `<span class="over">${overdue.length} next step${overdue.length===1?" is":"s are"} past due.</span> ` : ""}Pipeline EV ${money(ev)} across ${active.length} live situation${active.length===1?"":"s"}.</p></section>
+    <p class="sub">${overdue.length ? `<span class="over">${overdue.length} next step${overdue.length===1?" is":"s are"} past due.</span> ` : ""}${stalled.length ? `<b>${stalled.length} deal${stalled.length===1?" has":"s have"} stalled</b> (no updates or notes in ${STALL_DAYS} days). ` : ""}Pipeline EV ${money(ev)} across ${active.length} live situation${active.length===1?"":"s"}.</p></section>
   <section class="tiles" aria-label="Headline numbers">
     <div class="tile"><b class="c-navy">${active.length}</b><span>Active deals</span><small>${deals.length - active.length} closed, held or dead</small></div>
     <div class="tile"><b class="c-mag">${late.length}</b><span>At LOI or diligence</span><small>${money(lateEv)} EV</small></div>
@@ -530,10 +611,17 @@ function renderCEO(){
     </div>
   </section>
   <section><h3 class="sec">Deal summaries and decks</h3>
-    ${sorted.length ? `<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr><th>Deal</th><th>Stage</th><th class="num">EV ($M)</th><th>Summary</th><th>Decks</th><th>Lead</th></tr></thead><tbody>
+    ${sorted.length ? `<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr><th>Deal</th><th>Stage</th><th class="num">EV ($M)</th><th>Summary</th><th>Decks</th><th class="opt">Lead</th></tr></thead><tbody>
     ${sorted.map(d=>{ const meta=[moneyM(d.ev)&&("EV "+moneyM(d.ev)), moneyM(d.gwp)&&("GWP "+moneyM(d.gwp)), d.lead].filter(Boolean).join(" · ");
-      return `<tr class="click" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${X}</div><div class="t2">${esc(d.target||"")}</div>${meta?`<div class="t2 mob">${esc(meta)}</div>`:""}</td><td class="c-side">${stagePill(d.stage)}</td><td class="num c-hide">${esc(mnum(d.ev))}${moneyM(d.gwp)?`<div class="t2">GWP ${esc(mnum(d.gwp))}</div>`:""}</td><td class="summary c-full">${d.ceoSummary?`<div class="clamp">${esc(d.ceoSummary)}</div>${d.ceoSummary.length>150?`<span class="more">More</span>`:""}`:'<span class="t2">No summary yet</span>'}</td><td class="c-full" data-label="Decks">${links(d.links)}</td><td class="c-hide">${esc(d.lead||"")}</td></tr>`; }).join("")}
+      return `<tr class="click" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${X}${stallTag(d)}</div><div class="t2">${esc(d.target||"")}</div>${meta?`<div class="t2 mob">${esc(meta)}</div>`:""}</td><td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="num c-hide">${esc(mnum(d.ev))}${moneyM(d.gwp)?`<div class="t2">GWP ${esc(mnum(d.gwp))}</div>`:""}</td><td class="summary c-full">${d.ceoSummary?`<div class="clamp">${esc(d.ceoSummary)}</div>${d.ceoSummary.length>150?`<span class="more">More</span>`:""}`:'<span class="t2">No summary yet</span>'}</td><td class="c-full" data-label="Decks">${links(d.links)}</td><td class="c-hide opt">${esc(d.lead||"")}</td></tr>`; }).join("")}
     </tbody></table></div>` : `<div class="empty"><p>No active deals.</p></div>`}
+  </section>
+  <section><h3 class="sec">Outcomes in ${yr}</h3>
+    <div class="outc">
+      <div class="tile"><b class="c-teal">${closedY.length}</b><span>Closed</span><small>${money(closedY.reduce((s,d)=>s+(+d.ev||0),0))} EV</small></div>
+      <div class="tile"><b class="c-navy">${deadY.length}</b><span>Dropped (dead)</span><small>${deadY.length?`Most common reason: ${esc(reasons[0][0])}`:"None this year"}</small></div>
+    </div>
+    ${reasons.length?`<div class="reasons" aria-label="Why deals were dropped">${reasons.map(([r,n])=>`<div class="rr"><span>${esc(r)}</span><span class="num"><b>${n}</b></span><span class="ptrack"><i style="width:${Math.round(n/deadY.length*100)}%"></i></span></div>`).join("")}</div>`:""}
   </section>
   <section class="cols">
     <div><h3 class="sec">Banker relationships</h3>
@@ -549,7 +637,7 @@ function renderCEO(){
 }
 
 const PRIORITY_ORDER=["High","Medium","Low"];
-const DEAL_FILTERS = [["active","Active",isActive],["overdue","Overdue",isOverdue]].concat(STAGES.map(st=>[st,st,d=>d.stage===st])).concat([["all","All",()=>true]]);
+const DEAL_FILTERS = [["active","Active",isActive],["overdue","Overdue",isOverdue],["stalled","Stalled",isStalled]].concat(STAGES.map(st=>[st,st,d=>d.stage===st])).concat([["all","All",()=>true]]);
 const DEAL_SORTS = {
   deal:{cmp:(a,b)=>String(a.codename||"").localeCompare(String(b.codename||"")), dir:1},
   stage:{cmp:(a,b)=>STAGES.indexOf(a.stage)-STAGES.indexOf(b.stage), dir:1},
@@ -560,33 +648,38 @@ const DEAL_SORTS = {
   updated:{cmp:(a,b)=>(a.updatedAt||0)-(b.updatedAt||0), dir:-1, blank:d=>!d.updatedAt}
 };
 const defaultDealOrder = (a,b)=>STAGES.indexOf(a.stage)-STAGES.indexOf(b.stage) || (a.nextStepDate||"9").localeCompare(b.nextStepDate||"9");
-function searchedDeals(){ const {deals}=D(); const q=S.q.trim().toLowerCase();
-  return deals.filter(d => !q || [d.codename,d.target,d.sector,d.type,d.lead,d.nextStep,d.ceoSummary].join(" ").toLowerCase().includes(q)); }
+function searchedDeals(){ const {deals,notes}=D(); const q=S.q.trim().toLowerCase(); S.noteHits={};
+  if(!q) return deals.slice();
+  return deals.filter(d => { if([d.codename,d.target,d.sector,d.type,d.lead,d.nextStep,d.ceoSummary,d.keyRisks,d.deadReason,d.outcomeNote].join(" ").toLowerCase().includes(q)) return true;
+    const n=notes.find(n=>n.dealId===d.id && String(n.text||"").toLowerCase().includes(q)); if(n){ S.noteHits[d.id]=snippet(n.text,q); return true; } return false; }); }
 function filteredDeals(){
   const f=(DEAL_FILTERS.find(x=>x[0]===S.stageFilter)||DEAL_FILTERS[0])[2];
-  const so=S.dsort&&DEAL_SORTS[S.dsort.k];
-  return searchedDeals().filter(f).sort((a,b)=>{
-    if(so){ const ba=so.blank?so.blank(a):false, bb=so.blank?so.blank(b):false; if(ba!==bb) return ba?1:-1;
-      if(!ba){ const c=so.cmp(a,b)*S.dsort.dir; if(c) return c; } }
-    return defaultDealOrder(a,b); });
+  return sortWith(searchedDeals().filter(f), DEAL_SORTS, S.dsort, defaultDealOrder);
 }
-function setDealSort(k){
-  const so=DEAL_SORTS[k]; if(!so) return; const cur=S.dsort;
-  if(!cur||cur.k!==k) S.dsort={k, dir:so.dir};
-  else if(cur.dir===so.dir) S.dsort={k, dir:-so.dir};
-  else S.dsort=null;   // third click: back to the default order (stage, then next step date)
+function setSort(which,k){
+  const so=(which==="b"?BANKER_SORTS:DEAL_SORTS)[k]; if(!so) return; const key=which+"sort"; const cur=S[key];
+  if(!cur||cur.k!==k) S[key]={k, dir:so.dir};
+  else if(cur.dir===so.dir) S[key]={k, dir:-so.dir};
+  else S[key]=null;   // third click: back to the default order
   render();
 }
-function sortTh(label,k,cls){
-  const on=S.dsort&&S.dsort.k===k; const dir=on?S.dsort.dir:0;
-  return `<th${cls?` class="${cls}"`:""} aria-sort="${on?(dir>0?"ascending":"descending"):"none"}"><button type="button" class="sorth" data-act="dsort" data-k="${k}" aria-label="Sort by ${esc(label)}">${esc(label)}<span class="ar" aria-hidden="true">${on?(dir>0?"▲":"▼"):""}</span></button></th>`;
+function sortWith(list, sorts, st, fallback){
+  const so=st&&sorts[st.k];
+  return list.sort((a,b)=>{
+    if(so){ const ba=so.blank?so.blank(a):false, bb=so.blank?so.blank(b):false; if(ba!==bb) return ba?1:-1;
+      if(!ba){ const c=so.cmp(a,b)*st.dir; if(c) return c; } }
+    return fallback(a,b); });
+}
+function sortTh(label,k,cls,which){
+  which=which||"d"; const st=S[which+"sort"]; const on=st&&st.k===k; const dir=on?st.dir:0;
+  return `<th${cls?` class="${cls}"`:""} aria-sort="${on?(dir>0?"ascending":"descending"):"none"}"><button type="button" class="sorth" data-act="${which}sort" data-k="${k}" aria-label="Sort by ${esc(label)}">${esc(label)}<span class="ar" aria-hidden="true">${on?(dir>0?"▲":"▼"):""}</span></button></th>`;
 }
 function dealChipsHTML(){
   const base=searchedDeals();
   return `<div class="fchips" role="group" aria-label="Filter deals">${DEAL_FILTERS.map(([v,label,f])=>{
     const n=base.filter(f).length; const on=S.stageFilter===v;
     if(!on && !n && !["active","all"].includes(v)) return "";
-    const cls = v==="overdue" ? " late" : "";
+    const cls = v==="overdue" ? " late" : v==="stalled" ? " stale" : "";
     const sw = STAGE_CLASS[v] ? `<span class="sw ${STAGE_CLASS[v]}" aria-hidden="true"></span>` : "";
     return `<button type="button" class="fchip${cls}" data-act="dfilter" data-v="${esc(v)}" aria-pressed="${on}">${sw}${esc(label)}<b>${n}</b></button>`; }).join("")}</div>`;
 }
@@ -597,45 +690,74 @@ function renderDeals(){
   return `
   <section><h2 class="action-title">Deal tracker</h2><p class="sub">${edit?"Add, edit and close out deals. Changes save to the shared tracker and show in the CEO view straight away.":"You have view access. Ask the tracker owner for Contributor access to edit."}</p></section>
   <section class="toolbar">
-    <div class="grow"><input type="search" id="q" placeholder="Search codename, target, lead, next step" aria-label="Search deals"></div>
+    <div class="grow"><input type="search" id="q" placeholder="Search deals and their notes" aria-label="Search deals and their notes"></div>
     ${S.downloads?`<button class="btn" data-act="export">Export CSV</button>`:""}
     ${edit?`<button class="btn primary" data-act="new-deal">New deal</button>`:""}
   </section>
   ${dealChipsHTML()}
   <section>
-    ${rows.length ? `<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr>${sortTh("Deal","deal")}${sortTh("Stage","stage")}${sortTh("Priority","priority")}${sortTh("EV ($M)","ev","num")}${sortTh("Next step","next")}<th>Bankers</th>${sortTh("Lead","lead")}${sortTh("Updated","updated")}<th><span class="sr">Actions</span></th></tr></thead><tbody>
+    ${rows.length ? `<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr>${sortTh("Deal","deal")}${sortTh("Stage","stage")}${sortTh("Priority","priority")}${sortTh("EV ($M)","ev","num")}${sortTh("Next step","next")}<th>Bankers</th>${sortTh("Lead","lead","opt")}${sortTh("Updated","updated","opt")}<th><span class="sr">Actions</span></th></tr></thead><tbody>
     ${rows.map(d=>{ const late=isOverdue(d); const bk=(d.bankerIds||[]).map(id=>bankers.find(b=>b.id===id)).filter(Boolean);
       const meta=[moneyM(d.ev)&&("EV "+moneyM(d.ev)), stakeNote(d), d.priority&&(d.priority+" priority"), d.lead].filter(Boolean).join(" · ");
       return `<tr class="click${late?" late":""}" data-act="${ex||!edit?"view-deal":"edit-deal"}" data-id="${esc(d.id)}" tabindex="0">
-      <td><div class="t1">${esc(d.codename)}${X}</div><div class="t2">${esc(d.target||"")}</div><div class="t2">${esc([d.type,d.sector].filter(Boolean).join(" · "))}</div>${meta?`<div class="t2 mob">${esc(meta)}</div>`:""}</td>
-      <td class="c-side">${stagePill(d.stage)}</td><td class="c-hide">${esc(d.priority||"")}</td>
+      <td><div class="t1">${esc(d.codename)}${X}${stallTag(d)}</div><div class="t2">${esc(d.target||"")}</div><div class="t2">${esc([d.type,d.sector].filter(Boolean).join(" · "))}</div>${meta?`<div class="t2 mob">${esc(meta)}</div>`:""}${S.noteHits&&S.noteHits[d.id]?`<div class="t2 hit">In a note: ${S.noteHits[d.id]}</div>`:""}</td>
+      <td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="c-hide">${esc(d.priority||"")}</td>
       <td class="num c-hide">${esc(mnum(d.ev))}${stakeNote(d)?`<div class="t2">${esc(stakeNote(d))}</div>`:""}</td>
       <td class="c-full" data-label="Next step">${esc(d.nextStep||"")||'<span class="t2">None set</span>'}${d.nextStepDate?`<div class="t2${late?" over":""}">${late?"Overdue: ":""}${fmtDate(d.nextStepDate)}</div>`:""}</td>
       <td class="c-full" data-label="Bankers">${bk.length?`<div class="firmchips">${bk.map(b=>`<span>${firmLogo(b,20)}${esc(b.firm||b.name)}</span>`).join("")}</div>`:'<span class="t2">None</span>'}</td>
-      <td class="c-hide" style="white-space:nowrap">${esc(d.lead||"")}</td>
-      <td class="t2 c-hide" style="white-space:nowrap">${d.updatedAt?`${esc(new Date(d.updatedAt).toLocaleDateString("en-GB",{day:"numeric",month:"short"}))}<br>${esc(nameOf(d.updatedBy,d.updatedByName))}`:""}</td>
+      <td class="c-hide opt" style="white-space:nowrap">${esc(d.lead||"")}</td>
+      <td class="t2 c-hide opt" style="white-space:nowrap">${d.updatedAt?`${esc(new Date(d.updatedAt).toLocaleDateString("en-GB",{day:"numeric",month:"short"}))}<br>${esc(nameOf(d.updatedBy,d.updatedByName))}`:""}</td>
       <td class="c-hide"><div class="rowacts">${edit&&!ex?`<button class="btn sm" data-act="edit-deal" data-id="${esc(d.id)}">Edit</button>`:""}</div></td></tr>`; }).join("")}
     </tbody></table></div>` : `<div class="empty"><p>No deals match this filter.</p>${edit?`<button class="btn primary" data-act="new-deal">New deal</button>`:""}</div>`}
   </section>
   <p class="source">Source: Corp Dev deal tracker. ${rows.length} deal${rows.length===1?"":"s"} shown.</p>`;
 }
 
+const REL_ORDER=["Strong","Active","Developing","Dormant"];
+const isColdB = b => !b.lastContact || daysUntil(b.lastContact) < -90;
+const bankerDealCount = b => D().deals.filter(d=>(d.bankerIds||[]).includes(b.id)).length;
+const BANKER_FILTERS = [["all","All",()=>true]].concat(RELS.map(r=>[r,r,b=>b.relationship===r])).concat([["cold","Not contacted in 90 days",isColdB]]);
+const BANKER_SORTS = {
+  name:{cmp:(a,b)=>String(a.name||"").localeCompare(String(b.name||"")), dir:1},
+  rel:{cmp:(a,b)=>REL_ORDER.indexOf(a.relationship)-REL_ORDER.indexOf(b.relationship), dir:1, blank:b=>!REL_ORDER.includes(b.relationship)},
+  deals:{cmp:(a,b)=>bankerDealCount(a)-bankerDealCount(b), dir:-1},
+  last:{cmp:(a,b)=>String(a.lastContact).localeCompare(String(b.lastContact)), dir:1, blank:b=>!b.lastContact}
+};
+const defaultBankerOrder = (a,b)=>(a.firm||"").localeCompare(b.firm||"")||(a.name||"").localeCompare(b.name||"");
+function searchedBankers(){ const {bankers,notes}=D(); const q=S.bq.trim().toLowerCase(); S.bHits={};
+  if(!q) return bankers.slice();
+  return bankers.filter(b => { if([b.name,b.firm,b.coverage,b.title,b.context].join(" ").toLowerCase().includes(q)) return true;
+    const n=notes.find(n=>n.bankerId===b.id && String(n.text||"").toLowerCase().includes(q)); if(n){ S.bHits[b.id]=snippet(n.text,q); return true; } return false; }); }
+function bankerChipsHTML(base){
+  const cur=S.bfilter||"all";
+  return `<div class="fchips" role="group" aria-label="Filter bankers">${BANKER_FILTERS.map(([v,label,f])=>{
+    const n=base.filter(f).length, on=cur===v; if(!on && !n && v!=="all") return "";
+    const cls = v==="cold" ? " late" : ""; const sw = RELS.includes(v) ? `<span class="sw rel rel-${esc(v)}" aria-hidden="true"></span>` : "";
+    return `<button type="button" class="fchip${cls}" data-act="bfilter" data-v="${esc(v)}" aria-pressed="${on}">${sw}${esc(label)}<b>${n}</b></button>`; }).join("")}</div>`;
+}
 function renderBankers(){
-  const {bankers,deals}=D(); const ex=demoMode()||S.dbMissing; const edit=canEditNow(); const q=S.bq.trim().toLowerCase();
+  const {bankers,deals}=D(); const ex=demoMode()||S.dbMissing; const edit=canEditNow();
   const X = ex ? `<span class="ex">Example</span>` : "";
-  const rows = bankers.filter(b=>!q||[b.name,b.firm,b.coverage,b.title].join(" ").toLowerCase().includes(q)).sort((a,b)=>(a.firm||"").localeCompare(b.firm||"")||(a.name||"").localeCompare(b.name||""));
+  const base = searchedBankers();
+  const f = (BANKER_FILTERS.find(x=>x[0]===(S.bfilter||"all"))||BANKER_FILTERS[0])[2];
+  const rows = sortWith(base.filter(f), BANKER_SORTS, S.bsort, defaultBankerOrder);
   const firms = new Set(bankers.map(b=>b.firm).filter(Boolean)).size;
-  const cold = bankers.filter(b=>!b.lastContact||daysUntil(b.lastContact)<-90).length;
+  const cold = bankers.filter(isColdB).length;
+  const reconnect = bankers.filter(b=>["Strong","Active"].includes(b.relationship) && (!b.lastContact || daysUntil(b.lastContact) < -60))
+    .sort((a,b)=>String(a.lastContact||"").localeCompare(String(b.lastContact||""))).slice(0,5);
   return `
   <section><h2 class="action-title">${bankers.length} banker${bankers.length===1?"":"s"} across ${firms} firm${firms===1?"":"s"}; ${cold} not contacted in 90 days</h2>
     <p class="sub">Coverage, relationship strength and the mandates each banker brought us.</p></section>
+  ${reconnect.length?`<section><h3 class="sec">Reconnect</h3><p class="t2" style="margin:-4px 0 8px">Strong or active relationships with no contact in 60 days.</p><ul class="mlist">${reconnect.map(b=>{ const n=daysUntil(b.lastContact); const m=deals.filter(d=>isActive(d)&&(d.bankerIds||[]).includes(b.id)).length;
+    return `<li${edit&&!ex?` class="click" data-act="edit-banker" data-id="${esc(b.id)}" tabindex="0"`:""}><span class="d over">${b.lastContact?`${-n} days`:"Never"}</span><div><p><b>${esc(b.name)}</b>${X} · ${esc(b.firm||"")}</p><p class="meta">${esc(b.relationship)} relationship · last contact ${b.lastContact?fmtDate(b.lastContact):"not recorded"} · ${m} live mandate${m===1?"":"s"}</p></div></li>`; }).join("")}</ul></section>`:""}
   <section class="toolbar">
-    <div class="grow"><input type="search" id="bq" placeholder="Search name, firm, coverage" aria-label="Search bankers"></div>
+    <div class="grow"><input type="search" id="bq" placeholder="Search bankers and their notes" aria-label="Search bankers and their notes"></div>
     ${edit?`<button class="btn primary" data-act="new-banker">Add banker</button>`:""}
   </section>
-  <section>${rows.length?`<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr><th>Banker</th><th>Coverage</th><th>Relationship</th><th>Deals shown to us</th><th class="num">Last contact</th><th></th></tr></thead><tbody>
+  ${bankerChipsHTML(base)}
+  <section>${rows.length?`<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr>${sortTh("Banker","name","","b")}<th class="opt">Coverage</th>${sortTh("Relationship","rel","","b")}${sortTh("Deals shown to us","deals","","b")}${sortTh("Last contact","last","num","b")}<th><span class="sr">Actions</span></th></tr></thead><tbody>
     ${rows.map(b=>{ const ds=deals.filter(d=>(d.bankerIds||[]).includes(b.id)); const n=daysUntil(b.lastContact); return `<tr class="click" data-act="${ex?"":"edit-banker"}" data-id="${esc(b.id)}" tabindex="0">
-      <td><div class="firm">${firmLogo(b,34)}<div><div class="t1">${esc(b.name)}${X}</div><div class="t2">${esc([b.firm,b.title].filter(Boolean).join(" · "))}</div><div class="t2 mob">${esc(b.coverage||"")}</div><div class="t2 mob${n!=null&&n<-90?" over":""}">Last contact ${b.lastContact?fmtDate(b.lastContact):"n/d"}</div></div></div></td><td class="c-hide">${esc(b.coverage||"")}</td>
+      <td><div class="firm">${firmLogo(b,34)}<div><div class="t1">${esc(b.name)}${X}</div><div class="t2">${esc([b.firm,b.title].filter(Boolean).join(" · "))}</div><div class="t2 mob">${esc(b.coverage||"")}</div><div class="t2 mob${n!=null&&n<-90?" over":""}">Last contact ${b.lastContact?fmtDate(b.lastContact):"n/d"}</div>${S.bHits&&S.bHits[b.id]?`<div class="t2 hit">In a note: ${S.bHits[b.id]}</div>`:""}</div></div></td><td class="c-hide opt">${esc(b.coverage||"")}</td>
       <td class="c-side"><span class="pill rel-${esc(b.relationship)}">${esc(b.relationship||"n/d")}</span></td>
       <td class="c-full" data-label="Deals shown to us">${ds.length?ds.map(d=>`${esc(d.codename)} <span class="t2">(${esc(d.stage)})</span>`).join("<br>"):'<span class="t2">None yet</span>'}</td>
       <td class="num c-hide ${n!=null&&n<-90?"over":""}">${b.lastContact?fmtDate(b.lastContact):"n/d"}</td>
@@ -665,13 +787,13 @@ function viewDealHTML(id){
   const {deals,bankers,notes}=D(); const d=deals.find(x=>x.id===id); if(!d) return `<div class="drawer-h"><h2 id="drTitle">Deal not found</h2><button class="btn ghost" data-act="close">Close</button></div>`;
   const bk=(d.bankerIds||[]).map(i=>bankers.find(b=>b.id===i)).filter(Boolean);
   const ns=notes.filter(n=>n.dealId===id).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,8);
-  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${esc(d.type||"Deal")} · ${esc(d.sector||"")}</div><h2 id="drTitle">${esc(d.codename)}: ${esc(d.target||"")}</h2></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
+  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${esc(d.type||"Deal")} · ${esc(d.sector||"")}</div><h2 id="drTitle">${esc(d.codename)}: ${esc(d.target||"")}</h2></div>${linkBtn("deal",d.id)}<button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
   <div class="drawer-b">
-    <div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="tile"><b class="c-mag" style="font-size:22px">${esc(d.stage)}</b><span>Stage</span></div><div class="tile"><b style="font-size:22px">${money(d.ev)}</b><span>Enterprise value</span></div><div class="tile"><b style="font-size:22px">${d.stake!==""&&d.stake!=null?esc(d.stake)+"%":"n/d"}</b><span>Stake</span></div></div>
+    <div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="tile"><b class="c-mag" style="font-size:22px">${esc(d.stage)}</b><span>Stage</span>${ageHTML(d).replace('class="t2 age"','class="t2"')}</div><div class="tile"><b style="font-size:22px">${money(d.ev)}</b><span>Enterprise value</span></div><div class="tile"><b style="font-size:22px">${d.stake!==""&&d.stake!=null?esc(d.stake)+"%":"n/d"}</b><span>Stake</span></div></div>
     <div><h3 class="sec">Summary</h3><p class="prose">${esc(d.ceoSummary||"No summary yet.")}</p></div>
     ${d.keyRisks?`<div><h3 class="sec">Key risks</h3><p class="prose">${esc(d.keyRisks)}</p></div>`:""}
     <div><h3 class="sec">Decks and files</h3>${links(d.links)}</div>
-    <dl class="kv"><dt>Next step</dt><dd>${esc(d.nextStep||"n/d")}${d.nextStepDate?` (${fmtDate(d.nextStepDate)})`:""}</dd><dt>Deal lead</dt><dd>${esc(d.lead||"n/d")}</dd><dt>Origin</dt><dd>${esc(d.origin||"n/d")}</dd><dt>Bankers</dt><dd>${bk.map(b=>`${esc(b.name)} (${esc(b.firm)})`).join(", ")||"None"}</dd><dt>GWP</dt><dd>${money(d.gwp)}</dd><dt>Priority</dt><dd>${esc(d.priority||"n/d")}</dd></dl>
+    <dl class="kv"><dt>Next step</dt><dd>${esc(d.nextStep||"n/d")}${d.nextStepDate?` (${fmtDate(d.nextStepDate)})`:""}</dd><dt>Deal lead</dt><dd>${esc(d.lead||"n/d")}</dd><dt>Origin</dt><dd>${esc(d.origin||"n/d")}</dd><dt>Bankers</dt><dd>${bk.map(b=>`${esc(b.name)} (${esc(b.firm)})`).join(", ")||"None"}</dd><dt>GWP</dt><dd>${money(d.gwp)}</dd><dt>Priority</dt><dd>${esc(d.priority||"n/d")}</dd>${["Closed","Dead"].includes(d.stage)?`<dt>Outcome</dt><dd>${esc(d.stage)}${d.outcomeDate?` on ${fmtDate(d.outcomeDate)}`:""}${d.stage==="Dead"&&d.deadReason?`: ${esc(d.deadReason)}`:""}${d.outcomeNote?`. ${esc(d.outcomeNote)}`:""}</dd>`:""}</dl>
     <div><h3 class="sec">Recent context</h3>${ns.length?`<div class="notes">${ns.map(noteHTML).join("")}</div>`:`<p class="t2">No notes yet.</p>`}</div>
   </div>
   <div class="drawer-f">${canEditNow()&&!demoMode()&&!S.dbMissing?`<button class="btn primary" data-act="edit-deal" data-id="${esc(d.id)}">Edit in production view</button>`:""}<span class="sp"></span><button class="btn" data-act="close">Close</button></div>`;
@@ -703,7 +825,7 @@ function sel(id,opts,val){ return `<select id="${id}">${opts.map(o=>`<option${o=
 function dealFormHTML(dr){
   const isNew=!dr.id; const d = isNew ? (dr.seed||{}) : (dr.orig||S.deals.find(x=>x.id===dr.id)||{});
   dr.links = dr.links || (d.links||[]).map(l=>({...l}));
-  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${isNew?"New deal":"Edit deal"}</div><h2 id="drTitle">${esc(d.codename||"Untitled deal")}</h2>${isNew?"":savedLine(d)}<div class="presence" id="drPresence" role="status"></div></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
+  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${isNew?"New deal":"Edit deal"}</div><h2 id="drTitle">${esc(d.codename||"Untitled deal")}</h2>${isNew?"":savedLine(d)}<div class="presence" id="drPresence" role="status"></div></div>${isNew?"":linkBtn("deal",dr.id)}<button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
   <form class="drawer-b" id="dealForm" novalidate>
     <div id="drAlert" role="alert"></div>
     <div><h3 class="sec">Basics</h3><div class="fgrid">
@@ -724,6 +846,11 @@ function dealFormHTML(dr){
     <div><h3 class="sec">Next step</h3><div class="fgrid">
       <label class="f full">Next step<input type="text" id="f_nextStep" value="${esc(d.nextStep||"")}" placeholder="What happens next, and who owns it"></label>
       <label class="f">Due date<input type="date" id="f_nextStepDate" value="${esc(d.nextStepDate||"")}"></label>
+    </div></div>
+    <div id="outcomeBox"${["Closed","Dead"].includes(d.stage)?"":" hidden"}><h3 class="sec">Outcome</h3><div class="fgrid">
+      <label class="f">Date closed or dropped<input type="date" id="f_outcomeDate" value="${esc(d.outcomeDate||"")}"></label>
+      <label class="f" id="reasonWrap"${d.stage==="Dead"?"":" hidden"}>Why it was dropped<select id="f_deadReason"><option value="">Choose a reason</option>${DEAD_REASONS.map(r=>`<option${r===d.deadReason?" selected":""}>${esc(r)}</option>`).join("")}</select></label>
+      <label class="f full">Outcome note <em>(optional)</em><input type="text" id="f_outcomeNote" value="${esc(d.outcomeNote||"")}" placeholder="What decided it"></label>
     </div></div>
     <div><h3 class="sec">Summary for the CEO</h3><div class="fgrid">
       <label class="f full">CEO summary <em>(shown in the CEO view; two or three sentences)</em><textarea id="f_ceoSummary" rows="3">${esc(d.ceoSummary||"")}</textarea></label>
@@ -751,7 +878,7 @@ function linkRowsHTML(ls){ return (ls||[]).map((l,i)=>`<div class="linkrow"><inp
 function bankerFormHTML(dr){
   const isNew=!dr.id; const b = isNew ? (dr.seed||{}) : (dr.orig||S.bankers.find(x=>x.id===dr.id)||{});
   const ds = S.deals.filter(d=>(d.bankerIds||[]).includes(b.id));
-  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${isNew?"New banker":"Banker"}</div><h2 id="drTitle" class="firm">${isNew?"":firmLogo(b,32)}<span>${esc(b.name||"New contact")}</span></h2>${isNew?"":savedLine(b)}<div class="presence" id="drPresence" role="status"></div></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
+  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${isNew?"New banker":"Banker"}</div><h2 id="drTitle" class="firm">${isNew?"":firmLogo(b,32)}<span>${esc(b.name||"New contact")}</span></h2>${isNew?"":savedLine(b)}<div class="presence" id="drPresence" role="status"></div></div>${isNew?"":linkBtn("banker",dr.id)}<button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
   <form class="drawer-b" id="bankerForm" novalidate>
     <div id="drAlert" role="alert"></div>
     <div><h3 class="sec">Contact</h3><div class="fgrid">
@@ -809,6 +936,7 @@ function dealFormValues(){
   return {codename:val("f_codename"), target:val("f_target"), type:val("f_type"), sector:val("f_sector"), stage:val("f_stage"), priority:val("f_priority"),
     ev:numOrBlank(val("f_ev")), gwp:numOrBlank(val("f_gwp")), stake:numOrBlank(val("f_stake")), origin:val("f_origin"), lead:val("f_lead"),
     nextStep:val("f_nextStep"), nextStepDate:val("f_nextStepDate"), ceoSummary:val("f_ceoSummary"), keyRisks:val("f_keyRisks"),
+    outcomeDate:val("f_outcomeDate"), deadReason:val("f_deadReason"), outcomeNote:val("f_outcomeNote"),
     bankerIds:[...document.querySelectorAll('#drawerRoot input[name=bk]:checked')].map(e=>e.value),
     links:(S.drawer.links||[]).map(l=>({label:(l.label||"").trim(), url:(l.url||"").trim()})).filter(l=>l.url)};
 }
@@ -853,7 +981,7 @@ async function casWrite(table,id,build){
 function whoChanged(row){ const d=row.doc||{}; return (row.updated_by && d.updatedBy && d.updatedBy!==row.updated_by) ? nameOf(row.updated_by) : nameOf(row.updated_by, d.updatedByName); }
 const FIELD_LABELS={codename:"Codename",target:"Target",type:"Deal type",sector:"Sector",stage:"Stage",priority:"Priority",ev:"Enterprise value",gwp:"Target GWP",stake:"Stake",
   origin:"Origin",lead:"Deal lead",nextStep:"Next step",nextStepDate:"Next step date",ceoSummary:"CEO summary",keyRisks:"Key risks",bankerIds:"Bankers",links:"Decks and files",
-  name:"Name",firm:"Firm",website:"Firm website",title:"Title",coverage:"Coverage",email:"Email",phone:"Phone",relationship:"Relationship",lastContact:"Last contact",context:"Relationship context"};
+  name:"Name",firm:"Firm",website:"Firm website",title:"Title",coverage:"Coverage",email:"Email",phone:"Phone",relationship:"Relationship",lastContact:"Last contact",context:"Relationship context",outcomeDate:"Outcome date",deadReason:"Reason dropped",outcomeNote:"Outcome note"};
 function showVal(k,v){
   if(k==="bankerIds"){ const a=Array.isArray(v)?v:[]; return a.map(i=>(S.bankers.find(b=>b.id===i)||{}).name||"a removed banker").join(", ")||"none"; }
   if(k==="links"){ const a=Array.isArray(v)?v:[]; return a.map(l=>l.label||l.url).join(", ")||"none"; }
@@ -893,7 +1021,7 @@ async function saveRecord(kind){
   const meta={updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""};
   if(!dr.id){
     const id=(kind==="deal"?"d":"b")+uid();
-    const body={...read(), createdAt:Date.now(), ...(kind==="deal"?{createdBy:S.meId||""}:{}), ...meta};
+    const body={...read(), createdAt:Date.now(), ...(kind==="deal"?{createdBy:S.meId||"", stageSince:Date.now()}:{}), ...meta};
     if(await guard(()=>S.db.collection(table).doc(id).set(body), kind==="deal"?"Deal created":"Banker added")) closeDrawer();
     return;
   }
@@ -912,7 +1040,9 @@ async function saveRecord(kind){
       const latest=row.doc||{};
       const cs=changed.filter(k=>!same(latest[k],dr.orig[k]) && !same(mine[k],latest[k])).map(k=>({k, theirs:latest[k], mine:mine[k], who:whoChanged(row)}));
       if(cs.length) return {stop:true, conflicts:cs};
-      return {doc:{...stripMeta(latest), ...Object.fromEntries(changed.map(k=>[k,mine[k]])), ...meta}};
+      const doc={...stripMeta(latest), ...Object.fromEntries(changed.map(k=>[k,mine[k]])), ...meta};
+      if(kind==="deal" && changed.includes("stage") && !same(latest.stage, mine.stage)) doc.stageSince=Date.now();
+      return {doc};
     });
     if(r.conflicts){ if(S.drawer===dr){ dr.conflicts=r.conflicts; renderDrAlert(); document.getElementById("drAlert")?.scrollIntoView({block:"nearest"}); } return; }
     toast("Saved"); if(S.drawer===dr) closeDrawer();
@@ -943,7 +1073,12 @@ async function addNote(target, kind, text){
   return guard(async()=>{ await S.db.collection("notes").doc("n"+uid()).set(body);
     if(target.kind==="banker") await S.db.collection("bankers").doc(target.id).update({lastContact:TODAY()}); }, "Note added");
 }
-function closeDrawer(){ S.drawer=null; renderDrawer(); }
+function closeDrawer(){
+  const dr=S.drawer; const rec = dr && dr.id && ["deal","view-deal","banker"].includes(dr.kind);
+  S.drawer=null; renderDrawer();
+  if(rec && parseHash().kind){ if(S.pushed){ S.pushed=false; history.back(); return; } history.replaceState(null,"","#"+S.view); }
+  focusBack();
+}
 
 /* ---------- CSV export ---------- */
 async function exportCSV(){
@@ -956,7 +1091,7 @@ async function exportCSV(){
 }
 
 /* ---------- Claude helper ---------- */
-const ALLOWED_DEAL_CHANGES = ["target","type","sector","stage","priority","ev","gwp","stake","origin","lead","nextStep","nextStepDate","ceoSummary","keyRisks"];
+const ALLOWED_DEAL_CHANGES = ["target","type","sector","stage","priority","ev","gwp","stake","origin","lead","nextStep","nextStepDate","ceoSummary","keyRisks","outcomeDate","deadReason","outcomeNote"];
 const ALLOWED_BANKER_CHANGES = ["firm","website","title","coverage","relationship","lastContact","context","email","phone"];
 
 function aiData(){
@@ -1000,6 +1135,7 @@ function cleanChanges(obj, allowed){
     else if(k==="priority") v = PRIORITIES.includes(v)?v:undefined;
     else if(k==="origin") v = ORIGINS.includes(v)?v:undefined;
     else if(k==="relationship") v = RELS.includes(v)?v:undefined;
+    else if(k==="deadReason") v = DEAD_REASONS.includes(v)?v:undefined;
     else if(/Date$|lastContact/.test(k)) v = /^\d{4}-\d{2}-\d{2}$/.test(String(v))?String(v):undefined;
     else v = String(v??"").slice(0,4000);
     if(v!==undefined) out[k]=v; }
@@ -1009,7 +1145,7 @@ async function applyProposal(id){
   const p=S.proposals[id]; if(!p||p.status!=="pending") return;
   const meta={updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""}; let ok=false;
   if(p.kind==="deal-update") ok=await guard(()=>S.db.collection("deals").doc(p.target).update({...p.changes,...meta}),"Change applied");
-  else if(p.kind==="deal-new") ok=await guard(()=>S.db.collection("deals").doc("d"+uid()).set({type:TYPES[0],stage:"Screening",priority:"Medium",origin:ORIGINS[0],bankerIds:[],links:[],...p.changes,createdAt:Date.now(),createdBy:S.meId||"",...meta}),"Deal created");
+  else if(p.kind==="deal-new") ok=await guard(()=>S.db.collection("deals").doc("d"+uid()).set({type:TYPES[0],stage:"Screening",priority:"Medium",origin:ORIGINS[0],bankerIds:[],links:[],...p.changes,createdAt:Date.now(),createdBy:S.meId||"",stageSince:Date.now(),...meta}),"Deal created");
   else if(p.kind==="banker-update") ok=await guard(()=>S.db.collection("bankers").doc(p.target).update({...p.changes,...meta}),"Change applied");
   else if(p.kind==="note") ok=await addNote({kind:p.targetKind,id:p.target}, p.changes.kind, p.changes.text);
   if(ok){ p.status="applied"; renderAI(); }
@@ -1119,19 +1255,23 @@ document.addEventListener("click", async e=>{
   if(S.menuOpen && !e.target.closest("#whoMenu,#whoDot")) setMenu(false);
   const t=e.target.closest("[data-act]"); if(!t) return; const a=t.dataset.act, id=t.dataset.id;
   if(t.closest("#whoMenu")) setMenu(false);
+  if(["new-deal","new-banker","change-pw"].includes(a)) S.lastFocusEl = t.closest("#whoMenu") ? document.getElementById("whoDot") : t;
   if(t.tagName==="TR" && e.target.closest("button,a")) return;
   switch(a){
     case "close": closeDrawer(); break;
     case "who-menu": setMenu(!S.menuOpen); break;
-    case "dsort": setDealSort(t.dataset.k); break;
+    case "dsort": setSort("d",t.dataset.k); break;
     case "dfilter": S.stageFilter=t.dataset.v; render(); document.querySelector(`.fchip[data-v="${CSS.escape(t.dataset.v)}"]`)?.focus(); break;
     case "signout": signOut(); break;
     case "change-pw": S.drawer={kind:"password"}; renderDrawer(); break;
     case "save-pw": t.disabled=true; await savePassword(); t.disabled=false; break;
-    case "view-deal": S.drawer={kind:"view-deal",id}; renderDrawer(); break;
-    case "edit-deal": if(!canEditNow()||demoMode()) return; openEditor("deal",id); break;
+    case "view-deal": goRecord("deal",id,"view"); break;
+    case "edit-deal": if(!canEditNow()||demoMode()) return; if(S.drawer&&S.drawer.kind==="view-deal"&&S.drawer.id===id) openEditor("deal",id); else goRecord("deal",id,"edit"); break;
+    case "copy-link": await copyLink(t.dataset.k, id); break;
+    case "bsort": setSort("b",t.dataset.k); break;
+    case "bfilter": S.bfilter=t.dataset.v; render(); document.querySelector(`.fchip[data-act="bfilter"][data-v="${CSS.escape(t.dataset.v)}"]`)?.focus(); break;
     case "new-deal": if(!canEditNow()) return; S.drawer={kind:"deal",id:null,links:[{label:"",url:""}]}; renderDrawer(); break;
-    case "edit-banker": if(!canEditNow()||demoMode()) return; openEditor("banker",id); break;
+    case "edit-banker": if(!canEditNow()||demoMode()) return; goRecord("banker",id,"edit"); break;
     case "new-banker": if(!canEditNow()) return; S.drawer={kind:"banker",id:null}; renderDrawer(); break;
     case "add-link": readLinks(); S.drawer.links.push({label:"",url:""}); document.getElementById("linkRows").innerHTML=linkRowsHTML(S.drawer.links); break;
     case "rm-link": readLinks(); S.drawer.links.splice(+t.dataset.i,1); document.getElementById("linkRows").innerHTML=linkRowsHTML(S.drawer.links); break;
@@ -1159,9 +1299,19 @@ document.addEventListener("click", async e=>{
   }
 });
 document.addEventListener("keydown", e=>{
+  if(e.key==="Tab" && S.drawer){
+    const d=document.querySelector("#drawerRoot .drawer"); const ai=document.querySelector("#aiRoot .ai");
+    if(d && !(ai && ai.contains(document.activeElement))){
+      const f=[...d.querySelectorAll('a[href],button:not([disabled]),input:not([type=hidden]):not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(x=>x.offsetParent!==null);
+      if(f.length){ const first=f[0], last=f[f.length-1];
+        if(!d.contains(document.activeElement)){ e.preventDefault(); (e.shiftKey?last:first).focus(); }
+        else if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+        else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); } }
+    }
+  }
   if(e.key==="Escape" && S.menuOpen){ setMenu(false); document.getElementById("whoDot").focus(); return; }
   if(e.key==="Escape"){ if(S.drawer) closeDrawer(); else if(S.ai.open){ S.ai.open=false; renderAI(); } }
-  if(e.key==="Enter" && e.target.matches("tr.click")) e.target.click();
+  if(e.key==="Enter" && e.target.matches("tr.click, li.click")) e.target.click();
   if(e.key==="Enter" && e.target.id==="aiInput" && !e.shiftKey){ e.preventDefault(); const v=e.target.value; e.target.value=""; askAI(v); }
 });
 document.addEventListener("submit", e=>{ e.preventDefault();
@@ -1172,14 +1322,19 @@ document.addEventListener("input", e=>{
   if(e.target.id==="q"){ S.q=e.target.value; const pos=e.target.selectionStart; render(); const n=document.getElementById("q"); n.focus(); n.setSelectionRange(pos,pos); }
   if(e.target.id==="bq"){ S.bq=e.target.value; const pos=e.target.selectionStart; render(); const n=document.getElementById("bq"); n.value=S.bq; n.focus(); n.setSelectionRange(pos,pos); }
 });
-document.addEventListener("change", e=>{ if(e.target.id==="stageFilter"){ S.stageFilter=e.target.value; render(); } });
+document.addEventListener("change", e=>{
+  if(e.target.id==="f_stage"){ const st=e.target.value, box=document.getElementById("outcomeBox"); if(!box) return;
+    const done=["Closed","Dead"].includes(st); box.hidden=!done; document.getElementById("reasonWrap").hidden = st!=="Dead";
+    const od=document.getElementById("f_outcomeDate"); if(done && od && !od.value) od.value=TODAY(); }
+});
 
 /* ---------- data: Supabase tables (id text, doc jsonb) behind a small collection/doc API ---------- */
 const TABLES = ["deals","bankers","notes"];
 function makeDb(sb){
   return { collection(table){ return { doc(id){ return {
     async set(body){ const {error}=await sb.from(table).upsert({id, doc:body}); if(error) throw error; await refetch(table); },
-    async update(patch){ await casWrite(table, id, row=>({doc:{...(row.doc||{}), ...patch}})); },
+    async update(patch){ await casWrite(table, id, row=>{ const doc={...(row.doc||{}), ...patch};
+      if(table==="deals" && patch.stage && patch.stage!==(row.doc||{}).stage) doc.stageSince=Date.now(); return {doc}; }); },
     async delete(){ const {data, error}=await sb.from(table).delete().eq("id", id).select("id"); if(error) throw error; if(!data||!data.length) throw {code:"denied"}; await refetch(table); }
   }; } }; } };
 }
@@ -1193,6 +1348,7 @@ async function refetch(table){
   S.loaded[table]=true; if(table==="deals") clearTimeout(startData.timer);
   if(S.drawer && S.drawer.kind==="view-deal") S.drawer.rendered=false;
   render();
+  if(S.pendingRoute && S.loaded[S.pendingRoute.kind==="deal"?"deals":"bankers"]) openRoute(S.pendingRoute);
 }
 const refetchSoon = (()=>{ const t={}; return table=>{ clearTimeout(t[table]); t[table]=setTimeout(()=>refetch(table),250); }; })();
 async function loadProfiles(){
