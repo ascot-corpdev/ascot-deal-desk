@@ -211,6 +211,14 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
 /* Claude panel */
 .ai{position:fixed;top:0;right:0;bottom:0;width:min(440px,100%);background:var(--surface);z-index:45;display:flex;flex-direction:column;border-left:1px solid var(--grid);box-shadow:var(--shadow);
   padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px)}
+/* On wide screens the panel docks: the dashboard (and any open deal drawer) shrinks to the left instead of being covered */
+@media (min-width:1200px){
+  body.ai-docked{padding-right:440px}
+  body.ai-docked .ai{box-shadow:none}
+  body.ai-docked .scrim{right:440px}
+  body.ai-docked .drawer{right:440px;width:min(640px,calc(100% - 440px));border-right:1px solid var(--grid)}
+}
+@media (min-width:1200px) and (prefers-reduced-motion:no-preference){body{transition:padding-right .18s ease-out}}
 .ai-h{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--grid)}
 .ai-h h2{margin:0;font-size:16px;flex:1}
 .ai-h p{margin:0;font-size:11px;color:var(--muted)}
@@ -1034,6 +1042,7 @@ function renderAI(){
   const root=document.getElementById("aiRoot"); const btn=document.getElementById("aiBtn");
   const available = !!S.sample && !!S.session && !isCEO();
   btn.hidden = !available || S.ai.open;
+  document.body.classList.toggle("ai-docked", !!(S.ai.open && available));
   if(!S.ai.open||!available){ if(root.innerHTML) root.innerHTML=""; return; }
   const body = (S.ai.msgs.length ? S.ai.msgs.map(m=> m.role==="user" ? `<div class="msg u">${esc(m.text)}</div>` :
       `<div class="msg a">${m.text?md(m.text):`<span class="thinking">${S.ai.busy?"Thinking…":""}</span>`}${(m.props||[]).map(id=>proposalHTML(S.proposals[id])).join("")}</div>${m.err?`<div class="msg err">${esc(m.err)}</div>`:""}`).join("")
