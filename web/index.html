@@ -139,6 +139,23 @@ th[aria-sort="none"] .sorth:is(:hover,:focus-visible) .ar::before{content:"↕";
 .fchip .sw.st-done{background:var(--teal)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .mob{display:none}
+.ceohead{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-start;justify-content:space-between}
+.ceohead>div:first-child{flex:1 1 420px;min-width:0}
+.ceoacts{display:flex;gap:8px;flex-wrap:wrap}
+@media print{
+  @page{size:A4 landscape;margin:12mm}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body,body.ai-docked{padding-right:0!important;font-size:12px}
+  header.top .who,nav.tabs,.ceoacts,.toolbar,.fchips,.chgbar,#drawerRoot,#aiRoot,#toastRoot,.rowacts,.banner .btn{display:none!important}
+  .wrap{max-width:none;padding-left:0;padding-right:0}
+  main .wrap{gap:16px;padding-block:10px}
+  .tbl-wrap{overflow:visible;border:0}
+  tr,li,.tile,.pr,.rr{break-inside:avoid}
+  thead{display:table-header-group}
+  .clamp{display:block;-webkit-line-clamp:unset;overflow:visible}
+  .more{display:none}
+  tr.click{cursor:auto}
+}
 .mlist.hist li{grid-template-columns:118px minmax(0,1fr)}
 .mlist.hist .d{font-weight:normal;color:var(--muted)}
 .mlist.hist p{font-size:13px}
@@ -597,8 +614,9 @@ function renderCEO(){
   const X = ex ? `<span class="ex">Example</span>` : "";
 
   return `
-  <section><h2 class="action-title">${esc(title)}</h2>
-    <p class="sub">${overdue.length ? `<span class="over">${overdue.length} next step${overdue.length===1?" is":"s are"} past due.</span> ` : ""}${stalled.length ? `<b>${stalled.length} deal${stalled.length===1?" has":"s have"} stalled</b> (no updates or notes in ${STALL_DAYS} days). ` : ""}Pipeline EV ${money(ev)} across ${active.length} live situation${active.length===1?"":"s"}.</p></section>
+  <section class="ceohead"><div><h2 class="action-title">${esc(title)}</h2>
+    <p class="sub">${overdue.length ? `<span class="over">${overdue.length} next step${overdue.length===1?" is":"s are"} past due.</span> ` : ""}${stalled.length ? `<b>${stalled.length} deal${stalled.length===1?" has":"s have"} stalled</b> (no updates or notes in ${STALL_DAYS} days). ` : ""}Pipeline EV ${money(ev)} across ${active.length} live situation${active.length===1?"":"s"}.</p></div>
+    <div class="ceoacts"><button type="button" class="btn sm" data-act="board-pack">Board pack (.pptx)</button><button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></section>
   <section class="tiles" aria-label="Headline numbers">
     <div class="tile"><b class="c-navy">${active.length}</b><span>Active deals</span><small>${deals.length - active.length} closed, held or dead</small></div>
     <div class="tile"><b class="c-mag">${late.length}</b><span>At LOI or diligence</span><small>${money(lateEv)} EV</small></div>
@@ -1187,6 +1205,123 @@ function closeDrawer(){
   focusBack();
 }
 
+/* ---------- board pack: PowerPoint in Ascot house style, built in the browser ---------- */
+const PPTX_SRC="https://cdn.jsdelivr.net/npm/pptxgenjs@4.0.1/dist/pptxgen.bundle.js";
+function loadScript(src){ return new Promise((res,rej)=>{ const el=document.createElement("script"); el.src=src; el.onload=res; el.onerror=()=>rej(new Error("the PowerPoint library didn't load. Check your connection and try again")); document.head.appendChild(el); }); }
+const plainText = html => { const d=document.createElement("div"); d.innerHTML=html; return d.textContent; };
+const clip = (t,n) => { t=String(t||"").replace(/\s+/g," ").trim(); return t.length>n ? t.slice(0,n-1).trimEnd()+"…" : t; };
+async function exportBoardPack(){
+  if(demoMode()||S.dbMissing){ toast("Add your first deal before exporting. Example rows aren't exported."); return; }
+  toast("Building the board pack…");
+  if(!window.PptxGenJS) await loadScript(PPTX_SRC);
+  if(!S.changes || S.changes.loading) await loadChanges();
+  const {deals,bankers}=D(); const active=deals.filter(isActive), late=active.filter(d=>LATE.includes(d.stage));
+  const ev=active.reduce((t,d)=>t+(+d.ev||0),0), lateEv=late.reduce((t,d)=>t+(+d.ev||0),0);
+  const engaged=bankers.filter(b=>b.lastContact && daysUntil(b.lastContact)>=-90).length;
+  const overdue=active.filter(isOverdue), stalled=active.filter(isStalled);
+  const upcoming=active.filter(d=>d.nextStepDate && daysUntil(d.nextStepDate)>=0 && daysUntil(d.nextStepDate)<=30).sort((a,b)=>a.nextStepDate.localeCompare(b.nextStepDate));
+  const yr=new Date().getFullYear(); const outYear=d=>d.outcomeDate?+String(d.outcomeDate).slice(0,4):new Date(d.stageSince||d.updatedAt||0).getFullYear();
+  const closedY=deals.filter(d=>d.stage==="Closed"&&outYear(d)===yr), deadY=deals.filter(d=>d.stage==="Dead"&&outYear(d)===yr);
+  const reasons=Object.entries(deadY.reduce((m,d)=>{ const r=d.deadReason||"No reason recorded"; m[r]=(m[r]||0)+1; return m; },{})).sort((a,b)=>b[1]-a[1]);
+  const asOf=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+  const month=new Date().toLocaleDateString("en-GB",{month:"long",year:"numeric"});
+  const C={navy:"262166",mag:"EB008C",blue:"00539E",lblue:"0081C3",teal:"00857C",purple:"944599",tile:"EEEEF5",alt:"F5F5FA",grid:"D9DCE6",grey:"666666",white:"FFFFFF"}, F="Arial";
+  const pptx=new window.PptxGenJS(); pptx.layout="LAYOUT_WIDE"; pptx.author=S.session?.name||"Corp Dev"; pptx.title="M&A pipeline board pack";
+  const stripe=[C.navy,C.purple,C.mag,C.lblue,C.blue,C.teal].map((c,i)=>({rect:{x:i*13.333/6,y:0,w:13.333/6+0.01,h:0.09,fill:{color:c},line:{color:c}}}));
+  const footer={text:{text:yr+" Ascot Group",options:{x:0.52,y:7.02,w:4,h:0.3,fontFace:F,fontSize:10,color:C.grey}}};
+  pptx.defineSlideMaster({title:"COVER",background:{color:C.white},objects:[...stripe, footer]});
+  pptx.defineSlideMaster({title:"CONTENT",background:{color:C.white},objects:[...stripe, footer],slideNumber:{x:12.3,y:7.02,w:0.5,h:0.3,fontFace:F,fontSize:10,color:C.grey,align:"right"}});
+  const SH=pptx.ShapeType;
+  const title=(sl,t)=>sl.addText(clip(t,70),{x:0.52,y:0.32,w:12.28,h:0.8,fontFace:F,fontSize:28,color:C.mag,valign:"middle",margin:0});
+  const source=(sl,t)=>sl.addText(t,{x:0.52,y:6.66,w:12.28,h:0.3,fontFace:F,fontSize:10,italic:true,color:C.grey,margin:0});
+  const sec=(sl,t,x,y,w)=>{ const tw=Math.min(w-0.4, t.length*0.105+0.3);
+    sl.addText(t,{x:x+(w-tw)/2,y,w:tw,h:0.32,fontFace:F,fontSize:14,bold:true,color:C.navy,align:"center",margin:0});
+    const lw=(w-tw)/2-0.08; if(lw>0.1){ for(const lx of [x, x+w-lw]) sl.addShape(SH.rect,{x:lx,y:y+0.155,w:lw,h:0.012,fill:{color:C.navy},line:{color:C.navy,width:0}}); } };
+  const tile=(sl,x,y,w,h,val,label,color)=>sl.addText([{text:val,options:{fontSize:26,bold:true,color,breakLine:true}},{text:label,options:{fontSize:11,color:C.navy}}],{shape:SH.rect,x,y,w,h,fill:{color:C.tile},line:{color:C.tile},fontFace:F,margin:[6,10,6,10],valign:"middle"});
+  const head=(cols)=>cols.map(([t,num])=>({text:t,options:{bold:true,color:C.white,fill:{color:C.navy},align:num?"right":"left"}}));
+  const cellOpts=(i,num)=>({fill:{color:i%2?C.alt:C.white},align:num?"right":"left",valign:"top"});
+  const tbl=(sl,rows,o)=>sl.addTable(rows,{fontFace:F,fontSize:11,color:C.navy,border:{type:"solid",pt:0.5,color:C.grid},margin:[3,5,3,5],autoPage:false,...o});
+  const bullets=(items)=>items.flatMap((it,i)=>[{text:"• ",options:{color:C.mag,bold:true}}, ...(it.lead?[{text:it.lead+": ",options:{bold:true}}]:[]), {text:it.text,options:{breakLine:i<items.length-1}}]);
+  const src=`Source: Corp Dev deal tracker as of ${asOf}.`;
+
+  // 1. Cover
+  let sl=pptx.addSlide({masterName:"COVER"});
+  sl.addText(`Corporate development | ${month}`,{x:0.9,y:2.3,w:11.5,h:0.4,fontFace:F,fontSize:14,bold:true,color:C.navy,margin:0});
+  sl.addText("M&A pipeline: board pack",{x:0.9,y:2.8,w:11.5,h:1.0,fontFace:F,fontSize:40,color:C.mag,margin:0});
+  sl.addText(`${active.length} active deal${active.length===1?"":"s"}, ${money(ev)} pipeline EV, and banker coverage as of ${asOf}`,{x:0.9,y:3.9,w:11.5,h:0.5,fontFace:F,fontSize:16,color:C.navy,margin:0});
+  sl.addText("Confidential: corporate development use only",{x:0.9,y:6.3,w:11.5,h:0.3,fontFace:F,fontSize:11,color:C.navy,margin:0});
+
+  // 2. Summary
+  sl=pptx.addSlide({masterName:"CONTENT"});
+  title(sl, `${active.length} active deal${active.length===1?"":"s"}; ${late.length} at LOI or later worth ${money(lateEv)} EV`);
+  const tw=(12.28-0.9)/4;
+  [[String(active.length),"Active deals",C.navy],[String(late.length),`At LOI or diligence (${money(lateEv)} EV)`,C.mag],[money(ev),"Active pipeline EV (derived)",C.blue],[String(engaged),"Bankers contacted in 90 days",C.teal]]
+    .forEach(([v,l,c],i)=>tile(sl,0.52+i*(tw+0.3),1.3,tw,1.1,v,l,c));
+  sec(sl,"Pipeline EV by stage ($M)",0.52,2.7,7.4);
+  const bs=ACTIVE.map(st=>{ const ds=active.filter(d=>d.stage===st); return {st,n:ds.length,ev:ds.reduce((t,d)=>t+(+d.ev||0),0)}; });
+  sl.addChart(pptx.ChartType.bar,[{name:"EV ($M)",labels:bs.map(b=>`${b.st} (${b.n})`),values:bs.map(b=>Math.round(b.ev*10)/10)}],
+    {x:0.52,y:3.1,w:7.4,h:3.4,barDir:"bar",chartColors:[C.navy],showValue:true,dataLabelColor:C.navy,dataLabelFontFace:F,dataLabelFontSize:11,dataLabelPosition:"outEnd",
+     catAxisLabelFontFace:F,catAxisLabelFontSize:11,catAxisLabelColor:C.navy,catAxisOrientation:"maxMin",valAxisHidden:true,valGridLine:{style:"none"},catGridLine:{style:"none"},showLegend:false,barGapWidthPct:60});
+  sec(sl,"Needs attention",8.42,2.7,4.38);
+  const att=[];
+  if(overdue.length) att.push({lead:`${overdue.length} overdue next step${overdue.length===1?"":"s"}`,text:clip(overdue.map(d=>d.codename).join(", "),80)});
+  if(stalled.length) att.push({lead:`${stalled.length} stalled (no activity in ${STALL_DAYS} days)`,text:clip(stalled.map(d=>d.codename).join(", "),80)});
+  upcoming.slice(0,4).forEach(d=>att.push({lead:`${d.codename}, ${fmtDate(d.nextStepDate)}`,text:clip(d.nextStep||"Next step not set",70)}));
+  if(!att.length) att.push({lead:"On track",text:"no overdue next steps, stalled deals or milestones in the next 30 days."});
+  sl.addText(bullets(att.slice(0,6)),{x:8.42,y:3.1,w:4.38,h:3.4,fontFace:F,fontSize:13,color:C.navy,valign:"top",paraSpaceAfter:6,margin:0});
+  source(sl, `${src} EV in $M as entered by deal teams; pipeline totals (derived).`);
+
+  // 3. Active deals (5 per slide)
+  const order=[...active].sort((a,b)=>ACTIVE.indexOf(b.stage)-ACTIVE.indexOf(a.stage)||(+b.ev||0)-(+a.ev||0));
+  for(let i=0;i<Math.max(order.length,1);i+=5){
+    sl=pptx.addSlide({masterName:"CONTENT"});
+    title(sl, i ? `Active deals (continued)` : `${active.length} active deal${active.length===1?"":"s"}: stage, value and next step`);
+    const rows=[head([["Deal"],["Stage"],["EV ($M)",1],["Next step"],["Summary for the CEO"]])];
+    order.slice(i,i+5).forEach((d,j)=>{ const a=stageAge(d); const o=cellOpts(j);
+      rows.push([
+        {text:[{text:d.codename,options:{bold:true,breakLine:!!d.target}},...(d.target?[{text:clip(d.target,60)}]:[])],options:o},
+        {text:[{text:d.stage,options:{breakLine:!!a}},...(a?[{text:`${a.n}${a.exact?"":"+"} days in stage`,options:{color:C.grey}}]:[])],options:o},
+        {text:mnum(d.ev),options:cellOpts(j,1)},
+        {text:[{text:clip(d.nextStep||"Not set",90),options:{breakLine:!!d.nextStepDate}},...(d.nextStepDate?[{text:(isOverdue(d)?"Overdue: ":"")+fmtDate(d.nextStepDate),options:{color:isOverdue(d)?C.mag:C.grey,bold:isOverdue(d)}}]:[])],options:o},
+        {text:clip(d.ceoSummary||"n/d",260),options:o}]); });
+    if(rows.length===1) rows.push([{text:"No active deals.",options:{colspan:5}}]);
+    tbl(sl,rows,{x:0.52,y:1.3,w:12.28,colW:[2.1,1.6,0.95,2.9,4.73]});
+    source(sl, `${src} EV in $M as entered by deal teams; summaries written by the deal leads.`);
+  }
+
+  // 4. Outcomes and changes
+  sl=pptx.addSlide({masterName:"CONTENT"});
+  title(sl, `${closedY.length} closed and ${deadY.length} dropped in ${yr}`);
+  const items=changeItems().slice(0,8);
+  sec(sl,`What changed in the last ${S.chgDays} days`,0.52,1.3,7.4);
+  sl.addText(items.length ? bullets(items.map(it=>({lead:new Date(it.at).toLocaleDateString("en-GB",{day:"numeric",month:"short"}),text:clip(plainText(it.html),85)}))) : [{text:"No changes recorded in this period."}],
+    {x:0.52,y:1.75,w:7.4,h:4.75,fontFace:F,fontSize:13,color:C.navy,valign:"top",paraSpaceAfter:4,margin:0});
+  sec(sl,`Outcomes in ${yr}`,8.42,1.3,4.38);
+  const hw=(4.38-0.3)/2;
+  tile(sl,8.42,1.75,hw,1.1,String(closedY.length),`Closed (${money(closedY.reduce((t,d)=>t+(+d.ev||0),0))} EV)`,C.teal);
+  tile(sl,8.42+hw+0.3,1.75,hw,1.1,String(deadY.length),"Dropped (dead)",C.navy);
+  sec(sl,"Why deals were dropped",8.42,3.15,4.38);
+  const rr=[head([["Reason"],["Deals",1]])].concat(reasons.length ? reasons.map(([r,n],j)=>[{text:r,options:cellOpts(j)},{text:String(n),options:cellOpts(j,1)}]) : [[{text:"None this year",options:{colspan:2}}]]);
+  tbl(sl,rr,{x:8.42,y:3.6,w:4.38,colW:[3.38,1.0]});
+  source(sl, `${src}${S.changes&&S.changes.err==="missing"?" Changes show latest updates only (change log not switched on).":" Changes from the tracker's change log."}`);
+
+  // 5. Bankers
+  sl=pptx.addSlide({masterName:"CONTENT"});
+  const coldN=bankers.filter(isColdB).length;
+  title(sl, `${bankers.length} banker${bankers.length===1?"":"s"}; ${coldN} not contacted in 90 days`);
+  const live=b=>active.filter(d=>(d.bankerIds||[]).includes(b.id)).length;
+  const top=[...bankers].sort((a,b)=>live(b)-live(a)||String(b.lastContact||"").localeCompare(String(a.lastContact||""))).slice(0,12);
+  const br=[head([["Banker"],["Firm"],["Relationship"],["Live mandates",1],["Last contact",1]])];
+  top.forEach((b,j)=>{ const cold=isColdB(b);
+    br.push([{text:b.name||"",options:{...cellOpts(j),bold:true}},{text:b.firm||"",options:cellOpts(j)},{text:b.relationship||"n/d",options:cellOpts(j)},{text:String(live(b)),options:cellOpts(j,1)},{text:b.lastContact?fmtDate(b.lastContact):"n/d",options:{...cellOpts(j,1),color:cold?C.mag:C.navy,bold:cold}}]); });
+  if(br.length===1) br.push([{text:"No bankers yet.",options:{colspan:5}}]);
+  tbl(sl,br,{x:0.52,y:1.3,w:12.28,colW:[3.0,3.2,2.0,2.0,2.08]});
+  source(sl, `${src} Top ${top.length} by live mandates, then most recent contact. Last contact in magenta when older than 90 days.`);
+
+  await pptx.writeFile({fileName:`Deal pipeline board pack ${TODAY()}.pptx`});
+  toast("Board pack downloaded");
+}
+
 /* ---------- CSV export ---------- */
 async function exportCSV(){
   const {bankers}=D(); const rows=filteredDeals();
@@ -1396,6 +1531,8 @@ document.addEventListener("click", async e=>{
       t.disabled=false; break; }
     case "del-note": if(S.drawer.confirmNote===id){ S.drawer.confirmNote=null; await guard(()=>S.db.collection("notes").doc(id).delete(),"Note deleted"); } else { S.drawer.confirmNote=id; refreshNotes(); } break;
     case "export": exportCSV(); break;
+    case "board-pack": t.disabled=true; try{ await exportBoardPack(); }catch(err){ toast("Couldn't build the board pack: "+((err&&err.message)||"unknown error")); } t.disabled=false; break;
+    case "print": window.print(); break;
     case "ai-open": S.ai.open=true; renderAI(); document.getElementById("aiInput")?.focus(); break;
     case "ai-close": S.ai.open=false; renderAI(); break;
     case "ai-clear": if(S.ai.ctrl) S.ai.ctrl.abort(); S.ai.msgs=[]; S.ai.api=[]; renderAI(); break;
