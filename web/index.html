@@ -145,6 +145,13 @@ th[aria-sort="none"] .sorth:is(:hover,:focus-visible) .ar::before{content:"↕";
 .mailbox .chk{display:flex;align-items:center;gap:8px;font-size:13px}
 .mailbox .chk input{width:auto}
 tr.firmrow td{background:var(--tile)!important;border-top:2px solid var(--ink);padding:10px}
+tr.firmrow{cursor:pointer}
+tr.firmrow:hover td{background:#E4E4EF!important}
+.fold{all:unset;cursor:pointer;width:22px;height:22px;display:inline-grid;place-items:center;flex:none;color:var(--ink);font-size:12px}
+.fold:focus-visible{outline:2px solid var(--magenta);outline-offset:2px}
+.fold span{display:inline-block;transition:transform .15s}
+.fold[aria-expanded="true"] span{transform:rotate(90deg)}
+.firmrow .who-list{margin-top:2px}
 tr.firmrow .t1{font-size:15px}
 tr.firmrow .rowacts{align-items:center}
 tr.inrow td:first-child{padding-left:24px}
@@ -455,7 +462,9 @@ function iso(d){ const z=new Date(d.getTime()-d.getTimezoneOffset()*60000); retu
 const TODAY = () => iso(new Date());
 function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function money(v){ if(v===""||v==null||isNaN(+v)) return "n/d"; const n=+v; if(n===0) return "$0M"; return "$" + (Math.abs(n)<10 ? n.toFixed(1) : Math.round(n).toLocaleString("en-US")) + "M"; }
-function fmtDate(s){ if(!s) return ""; const d=new Date(s+"T00:00:00"); if(isNaN(d)) return esc(s); return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}); }
+function fmtDate(s){ if(!s) return ""; const d=new Date(s+"T00:00:00"); if(isNaN(d)) return esc(s);
+  // the year only when it isn't this year, so an old contact never reads as recent
+  return d.toLocaleDateString("en-GB",{day:"numeric",month:"short", ...(d.getFullYear()!==new Date().getFullYear()?{year:"numeric"}:{})}); }
 function fmtWhen(ms){ if(!ms) return ""; const d=new Date(ms); return d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) + " " + d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}); }
 function daysUntil(s){ if(!s) return null; return Math.round((new Date(s+"T00:00:00") - new Date(TODAY()+"T00:00:00"))/86400000); }
 function safeUrl(u){ try{ const x=new URL(String(u).trim()); return (x.protocol==="https:"||x.protocol==="http:") ? x.href : null; }catch{ return null; } }
@@ -564,7 +573,7 @@ function openRoute(r){
   if(r.kind==="deal"){
     if(mode!=="view" && canEditNow() && !demoMode() && !S.dbMissing) openEditor("deal",r.id);
     else { S.drawer={kind:"view-deal",id:r.id}; renderDrawer(); }
-  } else if(canEditNow() && !demoMode()) openEditor("banker",r.id);
+  } else if(canEditNow() && !demoMode()){ if(S.bgroup!==false && !firmOpen(firmKey(rec.firm)||"~")){ setFold(firmKey(rec.firm)||"~",true); render(); } openEditor("banker",r.id); }
   else { history.replaceState(null,"","#bankers"); S.pushed=false; }
 }
 function goRecord(kind,id,mode){
@@ -807,6 +816,7 @@ function renderBankers(){
   <section class="toolbar">
     <div class="grow"><input type="search" id="bq" placeholder="Search bankers and their notes" aria-label="Search bankers and their notes"></div>
     <button type="button" class="btn" data-act="bgroup" aria-pressed="${S.bgroup!==false}">Group by firm</button>
+    ${S.bgroup!==false?`<button type="button" class="btn" data-act="fold-all" data-open="${allFirmsOpen()?"0":"1"}">${allFirmsOpen()?"Collapse all":"Expand all"}</button>`:""}
     ${edit?`<button type="button" class="btn" data-act="import-open">Import</button><button class="btn primary" data-act="new-banker">Add banker</button>`:""}
   </section>
   ${bankerChipsHTML(base)}
@@ -831,9 +841,22 @@ function bankerRows(rows, deals, ex, edit, X){
   return keys.map(k=>{ const ppl=groups.get(k); const firm=k==="~"?"No firm recorded":ppl[0].firm;
     const live=deals.filter(d=>isActive(d)&&(d.bankerIds||[]).some(id=>ppl.some(p=>p.id===id))).length;
     const last=ppl.map(p=>p.lastContact||"").sort().pop();
-    return `<tr class="firmrow"><td colspan="5"><div class="firm">${k==="~"?"":firmLogo({firm, website:(ppl.find(p=>p.website)||{}).website},34)}<div><div class="t1">${esc(firm)}</div><div class="t2">${ppl.length} ${ppl.length===1?"person":"people"} · ${live} live mandate${live===1?"":"s"} · last contact ${last?fmtDate(last):"not recorded"}</div></div></div></td>
-      <td class="c-hide"><div class="rowacts">${edit&&!ex&&k!=="~"?`${ppl.some(p=>isEmail(p.email))?`<button class="btn sm ghost" data-act="mail-firm" data-firm="${esc(firm)}" aria-label="Email everyone at ${esc(firm)}">Email all</button>`:""}<button class="btn sm ghost" data-act="new-banker" data-firm="${esc(firm)}" aria-label="Add a person at ${esc(firm)}">Add person</button>`:""}</div></td></tr>${ppl.map(row).join("")}`; }).join("");
+    const open=firmOpen(k); const names=ppl.slice(0,3).map(p=>p.name).join(", ")+(ppl.length>3?` and ${ppl.length-3} more`:"");
+    return `<tr class="firmrow" data-act="fold" data-k="${esc(k)}"><td colspan="5"><div class="firm"><button type="button" class="fold" data-act="fold" data-k="${esc(k)}" aria-expanded="${open}" aria-label="${open?"Collapse":"Expand"} ${esc(firm)}"><span aria-hidden="true">▶</span></button>${k==="~"?"":firmLogo({firm, website:(ppl.find(p=>p.website)||{}).website},34)}<div><div class="t1">${esc(firm)}</div><div class="t2">${ppl.length} ${ppl.length===1?"person":"people"} · ${live} live mandate${live===1?"":"s"} · last contact ${last?fmtDate(last):"not recorded"}</div>${open?"":`<div class="t2 who-list">${esc(names)}</div>`}</div></div></td>
+      <td class="c-hide"><div class="rowacts">${edit&&!ex&&k!=="~"?`${ppl.some(p=>isEmail(p.email))?`<button class="btn sm ghost" data-act="mail-firm" data-firm="${esc(firm)}" aria-label="Email everyone at ${esc(firm)}">Email all</button>`:""}<button class="btn sm ghost" data-act="new-banker" data-firm="${esc(firm)}" aria-label="Add a person at ${esc(firm)}">Add person</button>`:""}</div></td></tr>${open?ppl.map(row).join(""):""}`; }).join("");
 }
+/* Firm groups fold. Explicit choices are remembered per browser; otherwise large CRMs start collapsed.
+   Searching or filtering opens every firm with a match. */
+const FOLD_KEY="dealdesk.bankerFolds";
+function loadFolds(){ if(S.bfold) return S.bfold; try{ S.bfold=JSON.parse(localStorage.getItem(FOLD_KEY)||"{}")||{}; }catch{ S.bfold={}; } return S.bfold; }
+function saveFolds(){ try{ localStorage.setItem(FOLD_KEY, JSON.stringify(S.bfold||{})); }catch{} }
+function firmOpen(k){
+  if(S.bq.trim() || (S.bfilter && S.bfilter!=="all")) return true;
+  const f=loadFolds(); return (k in f) ? !!f[k] : D().bankers.length<=25;
+}
+function setFold(k,open){ loadFolds()[k]=!!open; saveFolds(); }
+function firmKeysShown(){ return [...new Set(D().bankers.map(b=>firmKey(b.firm)||"~"))]; }
+function allFirmsOpen(){ const ks=firmKeysShown(); return ks.length>0 && ks.every(firmOpen); }
 
 /* ---------- drawer: deal / banker ---------- */
 function renderDrawer(){
@@ -1748,6 +1771,9 @@ document.addEventListener("click", async e=>{
     case "mail-ai": mailDraftWithClaude(); break;
     case "mail-firm": mailFirm(t.dataset.firm); break;
     case "open-mate": e.preventDefault(); history.replaceState(null,"","#banker/"+encodeURIComponent(id)); S.lastFocusId=id; openRoute({kind:"banker",id}); break;
+    case "fold": { const k=t.dataset.k; const open=!firmOpen(k); setFold(k,open); render();
+      document.querySelector(`.fold[data-k="${CSS.escape(k)}"]`)?.focus(); break; }
+    case "fold-all": { const open=t.dataset.open==="1"; firmKeysShown().forEach(k=>loadFolds()[k]=open); saveFolds(); render(); document.querySelector('[data-act="fold-all"]')?.focus(); break; }
     case "bgroup": S.bgroup = S.bgroup===false; render(); document.querySelector('[data-act="bgroup"]')?.focus(); break;
     case "import-open": if(!canEditNow()) return; S.lastFocusEl=t; S.drawer={kind:"import"}; renderDrawer(); break;
     case "im-preview": importPreview(); break;

@@ -14,7 +14,9 @@ const stageOf = (d: Doc) => { const s = String(d.stage ?? ""); return STAGE_ALIA
 const isActive = (d: Doc) => ACTIVE.includes(stageOf(d));
 const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const daysBetween = (fromIso: string, toIso: string) => Math.round((Date.parse(toIso + "T00:00:00Z") - Date.parse(fromIso + "T00:00:00Z")) / DAY);
-const fmtDate = (s: string) => new Date(s + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+// The year only when it isn't this year, so an old contact never reads as recent
+const fmtDate = (s: string) => { const d = new Date(s + "T00:00:00Z");
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC", ...(d.getUTCFullYear() !== new Date().getUTCFullYear() ? { year: "numeric" as const } : {}) }); };
 const money = (v: unknown) => {
   if (v === "" || v == null || isNaN(Number(v))) return "n/d";
   const n = Number(v); if (n === 0) return "$0M";
