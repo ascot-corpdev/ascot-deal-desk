@@ -37,7 +37,7 @@ jobs:
             echo "::error::SUPABASE_PUBLISHABLE_KEY holds a secret key (sb_secret_...). Use the publishable key (sb_publishable_...) and delete this variable's value."
             exit 1;;
           esac
-          node -e 'const c={supabaseUrl:process.env.SUPABASE_URL,supabaseAnonKey:process.env.SUPABASE_PUBLISHABLE_KEY,usernameDomain:process.env.USERNAME_DOMAIN||"deal-desk.local"};require("fs").writeFileSync("web/config.js","window.DEALDESK_CONFIG = "+JSON.stringify(c,null,2)+";\n")'
+          node -e 'const c={supabaseUrl:process.env.SUPABASE_URL.trim().replace(/\/+$/,"").replace(/\/(rest|auth)\/v1$/,""),supabaseAnonKey:process.env.SUPABASE_PUBLISHABLE_KEY,usernameDomain:process.env.USERNAME_DOMAIN||"deal-desk.local"};require("fs").writeFileSync("web/config.js","window.DEALDESK_CONFIG = "+JSON.stringify(c,null,2)+";\n")'
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

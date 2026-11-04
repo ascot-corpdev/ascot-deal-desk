@@ -13,7 +13,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomInt } from "node:crypto";
 
-const url = process.env.SUPABASE_URL;
+// Accept the URL as copied from anywhere in the dashboard: keep only https://<ref>.supabase.co
+const url = (process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "").replace(/\/(rest|auth)\/v1$/, "");
 const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const domain = process.env.USERNAME_DOMAIN || "deal-desk.local";
 if (!url || !key) {

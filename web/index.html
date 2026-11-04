@@ -195,6 +195,14 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
 .ai-f .row{display:flex;gap:8px;align-items:center}
 .ai-f .row .sp{flex:1;font-size:11px;color:var(--muted)}
 .thinking{font-size:12px;color:var(--muted)}
+.logo{--s:28px;position:relative;flex:none;width:var(--s);height:var(--s);display:inline-grid;place-items:center;overflow:hidden;
+  border:1px solid var(--grid);background:#fff;color:#fff;font-size:calc(var(--s) * .36);font-weight:bold;letter-spacing:.02em;vertical-align:middle}
+.logo b{position:absolute;inset:0;display:grid;place-items:center;background:var(--lc,#262166)}
+.logo img{position:absolute;inset:3px;width:calc(100% - 6px);height:calc(100% - 6px);object-fit:contain;background:#fff;z-index:1}
+.firm{display:flex;align-items:center;gap:10px;min-width:0}
+.firm>div{min-width:0}
+.firmchips{display:flex;flex-wrap:wrap;gap:6px 10px}
+.firmchips span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .login{max-width:440px;width:100%;margin:28px auto;display:flex;flex-direction:column;gap:14px;background:var(--tile);padding:28px}
 .login h2{margin:0;color:var(--magenta);font-weight:normal;font-size:22px}
 .login p{margin:0}
@@ -277,7 +285,8 @@ const DEMO = (() => {
 })();
 
 /* ---------- state ---------- */
-const CFG = window.DEALDESK_CONFIG || {};
+const CFG = Object.assign({}, window.DEALDESK_CONFIG || {});
+if(CFG.supabaseUrl) CFG.supabaseUrl = String(CFG.supabaseUrl).trim().replace(/\/+$/,"").replace(/\/(rest|auth)\/v1$/,"");
 const S = {
   view:"ceo", sb:null, db:null, meId:null, me:null, writeLocked:false,
   deals:[], bankers:[], notes:[], loaded:{deals:false,bankers:false,notes:false}, stale:false, dbMissing:false, configMissing:false,
@@ -298,6 +307,32 @@ function fmtWhen(ms){ if(!ms) return ""; const d=new Date(ms); return d.toLocale
 function daysUntil(s){ if(!s) return null; return Math.round((new Date(s+"T00:00:00") - new Date(TODAY()+"T00:00:00"))/86400000); }
 function safeUrl(u){ try{ const x=new URL(String(u).trim()); return (x.protocol==="https:"||x.protocol==="http:") ? x.href : null; }catch{ return null; } }
 function linkKind(u,label){ const s=(u+" "+label).toLowerCase(); if(/\.pptx?\b|powerpoint|deck|:p:/.test(s)) return ["PPT",""]; if(/\.docx?\b|:w:|memo/.test(s)) return ["DOC","doc"]; if(/\.xlsx?\b|:x:|model/.test(s)) return ["XLS","xls"]; return ["LINK","web"]; }
+/* Firm logos: from the firm's website domain (saved on the banker, or recognised from the firm name).
+   The initials badge shows underneath and stays visible if no logo loads. */
+const FIRM_DOMAINS = {
+  "marsh":"marsh.com","marsh mclennan":"marshmclennan.com","aon":"aon.com","reagan consulting":"reaganconsulting.com",
+  "guy carpenter":"guycarp.com","gallagher":"ajg.com","gallagher re":"ajg.com","wtw":"wtwco.com","willis towers watson":"wtwco.com",
+  "howden":"howdengroup.com","bms":"bmsgroup.com","lockton":"lockton.com","marshberry":"marshberry.com","waller helms":"wallerhelms.com",
+  "goldman sachs":"goldmansachs.com","morgan stanley":"morganstanley.com","jp morgan":"jpmorgan.com","j.p. morgan":"jpmorgan.com","jpmorgan":"jpmorgan.com",
+  "evercore":"evercore.com","lazard":"lazard.com","kbw":"kbw.com","keefe bruyette & woods":"kbw.com","keefe, bruyette & woods":"kbw.com",
+  "houlihan lokey":"hl.com","pjt partners":"pjtpartners.com","pjt":"pjtpartners.com","moelis":"moelis.com","perella weinberg":"pwpartners.com",
+  "centerview":"centerviewpartners.com","ardea partners":"ardeapartners.com","jefferies":"jefferies.com","piper sandler":"pipersandler.com",
+  "raymond james":"raymondjames.com","barclays":"barclays.com","citi":"citigroup.com","citigroup":"citigroup.com","bank of america":"bankofamerica.com",
+  "bofa":"bankofamerica.com","ubs":"ubs.com","deutsche bank":"db.com","rbc":"rbccm.com","rbc capital markets":"rbccm.com","bmo":"bmo.com",
+  "wells fargo":"wellsfargo.com","hsbc":"hsbc.com","nomura":"nomura.com","mizuho":"mizuhogroup.com","truist":"truist.com","stifel":"stifel.com",
+  "william blair":"williamblair.com","deloitte":"deloitte.com","pwc":"pwc.com","ey":"ey.com","kpmg":"kpmg.com","milliman":"milliman.com"
+};
+function cleanDomain(v){ return String(v||"").trim().toLowerCase().replace(/^https?:\/\//,"").replace(/^www\./,"").split(/[\/?#\s]/)[0]; }
+function domainOf(b){ return cleanDomain(b && b.website) || FIRM_DOMAINS[String((b&&b.firm)||"").trim().toLowerCase()] || ""; }
+function initialsOf(t){ const w=String(t||"?").replace(/[^A-Za-z0-9 &]/g," ").trim().split(/\s+/).filter(x=>x&&x!=="&"); return ((w[0]||"?")[0]+(w[1]?w[1][0]:"")).toUpperCase(); }
+const LOGO_COLORS=["#262166","#00539E","#944599","#00857C","#0081C3","#EB008C"];
+function firmLogo(b, size){
+  const label=(b&&(b.firm||b.name))||""; const d=domainOf(b);
+  const c=LOGO_COLORS[[...label].reduce((a,ch)=>a+ch.charCodeAt(0),0)%LOGO_COLORS.length];
+  const img = d ? `<img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=128" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
+  return `<span class="logo" style="--s:${size||28}px;--lc:${c}" title="${esc(label)}" aria-hidden="true"><b>${esc(initialsOf(label))}</b>${img}</span>`;
+}
+function mnum(v){ if(v===""||v==null||isNaN(+v)) return "n/d"; const n=+v; return Math.abs(n)<10 ? n.toFixed(1) : Math.round(n).toLocaleString("en-US"); }
 function stagePill(st){ return `<span class="pill ${STAGE_CLASS[st]||"st-hold"}">${esc(st||"n/d")}</span>`; }
 function isActive(d){ return ACTIVE.includes(d.stage); }
 function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); }
@@ -383,13 +418,13 @@ function renderCEO(){
   </section>
   <section><h3 class="sec">Deal summaries and decks</h3>
     ${sorted.length ? `<div class="tbl-wrap"><table><thead><tr><th>Deal</th><th>Stage</th><th class="num">EV ($M)</th><th class="num">GWP ($M)</th><th>Summary</th><th>Decks</th><th>Lead</th></tr></thead><tbody>
-    ${sorted.map(d=>`<tr class="click" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${X}</div><div class="t2">${esc(d.target||"")}</div></td><td>${stagePill(d.stage)}</td><td class="num">${d.ev!==""&&d.ev!=null?esc(Math.round(+d.ev).toLocaleString("en-US")):"n/d"}</td><td class="num">${d.gwp!==""&&d.gwp!=null?esc(Math.round(+d.gwp).toLocaleString("en-US")):"n/d"}</td><td class="summary">${esc(d.ceoSummary||"")}</td><td>${links(d.links)}</td><td>${esc(d.lead||"")}</td></tr>`).join("")}
+    ${sorted.map(d=>`<tr class="click" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${X}</div><div class="t2">${esc(d.target||"")}</div></td><td>${stagePill(d.stage)}</td><td class="num">${esc(mnum(d.ev))}</td><td class="num">${esc(mnum(d.gwp))}</td><td class="summary">${esc(d.ceoSummary||"")}</td><td>${links(d.links)}</td><td>${esc(d.lead||"")}</td></tr>`).join("")}
     </tbody></table></div>` : `<div class="empty"><p>No active deals.</p></div>`}
   </section>
   <section class="cols">
     <div><h3 class="sec">Banker relationships</h3>
       ${topB.length ? `<div class="tbl-wrap"><table><thead><tr><th>Banker</th><th>Coverage</th><th>Relationship</th><th class="num">Live mandates</th><th class="num">Last contact</th></tr></thead><tbody>
-      ${topB.map(b=>{ const m=deals.filter(d=>isActive(d)&&(d.bankerIds||[]).includes(b.id)).length; const n=daysUntil(b.lastContact); return `<tr><td><div class="t1">${esc(b.name)}${X}</div><div class="t2">${esc(b.firm||"")}</div></td><td>${esc(b.coverage||"")}</td><td><span class="pill rel-${esc(b.relationship)}">${esc(b.relationship||"n/d")}</span></td><td class="num">${m}</td><td class="num ${n!=null&&n<-90?"over":""}">${b.lastContact?fmtDate(b.lastContact):"n/d"}</td></tr>`; }).join("")}
+      ${topB.map(b=>{ const m=deals.filter(d=>isActive(d)&&(d.bankerIds||[]).includes(b.id)).length; const n=daysUntil(b.lastContact); return `<tr><td><div class="firm">${firmLogo(b,30)}<div><div class="t1">${esc(b.name)}${X}</div><div class="t2">${esc(b.firm||"")}</div></div></div></td><td>${esc(b.coverage||"")}</td><td><span class="pill rel-${esc(b.relationship)}">${esc(b.relationship||"n/d")}</span></td><td class="num">${m}</td><td class="num ${n!=null&&n<-90?"over":""}">${b.lastContact?fmtDate(b.lastContact):"n/d"}</td></tr>`; }).join("")}
       </tbody></table></div>` : `<p class="t2">No bankers yet.</p>`}
     </div>
     <div><h3 class="sec">Latest context from the team</h3>
@@ -427,10 +462,10 @@ function renderDeals(){
       <td><div class="t1">${esc(d.codename)}${X}</div><div class="t2">${esc(d.target||"")}</div></td>
       <td>${esc(d.type||"")}<div class="t2">${esc(d.sector||"")}</div></td>
       <td>${stagePill(d.stage)}</td><td>${esc(d.priority||"")}</td>
-      <td class="num">${d.ev!==""&&d.ev!=null?esc(Math.round(+d.ev).toLocaleString("en-US")):"n/d"}</td>
+      <td class="num">${esc(mnum(d.ev))}</td>
       <td class="num">${d.stake!==""&&d.stake!=null?esc(d.stake):"n/d"}</td>
       <td>${esc(d.nextStep||"")}${d.nextStepDate?`<div class="t2 ${n<0&&isActive(d)?"over":""}">${n<0&&isActive(d)?"Overdue: ":""}${fmtDate(d.nextStepDate)}</div>`:""}</td>
-      <td>${bk.map(b=>esc(b.firm||b.name)).join(", ")||'<span class="t2">None</span>'}</td>
+      <td>${bk.length?`<div class="firmchips">${bk.map(b=>`<span>${firmLogo(b,20)}${esc(b.firm||b.name)}</span>`).join("")}</div>`:'<span class="t2">None</span>'}</td>
       <td>${esc(d.lead||"")}</td>
       <td class="t2">${d.updatedAt?`${esc(new Date(d.updatedAt).toLocaleDateString("en-GB",{day:"numeric",month:"short"}))}<br>${esc(nameOf(d.updatedBy,d.updatedByName))}`:""}</td>
       <td><div class="rowacts">${edit&&!ex?`<button class="btn sm" data-act="edit-deal" data-id="${esc(d.id)}">Edit</button>`:""}</div></td></tr>`; }).join("")}
@@ -454,7 +489,7 @@ function renderBankers(){
   </section>
   <section>${rows.length?`<div class="tbl-wrap"><table><thead><tr><th>Banker</th><th>Firm</th><th>Coverage</th><th>Relationship</th><th>Deals shown to us</th><th class="num">Last contact</th><th></th></tr></thead><tbody>
     ${rows.map(b=>{ const ds=deals.filter(d=>(d.bankerIds||[]).includes(b.id)); const n=daysUntil(b.lastContact); return `<tr class="click" data-act="${ex?"":"edit-banker"}" data-id="${esc(b.id)}" tabindex="0">
-      <td><div class="t1">${esc(b.name)}${X}</div><div class="t2">${esc(b.title||"")}</div></td><td>${esc(b.firm||"")}</td><td>${esc(b.coverage||"")}</td>
+      <td><div class="firm">${firmLogo(b,34)}<div><div class="t1">${esc(b.name)}${X}</div><div class="t2">${esc(b.title||"")}</div></div></div></td><td>${esc(b.firm||"")}</td><td>${esc(b.coverage||"")}</td>
       <td><span class="pill rel-${esc(b.relationship)}">${esc(b.relationship||"n/d")}</span></td>
       <td>${ds.length?ds.map(d=>`${esc(d.codename)} <span class="t2">(${esc(d.stage)})</span>`).join("<br>"):'<span class="t2">None yet</span>'}</td>
       <td class="num ${n!=null&&n<-90?"over":""}">${b.lastContact?fmtDate(b.lastContact):"n/d"}</td>
@@ -561,11 +596,12 @@ function linkRowsHTML(ls){ return (ls||[]).map((l,i)=>`<div class="linkrow"><inp
 function bankerFormHTML(dr){
   const isNew=!dr.id; const b = isNew ? (dr.seed||{}) : (S.bankers.find(x=>x.id===dr.id)||{});
   const ds = S.deals.filter(d=>(d.bankerIds||[]).includes(b.id));
-  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${isNew?"New banker":"Banker"}</div><h2 id="drTitle">${esc(b.name||"New contact")}</h2></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
+  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${isNew?"New banker":"Banker"}</div><h2 id="drTitle" class="firm">${isNew?"":firmLogo(b,32)}<span>${esc(b.name||"New contact")}</span></h2></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
   <form class="drawer-b" id="bankerForm" novalidate>
     <div class="fgrid">
       <label class="f">Name<input type="text" id="b_name" value="${esc(b.name||"")}"></label>
       <label class="f">Firm<input type="text" id="b_firm" value="${esc(b.firm||"")}"></label>
+      <label class="f">Firm website <em>(for the logo, e.g. marsh.com)</em><input type="text" id="b_website" value="${esc(b.website||"")}" placeholder="${esc(domainOf(b)||"firm.com")}" autocapitalize="none" spellcheck="false"></label>
       <label class="f">Title<input type="text" id="b_title" value="${esc(b.title||"")}"></label>
       <label class="f">Coverage<input type="text" id="b_coverage" value="${esc(b.coverage||"")}" placeholder="Specialty P&amp;C, MGAs"></label>
       <label class="f">Email<input type="email" id="b_email" value="${esc(b.email||"")}"></label>
@@ -633,7 +669,7 @@ async function deleteDeal(id){
 async function saveBanker(){
   const name=val("b_name"); if(!name){ toast("Add the banker's name."); return; }
   const id=S.drawer.id||("b"+uid()); const prev=S.bankers.find(b=>b.id===id);
-  const body={name, firm:val("b_firm"), title:val("b_title"), coverage:val("b_coverage"), email:val("b_email"), phone:val("b_phone"), relationship:val("b_relationship"), lastContact:val("b_lastContact"), context:val("b_context"),
+  const body={name, firm:val("b_firm"), website:cleanDomain(val("b_website")), title:val("b_title"), coverage:val("b_coverage"), email:val("b_email"), phone:val("b_phone"), relationship:val("b_relationship"), lastContact:val("b_lastContact"), context:val("b_context"),
     createdAt:prev?.createdAt||Date.now(), updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""};
   if(await guard(()=>S.db.collection("bankers").doc(id).set(body), prev?"Saved":"Banker added")) closeDrawer();
 }
@@ -660,7 +696,7 @@ async function exportCSV(){
 
 /* ---------- Claude helper ---------- */
 const ALLOWED_DEAL_CHANGES = ["target","type","sector","stage","priority","ev","gwp","stake","origin","lead","nextStep","nextStepDate","ceoSummary","keyRisks"];
-const ALLOWED_BANKER_CHANGES = ["firm","title","coverage","relationship","lastContact","context","email","phone"];
+const ALLOWED_BANKER_CHANGES = ["firm","website","title","coverage","relationship","lastContact","context","email","phone"];
 
 function aiData(){
   const {deals,bankers,notes}=D();
@@ -923,7 +959,11 @@ async function doLogin(){
   const {data, error}=await S.sb.auth.signInWithPassword({email:toEmail(u), password:pw});
   S.loginBusy=false;
   if(error || !data.session){
-    S.loginErr = (error && /rate|too many/i.test(error.message)) ? "Too many attempts. Wait a few minutes and try again." : "That username and password don't match. Check them, or ask the tracker owner to reset your password.";
+    const m=(error&&error.message)||"No session returned";
+    S.loginErr = /rate|too many/i.test(m) ? "Too many attempts. Wait a few minutes and try again."
+      : (error && (error.code==="invalid_credentials" || /invalid login credentials/i.test(m))) ? "That username and password don't match. Check them, or ask the tracker owner to reset your password."
+      : (error && error.code==="email_provider_disabled") ? "Sign-in is switched off in Supabase (Authentication > Sign In / Providers > Email). Tell the tracker owner."
+      : "Sign-in failed: "+m+". The site's Supabase settings may be wrong; tell the tracker owner.";
     render(); const f=document.getElementById("li_pw"); if(f){ f.value=""; f.focus(); } return;
   }
   await onSignedIn(data.session);
