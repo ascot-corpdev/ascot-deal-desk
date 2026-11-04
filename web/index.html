@@ -139,6 +139,11 @@ th[aria-sort="none"] .sorth:is(:hover,:focus-visible) .ar::before{content:"↕";
 .fchip .sw.st-done{background:var(--teal)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .mob{display:none}
+.mailbox{display:flex;flex-direction:column;gap:10px}
+.mailbox .to{font-size:13px}
+.mailbox .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.mailbox .chk{display:flex;align-items:center;gap:8px;font-size:13px}
+.mailbox .chk input{width:auto}
 tr.firmrow td{background:var(--tile)!important;border-top:2px solid var(--ink);padding:10px}
 tr.firmrow .t1{font-size:15px}
 tr.firmrow .rowacts{align-items:center}
@@ -402,7 +407,7 @@ const TYPES = ["Acquisition","Minority investment","MGA / program","Reinsurance 
 const PRIORITIES = ["High","Medium","Low"];
 const ORIGINS = ["Banker-led","Proprietary","Inbound","Auction"];
 const RELS = ["Strong","Active","Developing","Dormant"];
-const NOTE_KINDS = ["Update","Call","Meeting","Diligence","Board / IC","Decision"];
+const NOTE_KINDS = ["Update","Call","Email","Meeting","Diligence","Board / IC","Decision"];
 const DEAL_FIELDS = ["codename","target","type","sector","stage","priority","origin","ev","gwp","stake","lead","nextStep","nextStepDate","ceoSummary","keyRisks","bankerIds","links"];
 const BANKER_FIELDS = ["name","firm","title","email","phone","coverage","relationship","lastContact","context"];
 
@@ -827,7 +832,7 @@ function bankerRows(rows, deals, ex, edit, X){
     const live=deals.filter(d=>isActive(d)&&(d.bankerIds||[]).some(id=>ppl.some(p=>p.id===id))).length;
     const last=ppl.map(p=>p.lastContact||"").sort().pop();
     return `<tr class="firmrow"><td colspan="5"><div class="firm">${k==="~"?"":firmLogo({firm, website:(ppl.find(p=>p.website)||{}).website},34)}<div><div class="t1">${esc(firm)}</div><div class="t2">${ppl.length} ${ppl.length===1?"person":"people"} · ${live} live mandate${live===1?"":"s"} · last contact ${last?fmtDate(last):"not recorded"}</div></div></div></td>
-      <td class="c-hide"><div class="rowacts">${edit&&!ex&&k!=="~"?`<button class="btn sm ghost" data-act="new-banker" data-firm="${esc(firm)}" aria-label="Add a person at ${esc(firm)}">Add person</button>`:""}</div></td></tr>${ppl.map(row).join("")}`; }).join("");
+      <td class="c-hide"><div class="rowacts">${edit&&!ex&&k!=="~"?`${ppl.some(p=>isEmail(p.email))?`<button class="btn sm ghost" data-act="mail-firm" data-firm="${esc(firm)}" aria-label="Email everyone at ${esc(firm)}">Email all</button>`:""}<button class="btn sm ghost" data-act="new-banker" data-firm="${esc(firm)}" aria-label="Add a person at ${esc(firm)}">Add person</button>`:""}</div></td></tr>${ppl.map(row).join("")}`; }).join("");
 }
 
 /* ---------- drawer: deal / banker ---------- */
@@ -962,6 +967,7 @@ function bankerFormHTML(dr){
       <label class="f">Last contact<input type="date" id="b_lastContact" value="${esc(b.lastContact||"")}"></label>
       <label class="f full">Relationship context<textarea id="b_context" rows="3">${esc(b.context||"")}</textarea></label>
     </div></div>
+    ${isNew?"":mailBoxHTML(b)}
     ${isNew?"":`<div><h3 class="sec">Deals shown to us</h3>${ds.length?ds.map(d=>`<div>${esc(d.codename)} ${stagePill(d.stage)}</div>`).join(""):'<p class="t2">None linked yet. Link bankers from a deal.</p>'}</div>
     ${(()=>{ const mates=b.firm?S.bankers.filter(x=>x.id!==b.id && firmKey(x.firm)===firmKey(b.firm)):[]; return mates.length?`<div><h3 class="sec">Others at ${esc(b.firm)}</h3><div class="colleagues">${mates.map(m=>`<a href="#banker/${encodeURIComponent(m.id)}" data-act="open-mate" data-id="${esc(m.id)}">${esc(m.name)}</a>${m.title?` <span class="t2">${esc(m.title)}</span>`:""}`).join("<span class=\"t2\">·</span>")}</div></div>`:""; })()}
     <div><h3 class="sec">Interactions</h3>
@@ -1360,6 +1366,53 @@ async function exportBoardPack(){
   toast("Board pack downloaded");
 }
 
+/* ---------- email: drafts open in the user's own email app (mailto), optionally logged as an interaction ---------- */
+const isEmail = v => /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(String(v||"").trim());
+function mailBoxHTML(b){
+  return `<div><h3 class="sec">Email</h3><div class="mailbox">
+    <div class="to" id="mailTo">${isEmail(b.email)?`To: <a href="mailto:${esc(String(b.email).trim())}">${esc(String(b.email).trim())}</a>`:`<span class="t2">No email address yet. Add it under Contact above, then write here.</span>`}</div>
+    <label class="f">Subject<input type="text" id="m_subject" placeholder="Following up on Project Otter"></label>
+    <label class="f">Message<textarea id="m_body" rows="4" placeholder="Write it here, or let Claude draft it"></textarea></label>
+    <label class="chk"><input type="checkbox" id="m_log" checked> Log it as an email interaction (updates last contact)</label>
+    <div class="acts"><button type="button" class="btn primary sm" data-act="mail-send">Open in email app</button>${S.sample?`<button type="button" class="btn sm" data-act="mail-ai">Draft with Claude</button>`:""}</div>
+  </div></div>`;
+}
+function openMailto(to, subject, body){
+  const q=[subject?`subject=${encodeURIComponent(subject)}`:"", body?`body=${encodeURIComponent(body)}`:""].filter(Boolean).join("&");
+  const url=`mailto:${to.map(a=>encodeURIComponent(a.trim()).replace(/%40/g,"@")).join(",")}${q?"?"+q:""}`;
+  S.lastMailto=url;
+  const a=document.createElement("a"); a.href=url; a.rel="noopener"; document.body.appendChild(a); a.click(); a.remove();
+  return url;
+}
+async function mailSend(){
+  const dr=S.drawer; if(!dr||dr.kind!=="banker") return;
+  const to=val("b_email"); if(!isEmail(to)){ toast("Add their email address under Contact first."); document.getElementById("b_email")?.focus(); return; }
+  const subject=val("m_subject"), body=(document.getElementById("m_body")?.value||"").trim();
+  openMailto([to], subject, body);
+  if(document.getElementById("m_log")?.checked){
+    const text = subject ? `Emailed: ${subject}${body?`\n${clip(body,400)}`:""}` : (body ? `Emailed: ${clip(body,400)}` : "Emailed");
+    if(await addNote({kind:"banker",id:dr.id}, "Email", text)){ syncLastContact(dr); document.getElementById("m_subject").value=""; document.getElementById("m_body").value=""; }
+  }
+}
+function syncLastContact(dr){
+  if(dr.kind!=="banker" || S.drawer!==dr) return;
+  const e=document.getElementById("b_lastContact"); if(e && dr.base && e.value===normV(dr.base.lastContact)){ e.value=TODAY(); dr.base.lastContact=TODAY(); } if(dr.orig) dr.orig.lastContact=TODAY();
+}
+function mailDraftWithClaude(){
+  const dr=S.drawer; if(!dr||dr.kind!=="banker"||!S.sample) return;
+  const name=val("b_name"), firm=val("b_firm"), title=val("b_title"), ctx=val("b_context"), subject=val("m_subject"), body=(document.getElementById("m_body")?.value||"").trim();
+  const prompt=`Draft a short email from me to ${name}${title?`, ${title}`:""}${firm?` at ${firm}`:""}. `+
+    (subject?`Subject: ${subject}. `:"")+(body?`My notes for it: ${body}. `:"")+(ctx?`What we know about them: ${clip(ctx,600)}. `:"")+
+    `Use their banker id ${dr.id} to check our notes and deals with them. Under 120 words, plain and friendly, with a subject line. Don't propose tracker changes.`;
+  S.ai.open=true; renderAI(); askAI(prompt);
+}
+function mailFirm(firm){
+  const ppl=S.bankers.filter(b=>firmKey(b.firm)===firmKey(firm) && isEmail(b.email));
+  if(!ppl.length){ toast(`No email addresses saved for ${firm} yet.`); return; }
+  openMailto(ppl.map(b=>String(b.email).trim()), "", "");
+  toast(`Draft to ${ppl.length} ${ppl.length===1?"person":"people"} at ${firm}`);
+}
+
 /* ---------- import bankers from a pasted table ---------- */
 function importHTML(){
   const im=S.drawer.im||{};
@@ -1640,6 +1693,9 @@ document.addEventListener("click", async e=>{
     case "new-deal": if(!canEditNow()) return; S.drawer={kind:"deal",id:null,links:[{label:"",url:""}]}; renderDrawer(); break;
     case "edit-banker": if(!canEditNow()||demoMode()) return; goRecord("banker",id,"edit"); break;
     case "new-banker": if(!canEditNow()) return; S.drawer={kind:"banker",id:null,seed:t.dataset.firm?{firm:t.dataset.firm}:undefined}; renderDrawer(); break;
+    case "mail-send": t.disabled=true; await mailSend(); t.disabled=false; break;
+    case "mail-ai": mailDraftWithClaude(); break;
+    case "mail-firm": mailFirm(t.dataset.firm); break;
     case "open-mate": e.preventDefault(); history.replaceState(null,"","#banker/"+encodeURIComponent(id)); S.lastFocusId=id; openRoute({kind:"banker",id}); break;
     case "bgroup": S.bgroup = S.bgroup===false; render(); document.querySelector('[data-act="bgroup"]')?.focus(); break;
     case "import-open": if(!canEditNow()) return; S.lastFocusEl=t; S.drawer={kind:"import"}; renderDrawer(); break;
@@ -1657,7 +1713,7 @@ document.addEventListener("click", async e=>{
     case "gone-recreate": t.disabled=true; await recreateRecord(); t.disabled=false; break;
     case "add-note": { const txt=val("n_text"); if(!txt){ toast("Write the note first."); return; } t.disabled=true;
       const dr=S.drawer; if(await addNote({kind:dr.kind,id:dr.id}, val("n_kind"), txt)){ document.getElementById("n_text").value="";
-        if(dr.kind==="banker" && S.drawer===dr){ const e=document.getElementById("b_lastContact"); if(e && dr.base && e.value===normV(dr.base.lastContact)){ e.value=TODAY(); dr.base.lastContact=TODAY(); } if(dr.orig) dr.orig.lastContact=TODAY(); } }
+        syncLastContact(dr); }
       t.disabled=false; break; }
     case "del-note": if(S.drawer.confirmNote===id){ S.drawer.confirmNote=null; await guard(()=>S.db.collection("notes").doc(id).delete(),"Note deleted"); } else { S.drawer.confirmNote=id; refreshNotes(); } break;
     case "export": exportCSV(); break;
@@ -1693,6 +1749,7 @@ document.addEventListener("submit", e=>{ e.preventDefault();
   if(e.target.id==="pwForm"){ savePassword(); return; }
   if(e.target.id==="aiForm"){ const i=document.getElementById("aiInput"); const v=i.value; i.value=""; askAI(v); } });
 document.addEventListener("input", e=>{
+  if(e.target.id==="b_email"){ const el=document.getElementById("mailTo"); const v=e.target.value.trim(); if(el) el.innerHTML = isEmail(v) ? `To: <a href="mailto:${esc(v)}">${esc(v)}</a>` : `<span class="t2">No email address yet. Add it under Contact above, then write here.</span>`; }
   if(e.target.id==="q"){ S.q=e.target.value; const pos=e.target.selectionStart; render(); const n=document.getElementById("q"); n.focus(); n.setSelectionRange(pos,pos); }
   if(e.target.id==="bq"){ S.bq=e.target.value; const pos=e.target.selectionStart; render(); const n=document.getElementById("bq"); n.value=S.bq; n.focus(); n.setSelectionRange(pos,pos); }
 });
