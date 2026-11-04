@@ -1,0 +1,12 @@
+{
+  "name": "ascot-deal-desk",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "logins": "node scripts/logins.mjs",
+    "serve": "npx --yes http-server@14.1.1 web -p 8080 -c-1"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.117.2"
+  }
+}
