@@ -139,6 +139,13 @@ th[aria-sort="none"] .sorth:is(:hover,:focus-visible) .ar::before{content:"↕";
 .fchip .sw.st-done{background:var(--teal)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .mob{display:none}
+.mlist.hist li{grid-template-columns:118px minmax(0,1fr)}
+.mlist.hist .d{font-weight:normal;color:var(--muted)}
+.mlist.hist p{font-size:13px}
+.chgbar{display:flex;justify-content:flex-end;margin:-4px 0 6px}
+.chgbar label{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.chgbar select{width:auto;padding:4px 8px;font-size:12px}
+.chg .d{white-space:nowrap}
 .stall{display:inline-block;font-size:10px;font-weight:bold;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border:1px dashed var(--muted);padding:0 5px;margin-left:6px;vertical-align:1px}
 .age{margin-top:4px;white-space:nowrap}
 .hit{margin-top:3px;font-style:italic}
@@ -403,7 +410,7 @@ const S = {
   drawer:null, sample:null, toolsOk:false, downloads:true,
   ai:{open:false, msgs:[], api:[], busy:false, ctrl:null}, proposals:{},
   session:null, authChecked:false, started:false, channel:null, loginErr:"", loginBusy:false,
-  presence:null, presenceReady:false, others:[], editing:null
+  presence:null, presenceReady:false, others:[], editing:null, hist:{}, changes:null, chgDays:7
 };
 const ROLES = {ceo:"CEO", corpdev:"Corp Dev"};
 
@@ -411,7 +418,7 @@ const ROLES = {ceo:"CEO", corpdev:"Corp Dev"};
 function iso(d){ const z=new Date(d.getTime()-d.getTimezoneOffset()*60000); return z.toISOString().slice(0,10); }
 const TODAY = () => iso(new Date());
 function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function money(v){ if(v===""||v==null||isNaN(+v)) return "n/d"; const n=+v; return "$" + (Math.abs(n)<10 ? n.toFixed(1) : Math.round(n).toLocaleString("en-US")) + "M"; }
+function money(v){ if(v===""||v==null||isNaN(+v)) return "n/d"; const n=+v; if(n===0) return "$0M"; return "$" + (Math.abs(n)<10 ? n.toFixed(1) : Math.round(n).toLocaleString("en-US")) + "M"; }
 function fmtDate(s){ if(!s) return ""; const d=new Date(s+"T00:00:00"); if(isNaN(d)) return esc(s); return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}); }
 function fmtWhen(ms){ if(!ms) return ""; const d=new Date(ms); return d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) + " " + d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}); }
 function daysUntil(s){ if(!s) return null; return Math.round((new Date(s+"T00:00:00") - new Date(TODAY()+"T00:00:00"))/86400000); }
@@ -442,7 +449,7 @@ function firmLogo(b, size){
   const img = d ? `<img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=128" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
   return `<span class="logo" style="--s:${size||28}px;--lc:${c}" title="${esc(label)}" aria-hidden="true"><b>${esc(initialsOf(label))}</b>${img}</span>`;
 }
-function mnum(v){ if(v===""||v==null||isNaN(+v)) return "n/d"; const n=+v; return Math.abs(n)<10 ? n.toFixed(1) : Math.round(n).toLocaleString("en-US"); }
+function mnum(v){ if(v===""||v==null||isNaN(+v)) return "n/d"; const n=+v; if(n===0) return "0"; return Math.abs(n)<10 ? n.toFixed(1) : Math.round(n).toLocaleString("en-US"); }
 function stagePill(st){
   const n=ACTIVE.indexOf(st)+1;
   const steps = n ? `<span class="stp" aria-hidden="true">${ACTIVE.map((_,i)=>`<i${i<n?' class="on"':""}></i>`).join("")}</span>` : "";
@@ -616,12 +623,15 @@ function renderCEO(){
       return `<tr class="click" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${X}${stallTag(d)}</div><div class="t2">${esc(d.target||"")}</div>${meta?`<div class="t2 mob">${esc(meta)}</div>`:""}</td><td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="num c-hide">${esc(mnum(d.ev))}${moneyM(d.gwp)?`<div class="t2">GWP ${esc(mnum(d.gwp))}</div>`:""}</td><td class="summary c-full">${d.ceoSummary?`<div class="clamp">${esc(d.ceoSummary)}</div>${d.ceoSummary.length>150?`<span class="more">More</span>`:""}`:'<span class="t2">No summary yet</span>'}</td><td class="c-full" data-label="Decks">${links(d.links)}</td><td class="c-hide opt">${esc(d.lead||"")}</td></tr>`; }).join("")}
     </tbody></table></div>` : `<div class="empty"><p>No active deals.</p></div>`}
   </section>
-  <section><h3 class="sec">Outcomes in ${yr}</h3>
+  <section class="cols">
+    <div><h3 class="sec">What changed</h3>${changesHTML()}</div>
+    <div><h3 class="sec">Outcomes in ${yr}</h3>
     <div class="outc">
       <div class="tile"><b class="c-teal">${closedY.length}</b><span>Closed</span><small>${money(closedY.reduce((s,d)=>s+(+d.ev||0),0))} EV</small></div>
       <div class="tile"><b class="c-navy">${deadY.length}</b><span>Dropped (dead)</span><small>${deadY.length?`Most common reason: ${esc(reasons[0][0])}`:"None this year"}</small></div>
     </div>
     ${reasons.length?`<div class="reasons" aria-label="Why deals were dropped">${reasons.map(([r,n])=>`<div class="rr"><span>${esc(r)}</span><span class="num"><b>${n}</b></span><span class="ptrack"><i style="width:${Math.round(n/deadY.length*100)}%"></i></span></div>`).join("")}</div>`:""}
+    </div>
   </section>
   <section class="cols">
     <div><h3 class="sec">Banker relationships</h3>
@@ -779,7 +789,7 @@ function renderDrawer(){
   else if(dr.kind==="deal") body=dealFormHTML(dr);
   else body=bankerFormHTML(dr);
   root.innerHTML=`<div class="scrim" data-act="close"></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drTitle">${body}</aside>`;
-  renderDrAlert(); renderPresence();
+  renderDrAlert(); renderPresence(); renderHistory(); loadHistory(histKey(dr));
   const f=root.querySelector("input,textarea,select"); if(f && dr.kind!=="view-deal") f.focus();
 }
 
@@ -787,7 +797,7 @@ function viewDealHTML(id){
   const {deals,bankers,notes}=D(); const d=deals.find(x=>x.id===id); if(!d) return `<div class="drawer-h"><h2 id="drTitle">Deal not found</h2><button class="btn ghost" data-act="close">Close</button></div>`;
   const bk=(d.bankerIds||[]).map(i=>bankers.find(b=>b.id===i)).filter(Boolean);
   const ns=notes.filter(n=>n.dealId===id).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,8);
-  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${esc(d.type||"Deal")} · ${esc(d.sector||"")}</div><h2 id="drTitle">${esc(d.codename)}: ${esc(d.target||"")}</h2></div>${linkBtn("deal",d.id)}<button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
+  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${esc([d.type||"Deal",d.sector].filter(Boolean).join(" · "))}</div><h2 id="drTitle">${esc(d.codename)}${d.target?`: ${esc(d.target)}`:""}</h2></div>${linkBtn("deal",d.id)}<button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
   <div class="drawer-b">
     <div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="tile"><b class="c-mag" style="font-size:22px">${esc(d.stage)}</b><span>Stage</span>${ageHTML(d).replace('class="t2 age"','class="t2"')}</div><div class="tile"><b style="font-size:22px">${money(d.ev)}</b><span>Enterprise value</span></div><div class="tile"><b style="font-size:22px">${d.stake!==""&&d.stake!=null?esc(d.stake)+"%":"n/d"}</b><span>Stake</span></div></div>
     <div><h3 class="sec">Summary</h3><p class="prose">${esc(d.ceoSummary||"No summary yet.")}</p></div>
@@ -795,6 +805,7 @@ function viewDealHTML(id){
     <div><h3 class="sec">Decks and files</h3>${links(d.links)}</div>
     <dl class="kv"><dt>Next step</dt><dd>${esc(d.nextStep||"n/d")}${d.nextStepDate?` (${fmtDate(d.nextStepDate)})`:""}</dd><dt>Deal lead</dt><dd>${esc(d.lead||"n/d")}</dd><dt>Origin</dt><dd>${esc(d.origin||"n/d")}</dd><dt>Bankers</dt><dd>${bk.map(b=>`${esc(b.name)} (${esc(b.firm)})`).join(", ")||"None"}</dd><dt>GWP</dt><dd>${money(d.gwp)}</dd><dt>Priority</dt><dd>${esc(d.priority||"n/d")}</dd>${["Closed","Dead"].includes(d.stage)?`<dt>Outcome</dt><dd>${esc(d.stage)}${d.outcomeDate?` on ${fmtDate(d.outcomeDate)}`:""}${d.stage==="Dead"&&d.deadReason?`: ${esc(d.deadReason)}`:""}${d.outcomeNote?`. ${esc(d.outcomeNote)}`:""}</dd>`:""}</dl>
     <div><h3 class="sec">Recent context</h3>${ns.length?`<div class="notes">${ns.map(noteHTML).join("")}</div>`:`<p class="t2">No notes yet.</p>`}</div>
+    <div><h3 class="sec">History</h3><ul class="mlist hist" id="histList"></ul></div>
   </div>
   <div class="drawer-f">${canEditNow()&&!demoMode()&&!S.dbMissing?`<button class="btn primary" data-act="edit-deal" data-id="${esc(d.id)}">Edit in production view</button>`:""}<span class="sp"></span><button class="btn" data-act="close">Close</button></div>`;
 }
@@ -866,7 +877,8 @@ function dealFormHTML(dr){
     </div>
     ${isNew?"":`<div><h3 class="sec">Context and notes</h3>
       <div class="addnote">${sel("n_kind",NOTE_KINDS,"Update")}<textarea id="n_text" rows="2" placeholder="Call notes, diligence findings, IC feedback"></textarea><button type="button" class="btn sm primary" data-act="add-note">Add note</button></div>
-      <div class="notes" id="noteList"></div></div>`}
+      <div class="notes" id="noteList"></div></div>
+    <div><h3 class="sec">History</h3><ul class="mlist hist" id="histList"></ul></div>`}
   </form>
   <div class="drawer-f">
     ${isNew?"":(dr.confirmDelete?`<span class="over">Delete ${esc(d.codename)} and its notes?</span><button class="btn danger sm" data-act="del-deal-yes">Delete</button><button class="btn sm" data-act="del-deal-no">Keep</button>`:`<button class="btn danger" data-act="del-deal">Delete deal</button>`)}
@@ -898,7 +910,8 @@ function bankerFormHTML(dr){
     ${isNew?"":`<div><h3 class="sec">Deals shown to us</h3>${ds.length?ds.map(d=>`<div>${esc(d.codename)} ${stagePill(d.stage)}</div>`).join(""):'<p class="t2">None linked yet. Link bankers from a deal.</p>'}</div>
     <div><h3 class="sec">Interactions</h3>
       <div class="addnote">${sel("n_kind",NOTE_KINDS,"Call")}<textarea id="n_text" rows="2" placeholder="What was discussed; logging updates last contact"></textarea><button type="button" class="btn sm primary" data-act="add-note">Log interaction</button></div>
-      <div class="notes" id="noteList"></div></div>`}
+      <div class="notes" id="noteList"></div></div>
+    <div><h3 class="sec">History</h3><ul class="mlist hist" id="histList"></ul></div>`}
   </form>
   <div class="drawer-f">
     ${isNew?"":(dr.confirmDelete?`<span class="over">Delete ${esc(b.name)}?</span><button class="btn danger sm" data-act="del-banker-yes">Delete</button><button class="btn sm" data-act="del-deal-no">Keep</button>`:`<button class="btn danger" data-act="del-banker">Delete</button>`)}
@@ -982,6 +995,100 @@ function whoChanged(row){ const d=row.doc||{}; return (row.updated_by && d.updat
 const FIELD_LABELS={codename:"Codename",target:"Target",type:"Deal type",sector:"Sector",stage:"Stage",priority:"Priority",ev:"Enterprise value",gwp:"Target GWP",stake:"Stake",
   origin:"Origin",lead:"Deal lead",nextStep:"Next step",nextStepDate:"Next step date",ceoSummary:"CEO summary",keyRisks:"Key risks",bankerIds:"Bankers",links:"Decks and files",
   name:"Name",firm:"Firm",website:"Firm website",title:"Title",coverage:"Coverage",email:"Email",phone:"Phone",relationship:"Relationship",lastContact:"Last contact",context:"Relationship context",outcomeDate:"Outcome date",deadReason:"Reason dropped",outcomeNote:"Outcome note"};
+/* ---------- change history (supabase/migrations/0003_history.sql) ---------- */
+const LONG_FIELDS=["ceoSummary","keyRisks","context","outcomeNote"];
+const histKey = dr => dr && dr.id && (dr.kind==="banker" ? "banker:"+dr.id : (dr.kind==="deal"||dr.kind==="view-deal") ? "deal:"+dr.id : null);
+function historyErr(e){ return /history|PGRST205|42P01/i.test(String(e&&e.code||"")+" "+String(e&&e.message||"")) ? "missing" : String(e&&e.message||"error"); }
+async function loadHistory(key){
+  if(!key || !S.sb || demoMode()) return;
+  const [kind,id]=[key.slice(0,key.indexOf(":")), key.slice(key.indexOf(":")+1)];
+  try{
+    const {data,error}=await S.sb.from("history").select("op,changes,changed_at,changed_by").eq("tbl",kind==="banker"?"bankers":"deals").eq("record_id",id).order("changed_at",{ascending:false}).limit(40);
+    S.hist[key] = error ? {err:historyErr(error)} : {rows:data||[]};
+  }catch(e){ S.hist[key]={err:historyErr(e)}; }
+  renderHistory();
+}
+function linkChange(from,to){
+  const a=Array.isArray(from)?from:[], b=Array.isArray(to)?to:[]; const urls=x=>new Set(x.map(l=>l.url));
+  const add=b.filter(l=>!urls(a).has(l.url)), del=a.filter(l=>!urls(b).has(l.url)); const out=[];
+  if(add.length) out.push(`Added ${add.length>1?"decks":"deck"}: ${add.map(l=>l.label||l.url).join(", ")}`);
+  if(del.length) out.push(`Removed ${del.length>1?"decks":"deck"}: ${del.map(l=>l.label||l.url).join(", ")}`);
+  return out.length ? out.join("; ") : "Decks edited";
+}
+function changeLines(kind,row){
+  if(row.op==="insert") return [kind==="banker"?"Added the banker":"Created the deal"];
+  if(row.op==="delete") return ["Deleted"];
+  return Object.entries(row.changes||{}).map(([k,c])=>{ const L=FIELD_LABELS[k]||k;
+    if(LONG_FIELDS.includes(k)) return `${L} edited`;
+    if(k==="links") return linkChange(c&&c.from, c&&c.to);
+    const f = k==="stage" ? (STAGE_ALIAS[c&&c.from]||c&&c.from) : c&&c.from, t = k==="stage" ? (STAGE_ALIAS[c&&c.to]||c&&c.to) : c&&c.to;
+    return `${L}: ${showVal(k,f)} → ${showVal(k,t)}`; });
+}
+function renderHistory(){
+  const el=document.getElementById("histList"); const key=histKey(S.drawer); if(!el||!key) return;
+  const h=S.hist[key]; const kind=key.startsWith("banker:")?"banker":"deal";
+  if(demoMode()){ el.innerHTML=`<li><span class="d"></span><p class="t2">Example records have no history.</p></li>`; return; }
+  if(!h){ el.innerHTML=`<li><span class="d"></span><p class="t2">Loading history…</p></li>`; return; }
+  if(h.err==="missing"){ el.innerHTML=`<li><span class="d"></span><p class="t2">History isn't switched on yet. Run supabase/migrations/0003_history.sql in Supabase to start recording every change.</p></li>`; return; }
+  if(h.err){ el.innerHTML=`<li><span class="d"></span><p class="t2">Couldn't load the history: ${esc(h.err)}</p></li>`; return; }
+  if(!h.rows.length){ el.innerHTML=`<li><span class="d"></span><p class="t2">No changes recorded yet.</p></li>`; return; }
+  el.innerHTML=h.rows.map(r=>`<li><span class="d">${esc(fmtWhen(Date.parse(r.changed_at)))}</span><div>${changeLines(kind,r).map(l=>`<p>${esc(l)}</p>`).join("")}<p class="meta">${esc(nameOf(r.changed_by))}</p></div></li>`).join("");
+}
+
+/* "What changed" on the CEO view: from the history table, or from the records themselves until it exists */
+function ensureChanges(){
+  if(!S.sb || demoMode()) return; const c=S.changes;
+  if(c && c.days===S.chgDays && (c.rows||c.err||c.loading)) return;
+  loadChanges();
+}
+async function loadChanges(){
+  const days=S.chgDays; S.changes={days, loading:true};
+  const since=new Date(Date.now()-days*DAY_MS).toISOString(); let res;
+  try{ const {data,error}=await S.sb.from("history").select("tbl,record_id,op,changes,changed_at,changed_by").gte("changed_at",since).order("changed_at",{ascending:false}).limit(300);
+    res = error ? {days, err:historyErr(error)} : {days, rows:data||[]}; }catch(e){ res={days, err:historyErr(e)}; }
+  if(!S.changes || S.changes.days!==days) return;
+  S.changes=res; if(S.view==="ceo" && S.session) render();
+}
+function changeItems(){
+  const c=S.changes; const days=S.chgDays; const items=[];
+  const dealName=(id,row)=>{ const d=S.deals.find(x=>x.id===id); const ch=(row&&row.changes)||{}; return d?d.codename:(ch.doc&&ch.doc.codename)||(ch.codename&&(ch.codename.to||ch.codename.from))||"A deleted deal"; };
+  const B = t => `<b>${esc(t)}</b>`;
+  if(c && c.rows){
+    for(const r of c.rows){ const at=Date.parse(r.changed_at), by=nameOf(r.changed_by), live=r.tbl==="deals" && S.deals.some(d=>d.id===r.record_id);
+      const push = html => items.push({html, at, by, id:live?r.record_id:null});
+      if(r.tbl==="bankers"){ if(r.op==="insert"){ const d=(r.changes&&r.changes.doc)||{}; push(`New banker: ${B(d.name||"Unnamed")}${d.firm?` (${esc(d.firm)})`:""}`); } continue; }
+      const n=dealName(r.record_id,r);
+      if(r.op==="insert"){ push(`New deal: ${B(n)}`); continue; }
+      if(r.op==="delete"){ push(`${B(n)} deleted`); continue; }
+      const ch=r.changes||{};
+      if(ch.stage){ const f=STAGE_ALIAS[ch.stage.from]||ch.stage.from, t=STAGE_ALIAS[ch.stage.to]||ch.stage.to; if(f!==t) push(`${B(n)} moved ${esc(f||"n/d")} → ${esc(t||"n/d")}${t==="Dead"&&ch.deadReason&&ch.deadReason.to?` (${esc(ch.deadReason.to)})`:""}`); }
+      if(ch.links){ const a=Array.isArray(ch.links.from)?ch.links.from:[], b=Array.isArray(ch.links.to)?ch.links.to:[]; const had=new Set(a.map(l=>l.url));
+        b.filter(l=>!had.has(l.url)).forEach(l=>push(`New deck on ${B(n)}: ${esc(l.label||"untitled link")}`)); }
+      if(ch.ev && !same(ch.ev.from,ch.ev.to)) push(`${B(n)} EV ${esc(moneyM(ch.ev.from)||"n/d")} → ${esc(moneyM(ch.ev.to)||"n/d")}`);
+      if(ch.ceoSummary) push(`CEO summary updated for ${B(n)}`);
+    }
+  } else {
+    const since=Date.now()-days*DAY_MS;
+    for(const d of S.deals){
+      if(d.createdAt>since) items.push({html:`New deal: ${B(d.codename)}`, at:d.createdAt, by:nameOf(d.createdBy), id:d.id});
+      else if(d.stageSince>since) items.push({html:`${B(d.codename)} moved to ${esc(d.stage)}`, at:d.stageSince, by:nameOf(d._by||d.updatedBy, d.updatedByName), id:d.id});
+      else if(d.updatedAt>since) items.push({html:`${B(d.codename)} updated`, at:d.updatedAt, by:nameOf(d._by||d.updatedBy, d.updatedByName), id:d.id});
+    }
+    items.sort((a,b)=>b.at-a.at);
+  }
+  return items;
+}
+function changesHTML(){
+  ensureChanges(); const c=S.changes;
+  const bar=`<div class="chgbar"><label>Period<select id="chgDays" aria-label="Period for what changed">${[7,14,30].map(n=>`<option value="${n}"${S.chgDays===n?" selected":""}>Last ${n} days</option>`).join("")}</select></label></div>`;
+  if(demoMode()) return bar+`<p class="t2">Changes appear here once deals are saved.</p>`;
+  if(!c || c.loading) return bar+`<p class="t2">Loading…</p>`;
+  const items=changeItems(); const shown=items.slice(0,12);
+  const note = c.err==="missing" ? `<p class="source" style="margin-top:8px">Showing latest updates only. Run supabase/migrations/0003_history.sql in Supabase for a full change log.</p>` : c.err ? `<p class="source" style="margin-top:8px">Couldn't load the change log: ${esc(c.err)}</p>` : "";
+  if(!shown.length) return bar+`<p class="t2">Nothing changed in the last ${S.chgDays} days.</p>`+note;
+  return bar+`<ul class="mlist chg">${shown.map(i=>`<li${i.id?` class="click" data-act="view-deal" data-id="${esc(i.id)}" tabindex="0"`:""}><span class="d">${esc(new Date(i.at).toLocaleDateString("en-GB",{day:"numeric",month:"short"}))}</span><div><p>${i.html}</p><p class="meta">${esc(i.by)}</p></div></li>`).join("")}</ul>${items.length>shown.length?`<p class="t2" style="margin-top:6px">And ${items.length-shown.length} more.</p>`:""}`+note;
+}
+
 function showVal(k,v){
   if(k==="bankerIds"){ const a=Array.isArray(v)?v:[]; return a.map(i=>(S.bankers.find(b=>b.id===i)||{}).name||"a removed banker").join(", ")||"none"; }
   if(k==="links"){ const a=Array.isArray(v)?v:[]; return a.map(l=>l.label||l.url).join(", ")||"none"; }
@@ -1323,6 +1430,7 @@ document.addEventListener("input", e=>{
   if(e.target.id==="bq"){ S.bq=e.target.value; const pos=e.target.selectionStart; render(); const n=document.getElementById("bq"); n.value=S.bq; n.focus(); n.setSelectionRange(pos,pos); }
 });
 document.addEventListener("change", e=>{
+  if(e.target.id==="chgDays"){ S.chgDays=+e.target.value; S.changes=null; render(); document.getElementById("chgDays")?.focus(); return; }
   if(e.target.id==="f_stage"){ const st=e.target.value, box=document.getElementById("outcomeBox"); if(!box) return;
     const done=["Closed","Dead"].includes(st); box.hidden=!done; document.getElementById("reasonWrap").hidden = st!=="Dead";
     const od=document.getElementById("f_outcomeDate"); if(done && od && !od.value) od.value=TODAY(); }
@@ -1345,6 +1453,7 @@ async function refetch(table){
   if(error){ if(!S.loaded[table]) toast("Couldn't load the tracker: "+error.message); return; }
   S[table]=(data||[]).map(r=>({...(r.doc||{}), id:r.id, _v:r.updated_at, _by:r.updated_by}));
   if(table==="deals") S.deals.forEach(normDeal);
+  if(table==="deals"||table==="bankers"){ if(S.changes && !S.changes.loading) S.changes=null; const hk=histKey(S.drawer); if(hk) setTimeout(()=>loadHistory(hk),0); }
   S.loaded[table]=true; if(table==="deals") clearTimeout(startData.timer);
   if(S.drawer && S.drawer.kind==="view-deal") S.drawer.rendered=false;
   render();
@@ -1388,7 +1497,7 @@ function startData(){
 }
 function stopData(){
   if(S.channel){ S.sb.removeChannel(S.channel); S.channel=null; }
-  stopPresence();
+  stopPresence(); S.hist={}; S.changes=null;
   S.started=false; TABLES.forEach(t=>{ S[t]=[]; S.loaded[t]=false; });
 }
 
