@@ -1,0 +1,5 @@
+# The claude function checks the caller's login itself (supabase.auth.getUser),
+# so the gateway's legacy JWT check is off. This is needed with the new
+# publishable/secret API keys and JWT signing keys.
+[functions.claude]
+verify_jwt = false

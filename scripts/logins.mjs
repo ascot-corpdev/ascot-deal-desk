@@ -7,17 +7,17 @@
 //   node scripts/logins.mjs remove <username>
 //   node scripts/logins.mjs list
 //
-// Needs: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Optional: USERNAME_DOMAIN (must match web/config.js).
+// Needs: SUPABASE_URL and SUPABASE_SECRET_KEY (the sb_secret_... key; the legacy SUPABASE_SERVICE_ROLE_KEY also works). Optional: USERNAME_DOMAIN (must match web/config.js).
 // Passwords are printed once and never stored in plain text.
 
 import { createClient } from "@supabase/supabase-js";
 import { randomInt } from "node:crypto";
 
 const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const domain = process.env.USERNAME_DOMAIN || "deal-desk.local";
 if (!url || !key) {
-  console.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY first (Supabase dashboard > Project settings > API).");
+  console.error("Set SUPABASE_URL and SUPABASE_SECRET_KEY first (Supabase dashboard > Project settings > API Keys; the secret key starts with sb_secret_).");
   process.exit(1);
 }
 const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });

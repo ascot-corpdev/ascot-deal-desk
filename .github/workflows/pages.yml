@@ -26,14 +26,18 @@ jobs:
       - name: Write web/config.js from repository variables
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || vars.SUPABASE_ANON_KEY }}
           USERNAME_DOMAIN: ${{ vars.USERNAME_DOMAIN }}
         run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
-            echo "::error::Add repository variables SUPABASE_URL and SUPABASE_ANON_KEY (Settings > Secrets and variables > Actions > Variables)."
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "::error::Add repository variables SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (Settings > Secrets and variables > Actions > Variables)."
             exit 1
           fi
-          node -e 'const c={supabaseUrl:process.env.SUPABASE_URL,supabaseAnonKey:process.env.SUPABASE_ANON_KEY,usernameDomain:process.env.USERNAME_DOMAIN||"deal-desk.local"};require("fs").writeFileSync("web/config.js","window.DEALDESK_CONFIG = "+JSON.stringify(c,null,2)+";\n")'
+          case "$SUPABASE_PUBLISHABLE_KEY" in sb_secret_*)
+            echo "::error::SUPABASE_PUBLISHABLE_KEY holds a secret key (sb_secret_...). Use the publishable key (sb_publishable_...) and delete this variable's value."
+            exit 1;;
+          esac
+          node -e 'const c={supabaseUrl:process.env.SUPABASE_URL,supabaseAnonKey:process.env.SUPABASE_PUBLISHABLE_KEY,usernameDomain:process.env.USERNAME_DOMAIN||"deal-desk.local"};require("fs").writeFileSync("web/config.js","window.DEALDESK_CONFIG = "+JSON.stringify(c,null,2)+";\n")'
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

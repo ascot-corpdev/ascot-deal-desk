@@ -92,8 +92,11 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "Use POST." });
 
   // Who is calling? Use their own token so row-level security applies.
+  // The page sends the project's publishable key as `apikey` (works with new and legacy keys).
   const authHeader = req.headers.get("Authorization") ?? "";
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+  const publicKey = req.headers.get("apikey") || Deno.env.get("SUPABASE_ANON_KEY") || "";
+  if (!authHeader || !publicKey) return json(401, { error: "Sign in again." });
+  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, publicKey, {
     global: { headers: { Authorization: authHeader } },
   });
   const { data: { user } } = await supabase.auth.getUser();

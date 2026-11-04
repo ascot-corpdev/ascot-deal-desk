@@ -25,7 +25,7 @@ Passwords are checked by Supabase Auth on the server, and the database refuses r
 1. Create a project at [supabase.com](https://supabase.com) (the free tier is enough to start).
 2. **SQL editor:** paste and run `supabase/migrations/0001_deal_desk.sql`.
 3. **Authentication > Sign In / Providers > Email:** keep Email enabled and turn **off** "Allow new users to sign up". Logins are created only by the script.
-4. **Project settings > API:** note the Project URL, the `anon` (public) key and the `service_role` key. Never put the service role key in the site or in GitHub.
+4. **Project settings > API Keys:** note the **publishable key** (`sb_publishable_...`, safe for the website) and the **secret key** (`sb_secret_...`, only for the login script on your computer). The Project URL is under **Project settings > Data API** (`https://YOUR_PROJECT_REF.supabase.co`). Never put the secret key in the site or in GitHub. (Older projects show `anon` and `service_role` keys instead; they work the same way.)
 
 ### 2. Claude assistant function
 
@@ -44,8 +44,10 @@ supabase secrets set ANTHROPIC_API_KEY=sk-ant-... ALLOWED_ORIGIN=https://YOUR_GI
 ```
 
 ```bash
-supabase functions deploy claude
+supabase functions deploy claude --no-verify-jwt
 ```
+
+`--no-verify-jwt` is safe: the function checks the caller's login itself and only answers Corp Dev logins.
 
 The assistant uses Claude Opus 5.5 at medium effort, with Anthropic's server-side fallback switched on (if Opus 5.5's safety checks decline a request, the API retries it on Anthropic's recommended fallback model). To use another model, set the secret `CLAUDE_MODEL`.
 
@@ -56,10 +58,12 @@ npm install
 ```
 
 ```bash
-SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY npm run logins -- seed
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co SUPABASE_SECRET_KEY=sb_secret_YOUR_KEY npm run logins -- seed
 ```
 
 This creates `ceo` (CEO, read only), `corpdev1` and `corpdev2` (Corp Dev, can edit and use Claude) and prints their passwords once. Send each one privately; people can change their own password after signing in.
+
+On Windows PowerShell, set the variables first: `$env:SUPABASE_URL="https://..."; $env:SUPABASE_SECRET_KEY="sb_secret_..."`, then run `npm run logins -- seed`.
 
 Other commands (same two environment variables):
 
@@ -84,12 +88,12 @@ Usernames become `username@deal-desk.local` behind the scenes; no email is ever 
 ### 4. GitHub Pages
 
 1. **Settings > Pages > Build and deployment > Source:** GitHub Actions. (Pages on a private repository needs a paid GitHub plan; on a free plan, make the repository public. The code holds no secrets.)
-2. **Settings > Secrets and variables > Actions > Variables:** add `SUPABASE_URL` and `SUPABASE_ANON_KEY` (and `USERNAME_DOMAIN` if you changed it).
+2. **Settings > Secrets and variables > Actions > Variables:** add `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (and `USERNAME_DOMAIN` if you changed it). Use the publishable key, never the secret key.
 3. Push to `main`, or run the "Deploy site to GitHub Pages" workflow. The site appears at `https://YOUR_GITHUB_USER.github.io/REPO_NAME/`.
 
 ## Running locally
 
-Fill in `web/config.js` with the Project URL and anon key, then:
+Fill in `web/config.js` with the Project URL and publishable key, then:
 
 ```bash
 npm run serve
