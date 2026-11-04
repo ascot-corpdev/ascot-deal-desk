@@ -153,7 +153,9 @@ tr.firmrow:hover td{background:#E4E4EF!important}
 .fold[aria-expanded="true"] span{transform:rotate(90deg)}
 .firmrow .who-list{margin-top:2px}
 tr.firmrow .t1{font-size:15px}
-tr.firmrow .rowacts{align-items:center}
+tr.firmrow .rowacts{align-items:center;flex-wrap:wrap}
+tr.firmrow td{vertical-align:top}
+tr.firmrow .firmdeals{font-size:13px}
 tr.inrow td:first-child{padding-left:24px}
 .btn[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
 .imtbl{font-size:12px}
@@ -839,11 +841,20 @@ function bankerRows(rows, deals, ex, edit, X){
   // With a column sort, firms follow their top person under that sort; otherwise alphabetical
   const keys = S.bsort ? [...groups.keys()] : [...groups.keys()].sort((a,b)=>a==="~"?1:b==="~"?-1:a.localeCompare(b));
   return keys.map(k=>{ const ppl=groups.get(k); const firm=k==="~"?"No firm recorded":ppl[0].firm;
-    const live=deals.filter(d=>isActive(d)&&(d.bankerIds||[]).some(id=>ppl.some(p=>p.id===id))).length;
-    const last=ppl.map(p=>p.lastContact||"").sort().pop();
-    const open=firmOpen(k); const names=ppl.slice(0,3).map(p=>p.name).join(", ")+(ppl.length>3?` and ${ppl.length-3} more`:"");
-    return `<tr class="firmrow" data-act="fold" data-k="${esc(k)}"><td colspan="5"><div class="firm"><button type="button" class="fold" data-act="fold" data-k="${esc(k)}" aria-expanded="${open}" aria-label="${open?"Collapse":"Expand"} ${esc(firm)}"><span aria-hidden="true">▶</span></button>${k==="~"?"":firmLogo({firm, website:(ppl.find(p=>p.website)||{}).website},34)}<div><div class="t1">${esc(firm)}</div><div class="t2">${ppl.length} ${ppl.length===1?"person":"people"} · ${live} live mandate${live===1?"":"s"} · last contact ${last?fmtDate(last):"not recorded"}</div>${open?"":`<div class="t2 who-list">${esc(names)}</div>`}</div></div></td>
-      <td class="c-hide"><div class="rowacts">${edit&&!ex&&k!=="~"?`${ppl.some(p=>isEmail(p.email))?`<button class="btn sm ghost" data-act="mail-firm" data-firm="${esc(firm)}" aria-label="Email everyone at ${esc(firm)}">Email all</button>`:""}<button class="btn sm ghost" data-act="new-banker" data-firm="${esc(firm)}" aria-label="Add a person at ${esc(firm)}">Add person</button>`:""}</div></td></tr>${open?ppl.map(row).join(""):""}`; }).join("");
+    // Firm-level figures cover everyone at the firm, even when a filter shows only some of them
+    const all=D().bankers.filter(x=>(firmKey(x.firm)||"~")===k); const ids=new Set(all.map(x=>x.id));
+    const fds=deals.filter(d=>(d.bankerIds||[]).some(id=>ids.has(id)))
+      .sort((a,b)=>(isActive(b)-isActive(a)) || (STAGES.indexOf(a.stage)>=0&&STAGES.indexOf(b.stage)>=0 ? ACTIVE.indexOf(b.stage)-ACTIVE.indexOf(a.stage) : 0) || String(a.codename||"").localeCompare(String(b.codename||"")));
+    const live=fds.filter(isActive).length;
+    const lastP=all.filter(x=>x.lastContact).sort((a,b)=>String(b.lastContact).localeCompare(String(a.lastContact)))[0];
+    const last=lastP?lastP.lastContact:""; const n=daysUntil(last); const old=!last || (n!=null && n<-90);
+    const open=firmOpen(k); const names=all.slice(0,3).map(p=>p.name).join(", ")+(all.length>3?` and ${all.length-3} more`:"");
+    const dealList = fds.length ? fds.slice(0,6).map(d=>`${esc(d.codename)} <span class="t2">(${esc(d.stage)})</span>`).join("<br>")+(fds.length>6?`<div class="t2">and ${fds.length-6} more</div>`:"") : '<span class="t2">None yet</span>';
+    return `<tr class="firmrow" data-act="fold" data-k="${esc(k)}"><td><div class="firm"><button type="button" class="fold" data-act="fold" data-k="${esc(k)}" aria-expanded="${open}" aria-label="${open?"Collapse":"Expand"} ${esc(firm)}"><span aria-hidden="true">▶</span></button>${k==="~"?"":firmLogo({firm, website:(all.find(p=>p.website)||{}).website},34)}<div><div class="t1">${esc(firm)}</div><div class="t2">${all.length} ${all.length===1?"person":"people"} · ${live} live mandate${live===1?"":"s"}</div><div class="t2 mob${old?" over":""}">Last contact ${last?fmtDate(last):"not recorded"}${lastP?` (${esc(lastP.name)})`:""}</div>${open?"":`<div class="t2 who-list">${esc(names)}</div>`}</div></div></td>
+      <td class="c-hide opt"></td><td class="c-hide"></td>
+      <td class="c-full firmdeals" data-label="Deals shown to us">${dealList}</td>
+      <td class="num c-hide${old?" over":""}">${last?fmtDate(last):"n/d"}${lastP?`<div class="t2" style="font-weight:normal">${esc(lastP.name)}</div>`:""}</td>
+      <td class="c-hide"><div class="rowacts">${edit&&!ex&&k!=="~"?`${all.some(p=>isEmail(p.email))?`<button class="btn sm ghost" data-act="mail-firm" data-firm="${esc(firm)}" aria-label="Email everyone at ${esc(firm)}">Email all</button>`:""}<button class="btn sm ghost" data-act="new-banker" data-firm="${esc(firm)}" aria-label="Add a person at ${esc(firm)}">Add person</button>`:""}</div></td></tr>${open?ppl.map(row).join(""):""}`; }).join("");
 }
 /* Firm groups fold. Explicit choices are remembered per browser; otherwise large CRMs start collapsed.
    Searching or filtering opens every firm with a match. */
