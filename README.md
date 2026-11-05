@@ -6,6 +6,8 @@ M&A deal tracker and banker CRM for Corporate Development, styled on the Ascot P
 - **Deals and Banker CRM (Corp Dev):** add, edit and delete deals, bankers and notes; SharePoint links per deal; CSV export.
 - **Ask Copilot (every login):** copies a plain-text brief of the tracker (deals, bankers, latest notes; under 15,000 characters) and opens Microsoft 365 Copilot in a new tab to paste it into. In a banker's email box, **Draft with Copilot** does the same with a drafting prompt. The site itself sends nothing to Copilot; use your company's Microsoft 365 sign-in so Copilot's enterprise data protection applies.
 
+For Copilot (and other coding assistants): how the code works and the rules for changing it are in [`.github/copilot-instructions.md`](.github/copilot-instructions.md).
+
 ## How it fits together
 
 | Part | Where it runs | What it does |
