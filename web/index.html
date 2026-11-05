@@ -139,10 +139,10 @@ th[aria-sort="none"] .sorth:is(:hover,:focus-visible) .ar::before{content:"↕";
 .fchip .sw.st-done{background:var(--teal)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .mob{display:none}
-.comps td,.comps th{white-space:nowrap}
+.comps td{white-space:nowrap}.comps th{white-space:normal;vertical-align:bottom}
 .comps td:first-child{white-space:normal;min-width:180px}
 .comps tr.med td{font-weight:bold;border-top:2px solid var(--ink);background:var(--tile)!important}
-.benchrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.benchrow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
 @media (max-width:900px){.benchrow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .linkbtn{text-decoration:none}
 .tgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr));gap:20px}
@@ -876,6 +876,8 @@ const COMPS_SORTS = {
   premiumGrowth:{cmp:(a,b)=>a.premiumGrowth-b.premiumGrowth, dir:-1, blank:c=>c.premiumGrowth==null},
   netIncome:{cmp:(a,b)=>a.netIncome-b.netIncome, dir:-1, blank:c=>c.netIncome==null},
   lossRatio:{cmp:(a,b)=>a.lossRatio-b.lossRatio, dir:1, blank:c=>c.lossRatio==null},
+  combinedRatio:{cmp:(a,b)=>a.combinedRatio-b.combinedRatio, dir:1, blank:c=>c.combinedRatio==null},
+  bvpsGrowth:{cmp:(a,b)=>a.bvpsGrowth-b.bvpsGrowth, dir:-1, blank:c=>c.bvpsGrowth==null},
   roe:{cmp:(a,b)=>a.roe-b.roe, dir:-1, blank:c=>c.roe==null},
   marketCap:{cmp:(a,b)=>a.marketCap-b.marketCap, dir:-1, blank:c=>c.marketCap==null},
   pb:{cmp:(a,b)=>a.pb-b.pb, dir:-1, blank:c=>c.pb==null},
@@ -913,15 +915,15 @@ function renderComps(){
   ${S.settingsMissing&&edit?`<div class="banner"><span>Using the default peer list. To choose your own peers and save the AGL financials link, run <b>supabase/migrations/0004_settings.sql</b> in Supabase.</span></div>`:""}
   <section class="toolbar"><div class="seg" role="group" aria-label="Period">${Object.entries(COMPS_PERIODS).map(([k,v])=>`<button type="button" class="btn sm" data-act="comps-period" data-v="${k}" aria-pressed="${k===per}">${v.btn}</button>`).join("")}</div></section>
   ${compsStatusHTML()}
-  ${rows.length?`<section><div class="tbl-wrap cardwrap"><table class="cards comps"><thead><tr>${th("Company","name")}<th>Period</th>${th("Revenue ($M)","revenue","num")}${th("Premiums ($M)","premiums","num")}${th("Premium growth","premiumGrowth","num")}${th("Net income ($M)","netIncome","num")}${th("Loss ratio","lossRatio","num")}${th("ROE","roe","num")}${th("Market cap ($M)","marketCap","num")}${th("P/B","pb","num")}${th("P/E","pe","num")}<th>Earnings calls</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td><div class="t1">${esc(r.name)}</div><div class="t2">${esc(r.ticker)}${r.currency&&r.currency!=="USD"?` · ${esc(r.currency)}`:""}</div>${r.notes.map(n=>`<div class="t2">${esc(n)}</div>`).join("")}<div class="t2 mob">${esc(r.quarter)} · premium growth ${pctS(r.premiumGrowth,true)} · loss ratio ${pctS(r.lossRatio)} · ROE ${pctS(r.roe)} · P/B ${xS(r.pb,2)} · P/E ${xS(r.pe,1)}</div></td>
+  ${rows.length?`<section><div class="tbl-wrap cardwrap"><table class="cards comps"><thead><tr>${th("Company","name")}<th>Period</th>${th("Revenue ($M)","revenue","num")}${th("Premiums ($M)","premiums","num")}${th("Premium growth","premiumGrowth","num")}${th("Net income ($M)","netIncome","num")}${th("Loss ratio","lossRatio","num")}${th("Combined ratio","combinedRatio","num")}${th("ROE","roe","num")}${th("BVPS growth","bvpsGrowth","num")}${th("Market cap ($M)","marketCap","num")}${th("P/B","pb","num")}${th("P/E","pe","num")}<th>Earnings calls</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td><div class="t1">${esc(r.name)}</div><div class="t2">${esc(r.ticker)}${r.currency&&r.currency!=="USD"?` · ${esc(r.currency)}`:""}</div>${r.notes.map(n=>`<div class="t2">${esc(n)}</div>`).join("")}<div class="t2 mob">${esc(r.quarter)} · premium growth ${pctS(r.premiumGrowth,true)} · loss ratio ${pctS(r.lossRatio)} · combined ratio ${pctS(r.combinedRatio)} · ROE ${pctS(r.roe)} · BVPS growth ${pctS(r.bvpsGrowth,true)} · P/B ${xS(r.pb,2)} · P/E ${xS(r.pe,1)}</div></td>
       <td class="c-hide">${esc(r.quarter)}</td><td class="num c-hide">${mS(r.revenue)}</td><td class="num c-hide">${mS(r.premiums)}</td><td class="num c-hide">${pctS(r.premiumGrowth,true)}</td><td class="num c-hide">${mS(r.netIncome)}</td>
-      <td class="num c-hide">${pctS(r.lossRatio)}</td><td class="num c-hide">${pctS(r.roe)}</td><td class="num c-hide">${mS(r.marketCap)}${r.marketCapCurrency&&r.marketCapCurrency!==r.currency?` <span class="t2">${esc(r.marketCapCurrency)}</span>`:""}</td><td class="num c-hide">${xS(r.pb,2)}</td><td class="num c-hide">${xS(r.pe,1)}</td>
+      <td class="num c-hide">${pctS(r.lossRatio)}</td><td class="num c-hide" title="${r.expenseRatio!=null?`Expense ratio ${pctS(r.expenseRatio)}`:""}">${pctS(r.combinedRatio)}</td><td class="num c-hide">${pctS(r.roe)}</td><td class="num c-hide">${pctS(r.bvpsGrowth,true)}${r.bvps!=null?`<div class="t2">BVPS ${r.bvps.toFixed(2)}</div>`:""}</td><td class="num c-hide">${mS(r.marketCap)}${r.marketCapCurrency&&r.marketCapCurrency!==r.currency?` <span class="t2">${esc(r.marketCapCurrency)}</span>`:""}</td><td class="num c-hide">${xS(r.pb,2)}</td><td class="num c-hide">${xS(r.pe,1)}</td>
       <td class="c-full" data-label="Earnings calls">${r.lastCall?`${fmtDate(r.lastCall.date.slice(0,10))}`:'<span class="t2">n/d</span>'}${r.nextCall?`<div class="t2">Next: ${fmtDate(r.nextCall.date.slice(0,10))}</div>`:""}</td></tr>`).join("")}
-    <tr class="med"><td>Median (derived)</td><td class="c-hide"></td><td class="c-hide"></td><td class="c-hide"></td><td class="num c-hide">${pctS(md.premiumGrowth,true)}</td><td class="c-hide"></td><td class="num c-hide">${pctS(md.lossRatio)}</td><td class="num c-hide">${pctS(md.roe)}</td><td class="c-hide"></td><td class="num c-hide">${xS(md.pb,2)}</td><td class="num c-hide">${xS(md.pe,1)}</td><td class="c-hide"></td></tr>
+    <tr class="med"><td>Median (derived)</td><td class="c-hide"></td><td class="c-hide"></td><td class="c-hide"></td><td class="num c-hide">${pctS(md.premiumGrowth,true)}</td><td class="c-hide"></td><td class="num c-hide">${pctS(md.lossRatio)}</td><td class="num c-hide">${pctS(md.combinedRatio)}</td><td class="num c-hide">${pctS(md.roe)}</td><td class="num c-hide">${pctS(md.bvpsGrowth,true)}</td><td class="c-hide"></td><td class="num c-hide">${xS(md.pb,2)}</td><td class="num c-hide">${xS(md.pe,1)}</td><td class="c-hide"></td></tr>
     </tbody></table></div></section>`:""}
   ${errs.length?`<p class="t2">Not shown: ${errs.map(([t,m])=>`<b>${esc(t)}</b> (${esc(m)})`).join("; ")}.</p>`:""}
-  <p class="source">Source: S&amp;P Global Capital IQ via Kensho${c&&c.at?`, fetched ${esc(fmtWhen(c.at))}`:""}. ${periodNote} $M in each company's reporting currency. ${growthNote} Loss ratio = policy benefits / premiums (derived); ${roeNote}; equity = total assets - total liabilities - minority interest where not reported (derived); P/B and P/E (twelve-month net income) from the latest market cap (derived). AGL financials open where they're kept and are not stored here.</p>`;
+  <p class="source">Source: S&amp;P Global Capital IQ via Kensho${c&&c.at?`, fetched ${esc(fmtWhen(c.at))}`:""}. ${periodNote} $M in each company's reporting currency. ${growthNote} Loss ratio = policy benefits / premiums (derived); combined ratio = operating expenses excluding non-insurance businesses / premiums, so loss ratio plus expense ratio (derived; hover for the expense ratio); ${roeNote}; BVPS growth = equity / shares outstanding at the latest quarter end versus a year earlier, before dividends (derived); equity = total assets - total liabilities - minority interest where not reported (derived); P/B and P/E (twelve-month net income) from the latest market cap (derived). AGL financials open where they're kept and are not stored here.</p>`;
 }
 /* CEO view strip: peer medians and the AGL link, only once Kensho answers */
 function benchStripHTML(){
@@ -930,7 +932,7 @@ function benchStripHTML(){
   const md=d.medians||{}; const q=[...new Set(d.companies.map(r=>r.quarter))];
   const tile=(v,l,c)=>`<div class="tile"><b class="${c}">${v}</b><span>${l}</span></div>`;
   return `<section><h3 class="sec">Peer benchmarks</h3>
-    <div class="benchrow">${tile(pctS(md.premiumGrowth,true),"Median premium growth (YoY)","c-blue")}${tile(pctS(md.lossRatio),"Median loss ratio (derived)","c-navy")}${tile(pctS(md.roe),"Median ROE (derived)","c-teal")}${tile(xS(md.pb,2),"Median P/B (derived)","c-mag")}</div>
+    <div class="benchrow">${tile(pctS(md.premiumGrowth,true),"Median premium growth (YoY)","c-blue")}${tile(pctS(md.combinedRatio),"Median combined ratio (derived)","c-navy")}${tile(pctS(md.roe),"Median ROE (derived)","c-teal")}${tile(pctS(md.bvpsGrowth,true),"Median BVPS growth (YoY, derived)","c-blue")}${tile(xS(md.pb,2),"Median P/B (derived)","c-mag")}</div>
     <p class="source" style="margin-top:8px">${d.companies.length} listed peers, ${COMPS_PERIODS[compsPeriod()].strip}${q.length===1?` (${esc(q[0])})`:""}, S&amp;P Global via Kensho. <a href="#comps">All comps</a>${benchCfg().aglUrl?` · <a href="${esc(benchCfg().aglUrl)}" target="_blank" rel="noopener noreferrer">AGL financials ↗</a>`:""}</p></section>`;
 }
 function compsSettingsHTML(){
@@ -1602,13 +1604,13 @@ async function exportBoardPack(){
   if(cd && cd.companies.length){
     sl=pptx.addSlide({masterName:"CONTENT"});
     const md=cd.medians||{};
-    title(sl, `Peers: median ROE ${pctS(md.roe)}, P/B ${xS(md.pb,2)} (derived)`);
+    title(sl, `Peers: median combined ratio ${pctS(md.combinedRatio)}, ROE ${pctS(md.roe)}, P/B ${xS(md.pb,2)} (derived)`);
     const top=[...cd.companies].sort((a,b)=>(b.marketCap??-1)-(a.marketCap??-1)).slice(0,12);
-    const cr=[head([["Company"],["Period"],["Premium growth",1],["Loss ratio",1],["ROE",1],["P/B",1],["P/E",1]])];
-    top.forEach((r,j)=>cr.push([{text:r.name,options:{...cellOpts(j),bold:true}},{text:r.quarter,options:cellOpts(j)},{text:pctS(r.premiumGrowth,true),options:cellOpts(j,1)},{text:pctS(r.lossRatio),options:cellOpts(j,1)},{text:pctS(r.roe),options:cellOpts(j,1)},{text:xS(r.pb,2),options:cellOpts(j,1)},{text:xS(r.pe,1),options:cellOpts(j,1)}]));
-    cr.push([{text:"Median (derived)",options:{bold:true,color:C.mag}},{text:""},{text:pctS(md.premiumGrowth,true),options:{align:"right",bold:true,color:C.mag}},{text:pctS(md.lossRatio),options:{align:"right",bold:true,color:C.mag}},{text:pctS(md.roe),options:{align:"right",bold:true,color:C.mag}},{text:xS(md.pb,2),options:{align:"right",bold:true,color:C.mag}},{text:xS(md.pe,1),options:{align:"right",bold:true,color:C.mag}}]);
-    tbl(sl,cr,{x:0.52,y:1.3,w:12.28,colW:[3.6,1.3,1.6,1.4,1.4,1.4,1.58]});
-    source(sl, `Source: S&P Global Capital IQ via Kensho, ${asOf}. ${({quarter:"Each company's latest fiscal quarter.",ytd:"Each company's fiscal year to date.",ltm:"Each company's last twelve months."})[compsPeriod()]} Loss ratio, ROE${compsPeriod()==="ltm"?"":" (annualised)"}, P/B and P/E (twelve-month net income) derived.`);
+    const cr=[head([["Company"],["Period"],["Premium growth",1],["Loss ratio",1],["Combined ratio",1],["ROE",1],["BVPS growth",1],["P/B",1],["P/E",1]])];
+    top.forEach((r,j)=>cr.push([{text:r.name,options:{...cellOpts(j),bold:true}},{text:r.quarter,options:cellOpts(j)},{text:pctS(r.premiumGrowth,true),options:cellOpts(j,1)},{text:pctS(r.lossRatio),options:cellOpts(j,1)},{text:pctS(r.combinedRatio),options:cellOpts(j,1)},{text:pctS(r.roe),options:cellOpts(j,1)},{text:pctS(r.bvpsGrowth,true),options:cellOpts(j,1)},{text:xS(r.pb,2),options:cellOpts(j,1)},{text:xS(r.pe,1),options:cellOpts(j,1)}]));
+    cr.push([{text:"Median (derived)",options:{bold:true,color:C.mag}},{text:""},{text:pctS(md.premiumGrowth,true),options:{align:"right",bold:true,color:C.mag}},{text:pctS(md.lossRatio),options:{align:"right",bold:true,color:C.mag}},{text:pctS(md.combinedRatio),options:{align:"right",bold:true,color:C.mag}},{text:pctS(md.roe),options:{align:"right",bold:true,color:C.mag}},{text:pctS(md.bvpsGrowth,true),options:{align:"right",bold:true,color:C.mag}},{text:xS(md.pb,2),options:{align:"right",bold:true,color:C.mag}},{text:xS(md.pe,1),options:{align:"right",bold:true,color:C.mag}}]);
+    tbl(sl,cr,{x:0.52,y:1.3,w:12.28,colW:[3.4,1.4,1.3,1.1,1.3,0.9,1.28,0.8,0.8]});
+    source(sl, `Source: S&P Global Capital IQ via Kensho, ${asOf}. ${({quarter:"Each company's latest fiscal quarter.",ytd:"Each company's fiscal year to date.",ltm:"Each company's last twelve months."})[compsPeriod()]} Loss and combined ratios, ROE${compsPeriod()==="ltm"?"":" (annualised)"}, BVPS growth (year on year), P/B and P/E (twelve-month net income) derived.`);
   }
 
   // 6. Bankers

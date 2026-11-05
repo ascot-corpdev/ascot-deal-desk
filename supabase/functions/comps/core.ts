@@ -5,7 +5,8 @@
 export type LineItem = { name: string; value: string | number | null };
 export type Period = { period_end_date: string; num_months: number; statements: { name: string; line_items: LineItem[] }[] };
 export type StatementsResult = { currency: string | null; periods: Record<string, Period> };
-export type MarketCaps = { currency?: string | null; market_caps: { date: string; market_cap: string | number | null }[] };
+type Shares = string | number | { value: string | number | null } | null | undefined;
+export type MarketCaps = { currency?: string | null; market_caps: { date: string; market_cap: string | number | null; shares_outstanding?: Shares }[] };
 export type Earnings = { earnings: { name: string; key_dev_id: number; datetime: string }[] };
 
 export type CompanyIn = {
@@ -17,7 +18,8 @@ export type CompanyOut = {
   ticker: string; name: string; quarter: string; periodEnd: string; currency: string;
   revenue: number | null; premiums: number | null; netIncome: number | null;
   revenueGrowth: number | null; premiumGrowth: number | null;
-  lossRatio: number | null; roe: number | null; equity: number | null;
+  lossRatio: number | null; expenseRatio: number | null; combinedRatio: number | null; roe: number | null; equity: number | null;
+  bvps: number | null; bvpsGrowth: number | null;
   marketCap: number | null; marketCapCurrency: string | null; pb: number | null; pe: number | null;
   lastCall: { name: string; date: string } | null; nextCall: { name: string; date: string } | null;
   notes: string[];
@@ -40,6 +42,26 @@ const REV = [/^Total Revenues?\b/i, /^Revenues?$/i];
 const PREM = [/^Net Premiums Earned/i, /^Premiums Earned/i, /^Premiums and Annuity Revenues/i, /^Premiums\b/i];
 const NI = [/^Net Income - \(IS\)$/i, /^Net Income to Common Incl/i, /^Net Income$/i, /^Net Income to Company$/i];
 const LOSS = [/^Policy Benefits/i, /Loss(es)? and (Loss )?Adjustment Expenses?/i, /^Losses and LAE/i, /^Net Losses/i];
+// Underwriting expenses: total operating expenses (losses included, interest excluded) less non-insurance businesses
+const OPEX = [/^Total Operating Expenses/i];
+const NONINS = [/^Non-Insurance Activities Expenses/i];
+
+/** Equity from a balance sheet: reported total equity, else assets - liabilities - minority interest. */
+function equityOf(bal: Map<string, number | null>): number | null {
+  const eq = pick(bal, [/^Total Equity$/i, /^Total Common Equity$/i]);
+  if (eq !== null) return eq;
+  const assets = pick(bal, [/^Total Assets$/i]);
+  const liabs = pick(bal, [/^Total Liabilities( - \(Template Specific\))?$/i]);
+  const minority = pick(bal, [/^Minority Interest, Total/i, /^Minority Interest$/i]) ?? 0;
+  return assets !== null && liabs !== null ? assets - liabs - minority : null;
+}
+const sharesNum = (s: Shares) => num(s && typeof s === "object" ? s.value : s);
+/** Shares outstanding on a date: the last value on or up to 15 days before it. */
+export function sharesAt(caps: MarketCaps | null | undefined, date: string): number | null {
+  const hit = [...(caps?.market_caps ?? [])].filter((x) => x.date <= date && days(date, x.date) <= 15 && sharesNum(x.shares_outstanding))
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  return hit ? sharesNum(hit.shares_outstanding) : null;
+}
 
 /** Quarters newest first. */
 function quarters(r?: StatementsResult | null): [string, Period][] {
@@ -87,14 +109,23 @@ export function computeCompany(c: CompanyIn, now: number, kind: PeriodKind = "qu
   }
   const months = latest?.num_months && latest.num_months > 0 ? latest.num_months : 3;
 
-  const bal = itemsOf(quarters(c.balance)[0]?.[1]);
-  let equity = pick(bal, [/^Total Equity$/i, /^Total Common Equity$/i]);
-  if (equity === null) {
-    const assets = pick(bal, [/^Total Assets$/i]);
-    const liabs = pick(bal, [/^Total Liabilities( - \(Template Specific\))?$/i]);
-    const minority = pick(bal, [/^Minority Interest, Total/i, /^Minority Interest$/i]) ?? 0;
-    equity = assets !== null && liabs !== null ? assets - liabs - minority : null;
-  }
+  // combined ratio = (operating expenses - non-insurance expenses) / premiums; expense ratio = combined - loss
+  const opex = pick(li, OPEX), nonIns = pick(li, NONINS) ?? 0;
+  const combinedRatio = opex !== null && premiums ? round(((opex - nonIns) / premiums) * 100) : null;
+  const lossRatio = losses !== null && premiums ? round((losses / premiums) * 100) : null;
+  const expenseRatio = combinedRatio !== null && lossRatio !== null ? round(combinedRatio - lossRatio) : null;
+
+  // balance sheet: latest quarter and the one a year earlier, for book value per share growth
+  const bqs = quarters(c.balance);
+  const [, bLatest] = bqs[0] ?? ["", undefined];
+  const equity = equityOf(itemsOf(bLatest));
+  const bYearAgo = bLatest ? bqs.find(([, p]) => { const d = days(bLatest.period_end_date, p.period_end_date); return d > 330 && d < 400; })?.[1] : undefined;
+  const sh = bLatest ? sharesAt(c.marketCap, bLatest.period_end_date) : null;
+  const shYA = bYearAgo ? sharesAt(c.marketCap, bYearAgo.period_end_date) : null;
+  const eqYA = bYearAgo ? equityOf(itemsOf(bYearAgo)) : null;
+  const bvps = equity !== null && sh ? equity / sh : null, bvpsYA = eqYA !== null && shYA ? eqYA / shYA : null;
+  const bvpsGrowth = growth(bvps, bvpsYA);
+  if (bLatest && bvpsGrowth === null) notes.push(!sh ? "No share count for book value per share" : "No year-ago book value per share");
 
   const caps = [...(c.marketCap?.market_caps ?? [])].filter((x) => num(x.market_cap) !== null).sort((a, b) => b.date.localeCompare(a.date));
   const marketCap = caps.length ? num(caps[0].market_cap) : null;
@@ -111,7 +142,8 @@ export function computeCompany(c: CompanyIn, now: number, kind: PeriodKind = "qu
     periodEnd: latest?.period_end_date ?? "", currency: ccy ?? "",
     revenue: round(M(revenue)), premiums: round(M(premiums)), netIncome: round(M(netIncome)),
     revenueGrowth: round(revenueGrowth), premiumGrowth: round(premiumGrowth),
-    lossRatio: losses !== null && premiums ? round((losses / premiums) * 100) : null,
+    lossRatio, expenseRatio, combinedRatio,
+    bvps: round(bvps, 2), bvpsGrowth: round(bvpsGrowth),
     roe: netIncome !== null && equity ? round(((netIncome * (12 / months)) / equity) * 100) : null,   // annualised
     equity: round(M(equity)),
     marketCap: round(M(marketCap)), marketCapCurrency: capCcy,
@@ -128,7 +160,7 @@ export function median(vals: (number | null)[]): number | null {
   const m = Math.floor(v.length / 2);
   return round(v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2, 2);
 }
-export const MEDIAN_FIELDS = ["revenueGrowth", "premiumGrowth", "lossRatio", "roe", "pb", "pe"] as const;
+export const MEDIAN_FIELDS = ["revenueGrowth", "premiumGrowth", "lossRatio", "expenseRatio", "combinedRatio", "roe", "bvpsGrowth", "pb", "pe"] as const;
 export function medians(rows: CompanyOut[]): Record<string, number | null> {
   return Object.fromEntries(MEDIAN_FIELDS.map((k) => [k, median(rows.map((r) => r[k] as number | null))]));
 }

@@ -83,13 +83,16 @@ async function serve(req: Request, deps: Deps, json: (status: number, body: unkn
     type Post = { results: Record<string, StatementsResult>; errors?: Record<string, string> };
     const [inc, bal] = await Promise.all([
       k.call<Post>("statements/", { company_ids: cids, statement_type: "income_statement", period_type: PERIOD_TYPE[period], num_periods: 5 }),
-      k.call<Post>("statements/", { company_ids: cids, statement_type: "balance_sheet", period_type: "quarterly", num_periods: 1 }),
+      k.call<Post>("statements/", { company_ids: cids, statement_type: "balance_sheet", period_type: "quarterly", num_periods: 5 }),
     ]);
-    // 3. market cap (last ten days, to cover weekends and holidays) and earnings calls, per company
+    // 3. market cap and shares outstanding (from ten days before the year-ago balance sheet to today, so the
+    //    latest market cap and the share counts for book value per share come in one call) and earnings calls
     const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
     const per = await Promise.all(found.map(async (f) => {
+      const ends = Object.values(bal.results?.[String(f.companyId)]?.periods ?? {}).map((p) => Date.parse(p.period_end_date)).filter((t) => isFinite(t));
+      const oldest = Math.max(Math.min(now, ...ends.filter((t) => now - t < 500 * 86_400_000)), now - 500 * 86_400_000);
       const [mc, ea] = await Promise.all([
-        k.call<MarketCaps>(`market_cap/${f.companyId}/${day(now - 10 * 86_400_000)}/${day(now)}`).catch(() => null),
+        k.call<MarketCaps>(`market_cap/${f.companyId}/${day(oldest - 10 * 86_400_000)}/${day(now)}`).catch(() => null),
         k.call<Earnings>(`earnings/${f.companyId}`).catch(() => null),
       ]);
       return { mc, ea };

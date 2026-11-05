@@ -130,7 +130,7 @@ Every Monday morning the CEO and Corp Dev get an email with overdue next steps, 
 
 ### 7. Public comps from Kensho and the AGL financials link (optional)
 
-The **Comps** tab shows listed specialty insurance peers (revenue, premiums, premium growth, net income, loss ratio, ROE, market cap, P/B, P/E, earnings call dates), with medians. A toggle switches between the latest quarter, year to date (YTD) and the last twelve months (LTM); each browser remembers its choice, and the CEO view strip and board pack follow it. The CEO view shows the peer medians and the board pack gets a peers slide. Data comes from S&P Global through Kensho's API (kfinance), fetched when someone opens the page and never written to the database. You need Kensho API access (kfinance) for your firm; ask your S&P Global / Kensho contact.
+The **Comps** tab shows listed specialty insurance peers (revenue, premiums, premium growth, net income, loss ratio, combined ratio, ROE, book value per share growth, market cap, P/B, P/E, earnings call dates), with medians. A toggle switches between the latest quarter, year to date (YTD) and the last twelve months (LTM); each browser remembers its choice, and the CEO view strip and board pack follow it. The CEO view shows the peer medians and the board pack gets a peers slide. Data comes from S&P Global through Kensho's API (kfinance), fetched when someone opens the page and never written to the database. You need Kensho API access (kfinance) for your firm; ask your S&P Global / Kensho contact.
 
 1. **SQL editor:** run `supabase/migrations/0004_settings.sql` once. It holds the peer list and the AGL financials link (the link only; AGL's financials are not stored). Without it the page uses a default peer list.
 2. Give the function Kensho credentials, either a refresh token:
@@ -165,7 +165,7 @@ The **Comps** tab shows listed specialty insurance peers (revenue, premiums, pre
 
 4. On the site, open **Comps**, then **Edit peers** to set the tickers (London listings as `LSE:HSX`) and paste the **AGL financials** link (for example the SharePoint file). The link then appears on the Comps tab and in the CEO view.
 
-Ratios are calculated by the function from the reported figures and labelled "(derived)". ROE is annualised in the quarter and YTD views; P/E always uses twelve-month net income. Each company shows its own latest fiscal period, so period ends can differ; P/B and P/E are left blank where the market cap and the accounts are in different currencies.
+Ratios are calculated by the function from the reported figures and labelled "(derived)". ROE is annualised in the quarter and YTD views; P/E always uses twelve-month net income. Combined ratio = operating expenses excluding non-insurance businesses / premiums (S&P has no combined ratio line, so it can differ from the ratio a company reports). BVPS growth = equity / shares outstanding at the latest quarter end versus a year earlier, before dividends. Each company shows its own latest fiscal period, so period ends can differ; P/B and P/E are left blank where the market cap and the accounts are in different currencies.
 
 ## Running locally
 
