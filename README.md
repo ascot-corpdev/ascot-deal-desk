@@ -4,7 +4,7 @@ M&A deal tracker and banker CRM for Corporate Development, styled on the Ascot P
 
 - **CEO view (read only):** pipeline headline, stat tiles, pipeline by stage, next 30 days, deal summaries with each deal's profile and other docs (SharePoint links), latest team notes.
 - **Deals and Banker CRM (Corp Dev):** add, edit and delete deals, bankers and notes; SharePoint links per deal; CSV export.
-- **Ask Copilot (every login):** copies a plain-text brief of the tracker (deals, bankers, latest notes; under 15,000 characters) and opens Microsoft 365 Copilot in a new tab to paste it into. In a banker's email box, **Draft with Copilot** does the same with a drafting prompt. The site itself sends nothing to Copilot; use your company's Microsoft 365 sign-in so Copilot's enterprise data protection applies.
+- **Ask Copilot (every login):** with step 8 set up, opens a chat panel beside the tracker that asks Microsoft 365 Copilot through Microsoft's Copilot Chat API. You sign in with your Microsoft account, and each question carries a plain-text brief of the tracker (deals, bankers, latest notes; under 15,000 characters) as context. Without step 8, it copies that brief and opens Microsoft 365 Copilot in a new tab to paste it into. In a banker's email box, **Draft with Copilot** copies a drafting prompt the same way. Use your company's Microsoft 365 sign-in so Copilot's enterprise data protection applies.
 
 For Copilot (and other coding assistants): how the code works and the rules for changing it are in [`.github/copilot-instructions.md`](.github/copilot-instructions.md).
 
@@ -21,6 +21,7 @@ For Copilot (and other coding assistants): how the code works and the rules for 
 | `supabase/functions/comps` | Supabase Edge Function | Optional public comps from S&P Global via Kensho (kfinance) for the Comps tab, CEO view and board pack. Credentials stay in its secrets; nothing is stored. |
 | `supabase/functions/claude` | Supabase Edge Function | Not used by the site at present (the Claude panel is switched off with `AI_PANEL` in `web/index.html` in favour of Ask Copilot). Kept so it can be turned back on. |
 | `scripts/logins.mjs` | Your machine | Creates, resets and removes logins with the Supabase service role key. |
+| `web/auth.html` | GitHub Pages (static) | Return page for "Sign in with Microsoft" in the Ask Copilot panel. Hands the sign-in back to the tracker tab and closes. |
 | `.github/workflows/pages.yml` | GitHub Actions | Writes `web/config.js` from repository variables and publishes `web/` to Pages. |
 
 Passwords are checked by Supabase Auth on the server, and the database refuses reads and writes that a login's role does not allow, so the public URL shows nothing without a valid login.
@@ -169,6 +170,26 @@ The **Comps** tab shows listed specialty insurance peers (revenue, premiums, pre
 
 Ratios are calculated by the function from the reported figures and labelled "(derived)". ROE is annualised in the quarter and YTD views; P/E always uses twelve-month net income. Combined ratio = operating expenses excluding non-insurance businesses / premiums (S&P has no combined ratio line, so it can differ from the ratio a company reports). BVPS growth = equity / shares outstanding at the latest quarter end versus a year earlier, before dividends. Each company shows its own latest fiscal period, so period ends can differ; P/B and P/E are left blank where the market cap and the accounts are in different currencies.
 
+### 8. Copilot chat in the page (optional)
+
+Without this step, Ask Copilot copies a brief and opens Copilot in a new tab. With it, Ask Copilot opens a chat panel in the page that talks to the [Microsoft 365 Copilot Chat API](https://learn.microsoft.com/microsoft-365/copilot/extensibility/api/ai-services/chat/overview).
+
+Before you start:
+
+- **The API is in preview** (Microsoft Graph `beta`). Microsoft says beta APIs can change and aren't supported for production use. If it changes or stops working, the panel shows the error and **Copy and open Copilot** still works.
+- **Each person needs a Microsoft 365 Copilot licence.** That includes the CEO if they'll use it.
+- **An Entra admin has to approve the app.** The API only works with all seven delegated Microsoft Graph permissions below. They let the page read, as the signed-in person, what Copilot can already see for them: SharePoint and OneDrive, mail, people, meeting transcripts, Teams chats and channel messages, and connector content. The page only calls the Copilot Chat API with them, and tokens stay in the browser tab's memory.
+
+Steps (Entra admin):
+
+1. **Entra admin center > App registrations > New registration.** Name it "Ascot deal desk", choose **Accounts in this organizational directory only**, and set the redirect URI platform to **Single-page application (SPA)** with `https://YOUR_GITHUB_USER.github.io/REPO_NAME/auth.html`. Add `http://localhost:8080/auth.html` too if you test locally.
+2. **API permissions > Add a permission > Microsoft Graph > Delegated:** `Sites.Read.All`, `Mail.Read`, `People.Read.All`, `OnlineMeetingTranscript.Read.All`, `Chat.Read`, `ChannelMessage.Read.All`, `ExternalItem.Read.All`. Then **Grant admin consent for Ascot**.
+3. Optional: **Enterprise applications > Ascot deal desk > Properties:** set **Assignment required** to Yes, then add the CEO and Corp Dev people under **Users and groups**.
+4. Copy the **Application (client) ID** and **Directory (tenant) ID** from the app's Overview. Neither is a secret, and the app needs no client secret.
+5. **GitHub > Settings > Secrets and variables > Actions > Variables:** add `COPILOT_CLIENT_ID` and `COPILOT_TENANT_ID`, then rerun the "Deploy site to GitHub Pages" workflow.
+
+To test locally, put the same two IDs in `web/config.js` as `copilotClientId` and `copilotTenantId`. Remove both variables to switch back to copy-and-open.
+
 ## Running locally
 
 Fill in `web/config.js` with the Project URL and publishable key, then:
@@ -184,4 +205,4 @@ Open http://localhost:8080. Add `http://localhost:8080` to `ALLOWED_ORIGIN` (com
 - **Data model:** each deal, banker and note is a JSON document (`id`, `doc`) so fields can change without migrations. `updated_at` and `updated_by` are stamped by the database.
 - **Live updates:** open pages refresh within a second when anyone saves, through Supabase Realtime.
 - **SharePoint links** are stored as links. Opening one still needs SharePoint access to that file.
-- **Costs:** Supabase free tier; GitHub Pages free; Ask Copilot uses your Microsoft 365 Copilot licences; nothing is billed through this site.
+- **Costs:** Supabase free tier; GitHub Pages free; Ask Copilot uses your Microsoft 365 Copilot licences (the Chat API is included with them); nothing is billed through this site.

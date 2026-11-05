@@ -16,7 +16,8 @@ An M&A deal tracker and banker CRM for Ascot's Corporate Development team, style
 | Path | What it is |
 | --- | --- |
 | `web/index.html` | The whole site. |
-| `web/config.js` | Supabase URL and publishable key. Blank in the repo; the Pages workflow writes it from repository variables. Never commit real values or any `sb_secret_` key. |
+| `web/config.js` | Supabase URL and publishable key, plus the optional Entra app IDs for the Copilot panel (`copilotClientId`, `copilotTenantId`). Blank in the repo; the Pages workflow writes it from repository variables. Never commit real values or any `sb_secret_` key. |
+| `web/auth.html` | Redirect page for Microsoft sign-in in the Copilot panel. Posts the response to the tracker tab over `BroadcastChannel("dealdesk-auth")` and closes. Keep it self-contained: no external scripts. |
 | `.github/workflows/pages.yml` | On every push to `main`: writes `web/config.js` and publishes `web/` to GitHub Pages. **A merge to `main` is a deploy.** |
 | `supabase/migrations/0001..0004_*.sql` | Schema, roles, RLS, change history trigger, settings table. Run by hand in the Supabase SQL editor. |
 | `supabase/functions/comps/` | Public comps from S&P Global via Kensho (kfinance). `core.ts` is the pure maths (tested), `kensho.ts` is auth and HTTP, `index.ts` is the handler. |
@@ -61,7 +62,7 @@ The patterns used throughout:
 
 ## Assistant
 
-The header button is **Ask Copilot**: it copies a plain-text brief of the tracker (`copilotBrief()`, under 15,000 characters) and opens Microsoft 365 Copilot in a new tab. "Draft with Copilot" in a banker's email box does the same with a drafting prompt. The older in-page Claude panel is switched off with `AI_PANEL = false`; its code and `supabase/functions/claude` remain so it can be turned back on.
+The header button is **Ask Copilot**. When `copilotClientId` is set (`cpEnabled()`), it opens a side panel (`renderCP()`, state `S.cp`, root `#cpRoot`, body class `cp-docked`) that calls the Microsoft 365 Copilot Chat API (Graph beta `/copilot/conversations`) as the user's Microsoft account. Sign-in is hand-written OAuth code flow with PKCE in a popup (`cpSignIn()`), with no MSAL library, so nothing is added from a CDN. Tokens stay in memory only and are cleared on tracker sign-out. Each question sends `copilotBrief(false)` as `additionalContext`; web grounding is off unless the user ticks "Include web results". The panel's **Copy and open Copilot** and the not-configured path both copy the brief (`copilotBrief()`, under 15,000 characters) and open Microsoft 365 Copilot in a new tab. "Draft with Copilot" in a banker's email box does the same with a drafting prompt. The older in-page Claude panel is switched off with `AI_PANEL = false`; its code and `supabase/functions/claude` remain so it can be turned back on.
 
 ## Rules
 

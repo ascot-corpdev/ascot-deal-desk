@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Microsoft sign-in</title>
+</head>
+<body style="font:14px/1.5 Arial,Helvetica,sans-serif;padding:24px;color:#222">
+<p id="m">Finishing Microsoft sign-in…</p>
+<script>
+/* Redirect page for "Sign in with Microsoft" in the Ask Copilot panel (web/index.html, cpSignIn).
+   Microsoft's sign-in pages cut the link back to the deal desk tab, so this page hands the sign-in response
+   (a one-time code that only works with the secret held by that tab) back over a same-origin BroadcastChannel,
+   clears it from the address bar, and closes. It loads nothing from anywhere else. */
+(function(){
+  var r = (location.search || location.hash.replace(/^#/, "?")).replace(/^\?/, "");
+  history.replaceState(null, "", location.pathname);
+  var sent = false;
+  try{ var ch = new BroadcastChannel("dealdesk-auth"); ch.postMessage(r); ch.close(); sent = true; }catch(e){}
+  setTimeout(function(){
+    window.close();
+    document.getElementById("m").textContent = sent ? "Signed in. You can close this window." : "This browser couldn't pass the sign-in back. Close this window and use \u201cCopy and open Copilot\u201d instead.";
+  }, 300);
+})();
+</script>
+</body>
+</html>
