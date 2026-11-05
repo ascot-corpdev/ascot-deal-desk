@@ -863,6 +863,7 @@ function compsStatusHTML(){
   if(!c || c.loading) return `<p class="t2">Loading the latest quarter from Kensho…</p>`;
   if(c.err==="not_configured") return `<div class="banner"><span><b>Kensho isn't connected yet.</b> ${edit?"Set the Kensho credentials on the comps function (README, section 7).":"Ask the tracker owner to connect it."}</span></div>`;
   if(c.err==="not_deployed") return `<div class="banner"><span><b>The comps function isn't deployed yet.</b> ${edit?"See README, section 7, to deploy it and connect Kensho.":"Ask the tracker owner to set it up."}</span></div>`;
+  if(c.err==="network") return `<div class="banner"><span><b>Couldn't reach the comps function.</b> ${edit?`The browser got no answer it could read. Check, in order: (1) the function is deployed: <code>supabase functions deploy comps --no-verify-jwt</code>; (2) it was deployed with <code>--no-verify-jwt</code> (redeploy with it if not); (3) the <code>ALLOWED_ORIGIN</code> secret is this site's address, <code>${esc(location.origin)}</code>. See README, section 7.`:"Ask the tracker owner to check the comps function."}</span><button class="btn sm" data-act="comps-refresh">Try again</button></div>`;
   if(c.err) return `<div class="banner"><span><b>Couldn't load the comps.</b> ${esc(c.msg||c.err)}</span><button class="btn sm" data-act="comps-refresh">Try again</button></div>`;
   return "";
 }

@@ -23,14 +23,29 @@ let client: { key: string; f: typeof fetch; k: Kensho } | null = null;
 
 export async function handle(req: Request, deps: Deps): Promise<Response> {
   const cors = {
-    "Access-Control-Allow-Origin": deps.env("ALLOWED_ORIGIN") ?? "*",
+    "Access-Control-Allow-Origin": allowOrigin(deps.env("ALLOWED_ORIGIN"), req.headers.get("Origin")),
+    "Vary": "Origin",
     "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json(405, { error: "Use POST." });
+  // Any unexpected failure still answers with CORS headers, so the page can show the reason
+  // instead of the browser's bare "Failed to fetch".
+  try { return await serve(req, deps, json); }
+  catch (e) { return json(500, { error: "server", message: `The comps function failed: ${(e as Error)?.message || "unknown error"}` }); }
+}
 
+/** ALLOWED_ORIGIN may be a site address with a path or trailing slash, or several separated by commas:
+    compare origins only, and echo the caller's origin when it is one of them. */
+export function allowOrigin(setting: string | undefined, origin: string | null): string {
+  if (!setting || !setting.trim() || setting.trim() === "*") return "*";
+  const allowed = setting.split(",").map((s) => { try { return new URL(s.trim()).origin; } catch { return s.trim().replace(/\/+$/, ""); } }).filter(Boolean);
+  return origin && allowed.includes(origin) ? origin : allowed[0];
+}
+
+async function serve(req: Request, deps: Deps, json: (status: number, body: unknown) => Response): Promise<Response> {
   const role = await (deps.whoIs ?? whoIs(deps.env))(req);
   if (!role) return json(401, { error: "Sign in again." });
 
