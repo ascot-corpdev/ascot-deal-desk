@@ -2,7 +2,7 @@
 
 M&A deal tracker and banker CRM for Corporate Development, styled on the Ascot PPT template.
 
-- **CEO view (read only):** pipeline headline, stat tiles, pipeline by stage, next 30 days, deal summaries with SharePoint deck links, banker relationships, latest team notes.
+- **CEO view (read only):** pipeline headline, stat tiles, pipeline by stage, next 30 days, deal summaries with each deal's profile and other docs (SharePoint links), latest team notes.
 - **Deals and Banker CRM (Corp Dev):** add, edit and delete deals, bankers and notes; SharePoint links per deal; CSV export.
 - **Claude assistant (Corp Dev):** reads the tracker, drafts CEO summaries, preps banker calls, and proposes edits that the user approves before anything is saved.
 
