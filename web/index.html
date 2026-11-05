@@ -358,7 +358,7 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
   .who{padding-bottom:4px;gap:8px}
   #whoName,#pwBtn,#signoutBtn{display:none}
   .dot{width:34px;height:34px;font-size:13px}
-  #aiBtn{padding:7px 10px}
+  #copilotBtn{padding:7px 10px}
   nav.tabs a{padding:10px 7px}
   nav.tabs .tag{display:none}
   main .wrap{padding-block:16px 22px;gap:18px}
@@ -395,7 +395,7 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
       <h1>M&amp;A pipeline and banker coverage</h1>
     </div>
     <div class="who">
-      <button class="btn accent" id="aiBtn" data-act="ai-open" hidden>Ask Claude</button>
+      <button class="btn accent" id="copilotBtn" data-act="copilot" hidden title="Copies a summary of the tracker and opens Microsoft 365 Copilot">Ask Copilot</button>
       <span id="whoName"></span><button type="button" class="dot" id="whoDot" data-act="who-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="whoMenu" hidden></button>
       <button class="btn sm ghost" id="pwBtn" data-act="change-pw" hidden>Change password</button>
       <button class="btn sm" id="signoutBtn" data-act="signout" hidden>Sign out</button>
@@ -1088,6 +1088,7 @@ function renderDrawer(){
   else if(dr.kind==="deal") body=dealFormHTML(dr);
   else if(dr.kind==="import") body=importHTML();
   else if(dr.kind==="comps-settings") body=compsSettingsHTML();
+  else if(dr.kind==="copilot") body=copilotHTML(dr);
   else body=bankerFormHTML(dr);
   root.innerHTML=`<div class="scrim" data-act="close"></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drTitle">${body}</aside>`;
   renderDrAlert(); renderPresence(); renderHistory(); loadHistory(histKey(dr));
@@ -1633,9 +1634,9 @@ function mailBoxHTML(b){
   return `<div><h3 class="sec">Email</h3><div class="mailbox">
     <div class="to" id="mailTo">${isEmail(b.email)?`To: <a href="mailto:${esc(String(b.email).trim())}">${esc(String(b.email).trim())}</a>`:`<span class="t2">No email address yet. Add it under Contact above, then write here.</span>`}</div>
     <label class="f">Subject<input type="text" id="m_subject" placeholder="Following up on Project Otter"></label>
-    <label class="f">Message<textarea id="m_body" rows="4" placeholder="Write it here, or let Claude draft it"></textarea></label>
+    <label class="f">Message<textarea id="m_body" rows="4" placeholder="Write it here, or draft it with Copilot"></textarea></label>
     <label class="chk"><input type="checkbox" id="m_log" checked> Log it as an email interaction (updates last contact)</label>
-    <div class="acts"><button type="button" class="btn primary sm" data-act="mail-send">Open in email app</button>${S.sample?`<button type="button" class="btn sm" data-act="mail-ai">Draft with Claude</button>`:""}</div>
+    <div class="acts"><button type="button" class="btn primary sm" data-act="mail-send">Open in email app</button><button type="button" class="btn sm" data-act="mail-copilot" title="Copies a drafting prompt and opens Microsoft 365 Copilot">Draft with Copilot</button></div>
   </div></div>`;
 }
 function openMailto(to, subject, body){
@@ -1666,6 +1667,17 @@ function mailDraftWithClaude(){
     (subject?`Subject: ${subject}. `:"")+(body?`My notes for it: ${body}. `:"")+(ctx?`What we know about them: ${clip(ctx,600)}. `:"")+
     `Use their banker id ${dr.id} to check our notes and deals with them. Under 120 words, plain and friendly, with a subject line. Don't propose tracker changes.`;
   S.ai.open=true; renderAI(); askAI(prompt);
+}
+function mailDraftWithCopilot(){
+  const dr=S.drawer; if(!dr||dr.kind!=="banker") return;
+  const name=val("b_name"), firm=val("b_firm"), title=val("b_title"), ctx=val("b_context"), subject=val("m_subject"), body=(document.getElementById("m_body")?.value||"").trim();
+  const b=D().bankers.find(x=>x.id===dr.id);
+  const deals=b ? D().deals.filter(d=>(d.bankerIds||[]).includes(b.id)).map(d=>`${d.codename} (${d.stage})`) : [];
+  const notes=b ? D().notes.filter(n=>n.bankerId===b.id).sort((x,y)=>(y.createdAt||0)-(x.createdAt||0)).slice(0,5).map(n=>`- ${n.createdAt?new Date(n.createdAt).toISOString().slice(0,10):""} ${n.kind||"Note"}: ${clip(plainNote(n),200)}`) : [];
+  const prompt=`Draft a short email from me to ${name}${title?`, ${title}`:""}${firm?` at ${firm}`:""}. Under 120 words, plain and friendly, with a subject line.\n`+
+    (subject?`Subject idea: ${subject}\n`:"")+(body?`My notes for it: ${body}\n`:"")+(ctx?`What we know about them: ${clip(ctx,600)}\n`:"")+
+    (deals.length?`Deals we've worked on with them: ${deals.join(", ")}\n`:"")+(notes.length?`Recent notes:\n${notes.join("\n")}\n`:"");
+  openCopilot(prompt, "Email prompt");
 }
 function mailFirm(firm){
   const ppl=S.bankers.filter(b=>firmKey(b.firm)===firmKey(firm) && isEmail(b.email));
@@ -1822,6 +1834,54 @@ async function exportCSV(){
   const a=document.createElement("a"); a.href=url; a.download=`deal-tracker-${TODAY()}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
 
+/* ---------- Microsoft 365 Copilot ----------
+   Copilot can't read this site, so the button copies a plain-text brief of what this login can see and
+   opens Copilot in a new tab to paste it into. Nothing is sent anywhere by the page itself. */
+const COPILOT_URL="https://m365.cloud.microsoft/chat";
+const COPILOT_MAX=15000;
+function plainNote(n){ return String(n.text||n.html||"").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(); }
+function copilotBrief(){
+  const {deals,bankers,notes}=D(), d10=t=>t?new Date(t).toISOString().slice(0,10):"";
+  const act=deals.filter(isActive), other=deals.filter(d=>!isActive(d));
+  const dealLine=d=>`- ${d.codename}${d.target?` (${d.target})`:""}: ${d.stage}${d.type?`, ${d.type}`:""}${d.sector?`, ${d.sector}`:""}${moneyM(d.ev)?`, EV $${mnum(d.ev)}M`:""}${moneyM(d.gwp)?`, GWP $${mnum(d.gwp)}M`:""}${d.priority?`, ${d.priority} priority`:""}${d.lead?`, lead ${d.lead}`:""}${d.nextStep?`. Next step: ${d.nextStep}${d.nextStepDate?` by ${d.nextStepDate}`:""}`:""}${isOverdue(d)?" (overdue)":""}${isStalled(d)?" (stalled)":""}${d.ceoSummary?`. Summary: ${clip(d.ceoSummary,300)}`:""}${d.keyRisks?`. Risks: ${clip(d.keyRisks,200)}`:""}${!isActive(d)&&(d.deadReason||d.outcomeNote)?`. Outcome: ${clip([d.deadReason,d.outcomeNote].filter(Boolean).join("; "),150)}`:""}`;
+  const bLine=b=>`- ${b.name}${b.firm?`, ${b.firm}`:""}${b.coverage?` (${clip(b.coverage,60)})`:""}: ${b.relationship||"no relationship set"}, last contact ${b.lastContact||"never"}`;
+  const head=`You're helping Ascot's Corporate Development team. Below is our M&A deal tracker as of ${TODAY()}. Use only this information; say so if something isn't in it. Confidential: internal use only.\n\nMy question: \n\n`;
+  const parts=[`ACTIVE DEALS (${act.length})\n${act.map(dealLine).join("\n")||"- none"}`];
+  if(other.length) parts.push(`CLOSED, ON HOLD OR DEAD (${other.length})\n${other.map(dealLine).join("\n")}`);
+  const recent=[...notes].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const dealName=id=>(deals.find(d=>d.id===id)||{}).codename, bName=id=>{ const b=bankers.find(x=>x.id===id); return b?`${b.name}${b.firm?` (${b.firm})`:""}`:null; };
+  const noteLine=n=>`- ${d10(n.createdAt)} ${dealName(n.dealId)||bName(n.bankerId)||""} ${n.kind?`[${n.kind}]`:""}: ${clip(plainNote(n),220)}`;
+  let text, nb=bankers.length, nn=Math.min(recent.length,30);
+  // shrink notes, then bankers, until it fits Copilot's prompt box
+  for(;;){
+    const bs=[...bankers].sort((a,b)=>String(b.lastContact||"").localeCompare(String(a.lastContact||""))).slice(0,nb);
+    const p=[...parts];
+    if(bs.length) p.push(`BANKERS (${bs.length}${bs.length<bankers.length?` most recently contacted of ${bankers.length}`:""})\n${bs.map(bLine).join("\n")}`);
+    if(nn) p.push(`LATEST NOTES (${nn})\n${recent.slice(0,nn).map(noteLine).join("\n")}`);
+    text=head+p.join("\n\n");
+    if(text.length<=COPILOT_MAX || (!nn && !nb)) break;
+    if(nn>5) nn=Math.max(5,nn-5); else if(nb>20) nb=Math.max(20,nb-10); else if(nn) nn=0; else nb=0;
+  }
+  return text.length>COPILOT_MAX ? text.slice(0,COPILOT_MAX-20)+"\n[cut to fit]" : text;
+}
+async function copyText(text){
+  try{ await navigator.clipboard.writeText(text); return true; }
+  catch{ try{ const t=document.createElement("textarea"); t.value=text; t.setAttribute("readonly",""); t.style.position="fixed"; t.style.opacity="0"; document.body.appendChild(t); t.select(); const ok=document.execCommand("copy"); document.body.removeChild(t); return ok; }catch{ return false; } }
+}
+async function openCopilot(text, what){
+  const copied=await copyText(text);
+  window.open(COPILOT_URL, "_blank", "noopener");
+  if(copied) toast(`${what} copied. Paste it into Copilot (Ctrl+V or Cmd+V), then ask.`);
+  else if(!S.drawer){ S.drawer={kind:"copilot", text}; renderDrawer(); }
+  else toast("Couldn't copy to the clipboard. Copy the text yourself and paste it into Copilot.");
+}
+function copilotHTML(dr){
+  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">Ask Copilot</div><h2 id="drTitle">Copy this into Copilot</h2></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
+  <div class="drawer-b"><p class="t2">The browser didn't allow copying. Select all of it, copy, and paste it into Microsoft 365 Copilot.</p>
+  <textarea id="copilotText" rows="18" readonly style="width:100%">${esc(dr.text)}</textarea>
+  <div class="acts" style="margin-top:8px"><a class="btn sm" href="${COPILOT_URL}" target="_blank" rel="noopener noreferrer">Open Copilot ↗</a></div></div>`;
+}
+
 /* ---------- Claude helper ---------- */
 const ALLOWED_DEAL_CHANGES = ["target","type","sector","stage","priority","ev","gwp","stake","origin","lead","nextStep","nextStepDate","ceoSummary","keyRisks","outcomeDate","deadReason","outcomeNote"];
 const ALLOWED_BANKER_CHANGES = ["firm","website","title","coverage","relationship","lastContact","context","email","phone"];
@@ -1906,9 +1966,14 @@ const SUGGEST = [
   "Summarize what changed in the tracker this week",
   "Which bankers have gone cold, and who should we reconnect with?"
 ];
+/* The in-page Claude panel is switched off in favour of Microsoft 365 Copilot (AI_PANEL); its code and the
+   claude function stay so it can be turned back on. */
+const AI_PANEL=false;
 function renderAI(){
   const root=document.getElementById("aiRoot"); const btn=document.getElementById("aiBtn");
-  const available = !!S.sample && !!S.session && !isCEO();
+  const cb=document.getElementById("copilotBtn"); if(cb) cb.hidden=!S.session;
+  if(!btn){ document.body.classList.remove("ai-docked"); if(root.innerHTML) root.innerHTML=""; return; }
+  const available = AI_PANEL && !!S.sample && !!S.session && !isCEO();
   btn.hidden = !available || S.ai.open;
   document.body.classList.toggle("ai-docked", !!(S.ai.open && available));
   if(!S.ai.open||!available){ if(root.innerHTML) root.innerHTML=""; return; }
@@ -2007,6 +2072,8 @@ document.addEventListener("click", async e=>{
     case "new-banker": if(!canEditNow()) return; S.drawer={kind:"banker",id:null,seed:t.dataset.firm?{firm:t.dataset.firm}:undefined}; renderDrawer(); break;
     case "mail-send": t.disabled=true; await mailSend(); t.disabled=false; break;
     case "mail-ai": mailDraftWithClaude(); break;
+    case "mail-copilot": mailDraftWithCopilot(); break;
+    case "copilot": S.lastFocusEl=t; openCopilot(copilotBrief(), "Tracker summary"); break;
     case "mail-firm": mailFirm(t.dataset.firm); break;
     case "open-mate": e.preventDefault(); history.replaceState(null,"","#banker/"+encodeURIComponent(id)); S.lastFocusId=id; openRoute({kind:"banker",id}); break;
     case "fold": { const k=t.dataset.k; const open=!firmOpen(k); setFold(k,open); render();

@@ -4,7 +4,7 @@ M&A deal tracker and banker CRM for Corporate Development, styled on the Ascot P
 
 - **CEO view (read only):** pipeline headline, stat tiles, pipeline by stage, next 30 days, deal summaries with each deal's profile and other docs (SharePoint links), latest team notes.
 - **Deals and Banker CRM (Corp Dev):** add, edit and delete deals, bankers and notes; SharePoint links per deal; CSV export.
-- **Claude assistant (Corp Dev):** reads the tracker, drafts CEO summaries, preps banker calls, and proposes edits that the user approves before anything is saved.
+- **Ask Copilot (every login):** copies a plain-text brief of the tracker (deals, bankers, latest notes; under 15,000 characters) and opens Microsoft 365 Copilot in a new tab to paste it into. In a banker's email box, **Draft with Copilot** does the same with a drafting prompt. The site itself sends nothing to Copilot; use your company's Microsoft 365 sign-in so Copilot's enterprise data protection applies.
 
 ## How it fits together
 
@@ -17,7 +17,7 @@ M&A deal tracker and banker CRM for Corporate Development, styled on the Ascot P
 | `supabase/migrations/0004_settings.sql` | Supabase Postgres | Shared settings: the Comps peer list and the AGL financials link (link only). |
 | `supabase/functions/digest` | Supabase Edge Function | Optional weekly email digest (overdue, stalled, due this week, cold bankers, what changed), sent through Resend on a Supabase Cron schedule (`supabase/digest_schedule.sql`). |
 | `supabase/functions/comps` | Supabase Edge Function | Optional public comps from S&P Global via Kensho (kfinance) for the Comps tab, CEO view and board pack. Credentials stay in its secrets; nothing is stored. |
-| `supabase/functions/claude` | Supabase Edge Function | Checks the caller is a Corp Dev login, then calls Claude with the Anthropic API key kept server side. |
+| `supabase/functions/claude` | Supabase Edge Function | Not used by the site at present (the Claude panel is switched off with `AI_PANEL` in `web/index.html` in favour of Ask Copilot). Kept so it can be turned back on. |
 | `scripts/logins.mjs` | Your machine | Creates, resets and removes logins with the Supabase service role key. |
 | `.github/workflows/pages.yml` | GitHub Actions | Writes `web/config.js` from repository variables and publishes `web/` to Pages. |
 
@@ -32,7 +32,9 @@ Passwords are checked by Supabase Auth on the server, and the database refuses r
 3. **Authentication > Sign In / Providers > Email:** keep Email enabled and turn **off** "Allow new users to sign up". Logins are created only by the script.
 4. **Project settings > API Keys:** note the **publishable key** (`sb_publishable_...`, safe for the website) and the **secret key** (`sb_secret_...`, only for the login script on your computer). The Project URL is under **Project settings > Data API** (`https://YOUR_PROJECT_REF.supabase.co`). Never put the secret key in the site or in GitHub. (Older projects show `anon` and `service_role` keys instead; they work the same way.)
 
-### 2. Claude assistant function
+### 2. Claude assistant function (not needed now)
+
+The site uses Ask Copilot instead, so skip this step. It only matters if you set `AI_PANEL=true` in `web/index.html` to bring back the in-page Claude panel.
 
 Needs the [Supabase CLI](https://supabase.com/docs/guides/cli) and an Anthropic API key from [console.anthropic.com](https://console.anthropic.com).
 
@@ -66,7 +68,7 @@ npm install
 SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co SUPABASE_SECRET_KEY=sb_secret_YOUR_KEY npm run logins -- seed
 ```
 
-This creates `ceo` (CEO, read only), `corpdev1` and `corpdev2` (Corp Dev, can edit and use Claude) and prints their passwords once. Send each one privately; people can change their own password after signing in.
+This creates `ceo` (CEO, read only), `corpdev1` and `corpdev2` (Corp Dev, can edit) and prints their passwords once. Send each one privately; people can change their own password after signing in.
 
 On Windows PowerShell, set the variables first: `$env:SUPABASE_URL="https://..."; $env:SUPABASE_SECRET_KEY="sb_secret_..."`, then run `npm run logins -- seed`.
 
@@ -173,11 +175,11 @@ Fill in `web/config.js` with the Project URL and publishable key, then:
 npm run serve
 ```
 
-Open http://localhost:8080. Add `http://localhost:8080` to `ALLOWED_ORIGIN` (comma-separated values are not supported; use `*` while testing) if you want the assistant locally.
+Open http://localhost:8080. Add `http://localhost:8080` to `ALLOWED_ORIGIN` (comma-separated values are not supported; use `*` while testing) if you turn the Claude panel back on.
 
 ## Notes
 
 - **Data model:** each deal, banker and note is a JSON document (`id`, `doc`) so fields can change without migrations. `updated_at` and `updated_by` are stamped by the database.
 - **Live updates:** open pages refresh within a second when anyone saves, through Supabase Realtime.
 - **SharePoint links** are stored as links. Opening one still needs SharePoint access to that file.
-- **Costs:** Supabase free tier; GitHub Pages free; Claude is billed per use on your Anthropic account (each assistant question sends the tracker snapshot, so cost grows with the size of the pipeline).
+- **Costs:** Supabase free tier; GitHub Pages free; Ask Copilot uses your Microsoft 365 Copilot licences; nothing is billed through this site.
