@@ -139,6 +139,13 @@ th[aria-sort="none"] .sorth:is(:hover,:focus-visible) .ar::before{content:"↕";
 .fchip .sw.st-done{background:var(--teal)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .mob{display:none}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr));gap:20px}
+.tcard{border:1px solid var(--grid);padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.tcard .th{display:flex;gap:12px;align-items:center}
+.tcard h3{margin:0;font-size:17px;color:var(--ink)}
+.tcard .dot{width:36px;height:36px;font-size:13px;cursor:default;flex:none}
+.tcard .dot.muted{background:var(--muted)}
+.tcard table{font-size:13px}
 .mailbox{display:flex;flex-direction:column;gap:10px}
 .mailbox .to{font-size:13px}
 .mailbox .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -391,6 +398,7 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
       <a href="#ceo" data-view="ceo">CEO view<span class="tag">read only</span></a>
       <a href="#deals" data-view="deals" id="tabDeals">Deals<span class="tag" id="tagDeals">production</span></a>
       <a href="#bankers" data-view="bankers">Banker CRM</a>
+      <a href="#team" data-view="team">Team</a>
     </nav>
   </div>
 </header>
@@ -555,12 +563,12 @@ function parseHash(){ let h=(location.hash||"").replace(/^#/,""); try{ h=decodeU
 function route(){
   const r=parseHash();
   if(r.kind){
-    S.view = r.kind==="banker" ? "bankers" : isCEO() ? "ceo" : (S.routed && S.view==="ceo") ? "ceo" : "deals";
+    S.view = r.kind==="banker" ? "bankers" : (S.routed && ["ceo","team"].includes(S.view)) ? S.view : isCEO() ? "ceo" : "deals";
     S.routed=true; render(); openRoute(r); return;
   }
   S.pushed=false;
   if(S.drawer && S.drawer.id && ["deal","view-deal","banker"].includes(S.drawer.kind)) S.drawer=null;
-  let v = ["ceo","deals","bankers"].includes(r.view) ? r.view : "ceo";
+  let v = ["ceo","deals","bankers","team"].includes(r.view) ? r.view : "ceo";
   if(v==="deals" && isCEO()) v="ceo"; S.view=v; S.routed=true; render(); focusBack();
 }
 function openRoute(r){
@@ -616,7 +624,7 @@ function render(){
   document.querySelectorAll("nav.tabs a").forEach(a => a.setAttribute("aria-current", a.dataset.view===S.view ? "page" : "false"));
   document.getElementById("tagDeals").textContent = canEditNow() ? "production" : "view only";
   const v=document.getElementById("view");
-  const html = S.view==="ceo" ? renderCEO() : S.view==="deals" ? renderDeals() : renderBankers();
+  const html = S.view==="ceo" ? renderCEO() : S.view==="deals" ? renderDeals() : S.view==="team" ? renderTeam() : renderBankers();
   v.innerHTML = statusBanner() + html;
   const sq=document.getElementById("q"); if(sq){ sq.value=S.q; } const bq=document.getElementById("bq"); if(bq){ bq.value=S.bq; }
   renderDrawer(); renderAI();
@@ -695,7 +703,7 @@ function renderCEO(){
 }
 
 const PRIORITY_ORDER=["High","Medium","Low"];
-const DEAL_FILTERS = [["active","Active",isActive],["overdue","Overdue",isOverdue],["stalled","Stalled",isStalled]].concat(STAGES.map(st=>[st,st,d=>d.stage===st])).concat([["all","All",()=>true]]);
+const DEAL_FILTERS = [["active","Active",isActive],["mine","Mine",d=>isActive(d)&&!!S.meId&&!!roleOn(d,S.meId)],["overdue","Overdue",isOverdue],["stalled","Stalled",isStalled]].concat(STAGES.map(st=>[st,st,d=>d.stage===st])).concat([["all","All",()=>true]]);
 const DEAL_SORTS = {
   deal:{cmp:(a,b)=>String(a.codename||"").localeCompare(String(b.codename||"")), dir:1},
   stage:{cmp:(a,b)=>STAGES.indexOf(a.stage)-STAGES.indexOf(b.stage), dir:1},
@@ -793,6 +801,56 @@ function bankerChipsHTML(base){
     const cls = v==="cold" ? " late" : ""; const sw = RELS.includes(v) ? `<span class="sw rel rel-${esc(v)}" aria-hidden="true"></span>` : "";
     return `<button type="button" class="fchip${cls}" data-act="bfilter" data-v="${esc(v)}" aria-pressed="${on}">${sw}${esc(label)}<b>${n}</b></button>`; }).join("")}</div>`;
 }
+/* ---------- team: who is working on which deal ----------
+   A person is on a deal as Lead (the deal's lead names them) or Team (ticked under Deal team). */
+function teamMembers(){
+  return Object.entries(S.profiles||{}).map(([id,p])=>({id, name:p.name||p.username||"Teammate", username:p.username||"", role:p.role||""}))
+    .filter(m=>m.role!=="ceo").sort((a,b)=>(b.id===S.meId)-(a.id===S.meId)||a.name.localeCompare(b.name));
+}
+function leadIs(d,id){ const p=(S.profiles||{})[id]; if(!p) return false; const l=String(d.lead||"").trim().toLowerCase(); return !!l && (l===String(p.name||"").toLowerCase() || l===String(p.username||"").toLowerCase()); }
+function roleOn(d,id){ return leadIs(d,id) ? "Lead" : (d.teamIds||[]).includes(id) ? "Team" : null; }
+function leadIsMember(d){ return Object.keys(S.profiles||{}).some(id=>leadIs(d,id)); }
+function teamDealRows(list, roleFn, ex, edit){
+  const order=(a,b)=>(isActive(b)-isActive(a)) || (ACTIVE.indexOf(b.stage)-ACTIVE.indexOf(a.stage)) || String(a.nextStepDate||"9").localeCompare(String(b.nextStepDate||"9"));
+  return [...list].sort(order).map(d=>{ const late=isOverdue(d); const r=roleFn(d);
+    return `<tr class="click${late?" late":""}" data-act="${ex||!edit?"view-deal":"edit-deal"}" data-id="${esc(d.id)}" tabindex="0">
+      <td><div class="t1">${esc(d.codename)}${stallTag(d)}</div><div class="t2">${esc(d.target||"")}</div>${r?`<div class="t2 mob">${esc(r)}${d.ev!==""&&d.ev!=null?` · EV ${esc(moneyM(d.ev))}`:""}</div>`:""}</td>
+      ${r!==undefined?`<td class="c-hide">${r?`<span class="pill ${r==="Lead"?"rel-Strong":"rel-Active"}">${esc(r)}</span>`:""}</td>`:""}
+      <td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td>
+      <td class="c-full" data-label="Next step">${esc(d.nextStep||"")||'<span class="t2">None set</span>'}${d.nextStepDate?`<div class="t2${late?" over":""}">${late?"Overdue: ":""}${fmtDate(d.nextStepDate)}</div>`:""}</td>
+      <td class="num c-hide">${esc(mnum(d.ev))}</td></tr>`; }).join("");
+}
+function renderTeam(){
+  const {deals}=D(); const ex=demoMode()||S.dbMissing; const edit=canEditNow();
+  const members=teamMembers(); const active=deals.filter(isActive);
+  const showClosed=!!S.teamClosed;
+  const head=(withRole)=>`<thead><tr><th>Deal</th>${withRole?"<th>Role</th>":""}<th>Stage</th><th>Next step</th><th class="num">EV ($M)</th></tr></thead>`;
+  const cards=members.map(m=>{
+    const mine=deals.filter(d=>roleOn(d,m.id)); const act=mine.filter(isActive); const shown=showClosed?mine:act;
+    const leads=act.filter(d=>roleOn(d,m.id)==="Lead").length, over=act.filter(isOverdue).length, stalled=act.filter(isStalled).length;
+    const ev=act.reduce((t,d)=>t+(+d.ev||0),0);
+    const initials=m.name.trim().split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase();
+    return `<section class="tcard" aria-label="${esc(m.name)}">
+      <div class="th"><span class="dot" aria-hidden="true">${esc(initials)}</span><div style="flex:1;min-width:0"><h3>${esc(m.name)}${m.id===S.meId?` <span class="t2">(you)</span>`:""}</h3>
+        <div class="t2">${act.length} active deal${act.length===1?"":"s"} · leads ${leads} · ${money(ev)} EV${over?` · <span class="over">${over} overdue</span>`:""}${stalled?` · ${stalled} stalled`:""}</div></div></div>
+      ${shown.length?`<div class="tbl-wrap cardwrap"><table class="cards">${head(true)}<tbody>${teamDealRows(shown, d=>roleOn(d,m.id), ex, edit)}</tbody></table></div>`
+        :`<p class="t2" style="margin:0">${mine.length?"No active deals.":"Not on any deals yet."}${edit&&!ex?" Tick them under Deal team when editing a deal, or name them as the deal lead.":""}</p>`}
+    </section>`; }).join("");
+  // leads who aren't logins (e.g. "A. Chen"), grouped by the name typed
+  const others={}; active.filter(d=>d.lead && !leadIsMember(d)).forEach(d=>{ const k=String(d.lead).trim(); (others[k]=others[k]||[]).push(d); });
+  const otherCards=Object.keys(others).sort((a,b)=>a.localeCompare(b)).map(name=>`<section class="tcard"><div class="th"><span class="dot muted" aria-hidden="true">${esc(name.split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase())}</span><div style="flex:1;min-width:0"><h3>${esc(name)}</h3><div class="t2">Deal lead without a login · ${others[name].length} active deal${others[name].length===1?"":"s"}</div></div></div>
+      <div class="tbl-wrap cardwrap"><table class="cards">${head(false)}<tbody>${teamDealRows(others[name], ()=>undefined, ex, edit)}</tbody></table></div></section>`).join("");
+  const unassigned=active.filter(d=>!d.lead && !Object.keys(S.profiles||{}).some(id=>(d.teamIds||[]).includes(id)));
+  const covered=active.length-unassigned.length;
+  return `
+  <section><h2 class="action-title">${members.length} ${members.length===1?"person":"people"} on ${covered} of ${active.length} active deal${active.length===1?"":"s"}${unassigned.length?`; ${unassigned.length} with no one assigned`:""}</h2>
+    <p class="sub">Who is leading and working on each deal. Set it under Deal lead and Deal team when editing a deal.</p></section>
+  <section class="toolbar"><span class="grow"></span><button type="button" class="btn" data-act="team-closed" aria-pressed="${showClosed}">Show closed and dead</button></section>
+  <div class="tgrid">${cards}${otherCards}</div>
+  ${unassigned.length?`<section><h3 class="sec">No one assigned</h3><div class="tbl-wrap cardwrap"><table class="cards">${head(false)}<tbody>${teamDealRows(unassigned, ()=>undefined, ex, edit)}</tbody></table></div></section>`:""}
+  <p class="source">Source: Corp Dev deal tracker. Lead from each deal's lead field; team from its Deal team list.</p>`;
+}
+
 function renderBankers(){
   const {bankers,deals}=D(); const ex=demoMode()||S.dbMissing; const edit=canEditNow();
   const X = ex ? `<span class="ex">Example</span>` : "";
@@ -934,7 +992,8 @@ function dealFormHTML(dr){
       <label class="f">Stage${sel("f_stage",STAGES,d.stage||"Screening")}</label>
       <label class="f">Priority${sel("f_priority",PRIORITIES,d.priority||"Medium")}</label>
       <label class="f">Origin${sel("f_origin",ORIGINS,d.origin||ORIGINS[0])}</label>
-      <label class="f">Deal lead<input type="text" id="f_lead" value="${esc(d.lead||"")}"></label>
+      <label class="f">Deal lead<input type="text" id="f_lead" value="${esc(d.lead||"")}" list="leadList" autocomplete="off"><datalist id="leadList">${teamMembers().map(m=>`<option value="${esc(m.name)}">`).join("")}</datalist></label>
+      ${teamMembers().length?`<div class="f full"><span>Deal team <em>(who is working on it)</em></span><div class="checks">${teamMembers().map(m=>`<label><input type="checkbox" name="tm" value="${esc(m.id)}"${(isNew ? m.id===S.meId : (d.teamIds||[]).includes(m.id))?" checked":""}><span>${esc(m.name)}${m.id===S.meId?` <span class="t2">(you)</span>`:""}</span></label>`).join("")}</div></div>`:""}
     </div></div>
     <div><h3 class="sec">Economics</h3><div class="fgrid">
       <label class="f">Enterprise value <em>($M)</em><input type="number" step="0.1" id="f_ev" value="${esc(d.ev??"")}"></label>
@@ -1015,8 +1074,8 @@ function refreshNotes(){
   el.innerHTML = ns.length ? ns.map(n=>noteHTML(n, canEditNow())).join("") : `<p class="t2">No notes yet.</p>`;
 }
 function rerenderDrawer(){ if(S.drawer){ captureForm(); S.drawer.rendered=false; renderDrawer(); restoreForm(); refreshNotes(); } }
-function captureForm(){ const dr=S.drawer; if(!dr) return; dr.vals={}; document.querySelectorAll("#drawerRoot [id^=f_],#drawerRoot [id^=b_],#drawerRoot [id^=n_]").forEach(e=>dr.vals[e.id]=e.value); dr.checked=[...document.querySelectorAll('#drawerRoot input[name=bk]:checked')].map(e=>e.value); readLinks(); }
-function restoreForm(){ const dr=S.drawer; if(!dr||!dr.vals) return; for(const [k,v] of Object.entries(dr.vals)){ const e=document.getElementById(k); if(e) e.value=v; } if(dr.checked) document.querySelectorAll('#drawerRoot input[name=bk]').forEach(e=>e.checked=dr.checked.includes(e.value)); }
+function captureForm(){ const dr=S.drawer; if(!dr) return; dr.vals={}; document.querySelectorAll("#drawerRoot [id^=f_],#drawerRoot [id^=b_],#drawerRoot [id^=n_]").forEach(e=>dr.vals[e.id]=e.value); dr.checked=[...document.querySelectorAll('#drawerRoot input[name=bk]:checked')].map(e=>e.value); dr.tmChecked=[...document.querySelectorAll('#drawerRoot input[name=tm]:checked')].map(e=>e.value); readLinks(); }
+function restoreForm(){ const dr=S.drawer; if(!dr||!dr.vals) return; for(const [k,v] of Object.entries(dr.vals)){ const e=document.getElementById(k); if(e) e.value=v; } if(dr.checked) document.querySelectorAll('#drawerRoot input[name=bk]').forEach(e=>e.checked=dr.checked.includes(e.value)); if(dr.tmChecked) document.querySelectorAll('#drawerRoot input[name=tm]').forEach(e=>e.checked=dr.tmChecked.includes(e.value)); }
 function readLinks(){ const dr=S.drawer; if(!dr||!dr.links) return; document.querySelectorAll("#linkRows [data-li]").forEach(e=>{ const i=+e.dataset.li; if(dr.links[i]) dr.links[i][e.dataset.lf]=e.value; }); }
 
 /* ---------- writes ---------- */
@@ -1040,6 +1099,7 @@ function dealFormValues(){
     nextStep:val("f_nextStep"), nextStepDate:val("f_nextStepDate"), ceoSummary:val("f_ceoSummary"), keyRisks:val("f_keyRisks"),
     outcomeDate:val("f_outcomeDate"), deadReason:val("f_deadReason"), outcomeNote:val("f_outcomeNote"),
     bankerIds:[...document.querySelectorAll('#drawerRoot input[name=bk]:checked')].map(e=>e.value),
+    teamIds:[...document.querySelectorAll('#drawerRoot input[name=tm]:checked')].map(e=>e.value),
     links:(S.drawer.links||[]).map(l=>({label:(l.label||"").trim(), url:(l.url||"").trim()})).filter(l=>l.url)};
 }
 function dealPayloadFromForm(){
@@ -1082,7 +1142,7 @@ async function casWrite(table,id,build){
 }
 function whoChanged(row){ const d=row.doc||{}; return (row.updated_by && d.updatedBy && d.updatedBy!==row.updated_by) ? nameOf(row.updated_by) : nameOf(row.updated_by, d.updatedByName); }
 const FIELD_LABELS={codename:"Codename",target:"Target",type:"Deal type",sector:"Sector",stage:"Stage",priority:"Priority",ev:"Enterprise value",gwp:"Target GWP",stake:"Stake",
-  origin:"Origin",lead:"Deal lead",nextStep:"Next step",nextStepDate:"Next step date",ceoSummary:"CEO summary",keyRisks:"Key risks",bankerIds:"Bankers",links:"Decks and files",
+  origin:"Origin",lead:"Deal lead",nextStep:"Next step",nextStepDate:"Next step date",ceoSummary:"CEO summary",keyRisks:"Key risks",bankerIds:"Bankers",teamIds:"Deal team",links:"Decks and files",
   name:"Name",firm:"Firm",website:"Firm website",title:"Title",coverage:"Coverage",email:"Email",phone:"Phone",relationship:"Relationship",lastContact:"Last contact",context:"Relationship context",outcomeDate:"Outcome date",deadReason:"Reason dropped",outcomeNote:"Outcome note"};
 /* ---------- change history (supabase/migrations/0003_history.sql) ---------- */
 const LONG_FIELDS=["ceoSummary","keyRisks","context","outcomeNote"];
@@ -1180,6 +1240,7 @@ function changesHTML(){
 
 function showVal(k,v){
   if(k==="bankerIds"){ const a=Array.isArray(v)?v:[]; return a.map(i=>(S.bankers.find(b=>b.id===i)||{}).name||"a removed banker").join(", ")||"none"; }
+  if(k==="teamIds"){ const a=Array.isArray(v)?v:[]; return a.map(i=>nameOf(i)).join(", ")||"none"; }
   if(k==="links"){ const a=Array.isArray(v)?v:[]; return a.map(l=>l.label||l.url).join(", ")||"none"; }
   v=normV(v); if(v==="") return "blank";
   if(/Date$|lastContact/.test(k)) return fmtDate(v);
@@ -1189,6 +1250,7 @@ function setFormField(k,v){
   const dr=S.drawer;
   if(k==="links"){ dr.links=(Array.isArray(v)?v:[]).map(l=>({...l})); const el=document.getElementById("linkRows"); if(el) el.innerHTML=linkRowsHTML(dr.links); return; }
   if(k==="bankerIds"){ const a=Array.isArray(v)?v:[]; document.querySelectorAll('#drawerRoot input[name=bk]').forEach(e=>e.checked=a.includes(e.value)); return; }
+  if(k==="teamIds"){ const a=Array.isArray(v)?v:[]; document.querySelectorAll('#drawerRoot input[name=tm]').forEach(e=>e.checked=a.includes(e.value)); return; }
   const e=document.getElementById((dr.kind==="deal"?"f_":"b_")+k); if(e) e.value=normV(v);
 }
 function openEditor(kind,id){
@@ -1581,9 +1643,9 @@ async function importSave(){
 /* ---------- CSV export ---------- */
 async function exportCSV(){
   const {bankers}=D(); const rows=filteredDeals();
-  const cols=["Codename","Target","Type","Sector","Stage","Priority","EV ($M)","GWP ($M)","Stake (%)","Origin","Lead","Next step","Next step date","Bankers","CEO summary","Key risks","Links"];
+  const cols=["Codename","Target","Type","Sector","Stage","Priority","EV ($M)","GWP ($M)","Stake (%)","Origin","Lead","Deal team","Next step","Next step date","Bankers","CEO summary","Key risks","Links"];
   const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
-  const lines=[cols.map(q).join(",")].concat(rows.map(d=>[d.codename,d.target,d.type,d.sector,d.stage,d.priority,d.ev,d.gwp,d.stake,d.origin,d.lead,d.nextStep,d.nextStepDate,(d.bankerIds||[]).map(i=>bankers.find(b=>b.id===i)).filter(Boolean).map(b=>`${b.name} (${b.firm})`).join("; "),d.ceoSummary,d.keyRisks,(d.links||[]).map(l=>l.url).join(" ")].map(q).join(",")));
+  const lines=[cols.map(q).join(",")].concat(rows.map(d=>[d.codename,d.target,d.type,d.sector,d.stage,d.priority,d.ev,d.gwp,d.stake,d.origin,d.lead,(d.teamIds||[]).map(i=>nameOf(i)).join("; "),d.nextStep,d.nextStepDate,(d.bankerIds||[]).map(i=>bankers.find(b=>b.id===i)).filter(Boolean).map(b=>`${b.name} (${b.firm})`).join("; "),d.ceoSummary,d.keyRisks,(d.links||[]).map(l=>l.url).join(" ")].map(q).join(",")));
   const url=URL.createObjectURL(new Blob(["\ufeff"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"}));
   const a=document.createElement("a"); a.href=url; a.download=`deal-tracker-${TODAY()}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
@@ -1597,7 +1659,7 @@ function aiData(){
   return {
     today:TODAY(), viewer:(S.session&&S.session.name)||"", example_data:demoMode(), can_propose_changes:canEditNow(),
     open_record: S.drawer && S.drawer.id ? {kind:S.drawer.kind==="banker"?"banker":"deal", id:S.drawer.id} : null,
-    deals:deals.map(d=>({id:d.id,codename:d.codename,target:d.target,type:d.type,sector:d.sector,stage:d.stage,priority:d.priority,ev_musd:d.ev,gwp_musd:d.gwp,stake_pct:d.stake,origin:d.origin,lead:d.lead,next_step:d.nextStep,next_step_date:d.nextStepDate,ceo_summary:d.ceoSummary,key_risks:d.keyRisks,banker_ids:d.bankerIds,deck_labels:(d.links||[]).map(l=>l.label),updated:d.updatedAt?new Date(d.updatedAt).toISOString().slice(0,10):""})),
+    deals:deals.map(d=>({id:d.id,codename:d.codename,target:d.target,type:d.type,sector:d.sector,stage:d.stage,priority:d.priority,ev_musd:d.ev,gwp_musd:d.gwp,stake_pct:d.stake,origin:d.origin,lead:d.lead,deal_team:(d.teamIds||[]).map(i=>nameOf(i)),next_step:d.nextStep,next_step_date:d.nextStepDate,ceo_summary:d.ceoSummary,key_risks:d.keyRisks,banker_ids:d.bankerIds,deck_labels:(d.links||[]).map(l=>l.label),updated:d.updatedAt?new Date(d.updatedAt).toISOString().slice(0,10):""})),
     bankers:bankers.map(b=>({id:b.id,name:b.name,firm:b.firm,title:b.title,coverage:b.coverage,relationship:b.relationship,last_contact:b.lastContact,context:b.context})),
     recent_notes:[...notes].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,120).map(n=>({deal_id:n.dealId||null,banker_id:n.bankerId||null,kind:n.kind,date:n.createdAt?new Date(n.createdAt).toISOString().slice(0,10):"",author:nameOf(n.authorId,n.authorName),text:String(n.text||"").slice(0,600)}))
   };
@@ -1778,6 +1840,7 @@ document.addEventListener("click", async e=>{
     case "fold": { const k=t.dataset.k; const open=!firmOpen(k); setFold(k,open); render();
       document.querySelector(`.fold[data-k="${CSS.escape(k)}"]`)?.focus(); break; }
     case "fold-all": { const open=t.dataset.open==="1"; firmKeysShown().forEach(k=>loadFolds()[k]=open); saveFolds(); render(); document.querySelector('[data-act="fold-all"]')?.focus(); break; }
+    case "team-closed": S.teamClosed=!S.teamClosed; render(); document.querySelector('[data-act="team-closed"]')?.focus(); break;
     case "bgroup": S.bgroup = S.bgroup===false; render(); document.querySelector('[data-act="bgroup"]')?.focus(); break;
     case "import-open": if(!canEditNow()) return; S.lastFocusEl=t; S.drawer={kind:"import"}; renderDrawer(); break;
     case "im-preview": importPreview(); break;
@@ -1868,8 +1931,8 @@ async function refetch(table){
 }
 const refetchSoon = (()=>{ const t={}; return table=>{ clearTimeout(t[table]); t[table]=setTimeout(()=>refetch(table),250); }; })();
 async function loadProfiles(){
-  const {data}=await S.sb.from("profiles").select("id,display_name");
-  (data||[]).forEach(p=>{ S.profiles[p.id]={name:p.display_name}; });
+  const {data}=await S.sb.from("profiles").select("id,display_name,username,role");
+  (data||[]).forEach(p=>{ S.profiles[p.id]={name:p.display_name, username:p.username||"", role:p.role||""}; });
 }
 /* "Also editing" notice: Realtime presence, one entry per open tab */
 const TAB_ID=uid();
