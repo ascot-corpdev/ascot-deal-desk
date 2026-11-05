@@ -170,6 +170,7 @@ tr.firmrow .rowacts{align-items:center;flex-wrap:wrap}
 tr.firmrow td{vertical-align:top}
 tr.firmrow .firmdeals{font-size:13px}
 tr.inrow td:first-child{padding-left:24px}
+#teamsBtn{text-decoration:none}#teamsBtn .tb-s{display:none}
 .btn[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
 .seg{display:inline-flex}.seg .btn+.btn{margin-left:-1px}
 .imtbl{font-size:12px}
@@ -366,7 +367,8 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
   .who{padding-bottom:4px;gap:8px}
   #whoName,#pwBtn,#signoutBtn{display:none}
   .dot{width:34px;height:34px;font-size:13px}
-  #copilotBtn{padding:7px 10px}
+  #copilotBtn,#teamsBtn{padding:7px 10px}
+  #teamsBtn .tb-x{display:none}#teamsBtn .tb-s{display:inline}
   nav.tabs a{padding:10px 7px}
   nav.tabs .tag{display:none}
   main .wrap{padding-block:16px 22px;gap:18px}
@@ -403,6 +405,7 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
       <h1>M&amp;A pipeline and banker coverage</h1>
     </div>
     <div class="who">
+      <a class="btn" id="teamsBtn" target="_blank" rel="noopener noreferrer" hidden title="Opens the Corp Dev group chat in Microsoft Teams" aria-label="Team chat (opens Microsoft Teams)"><span>Team<span class="tb-x"> chat</span><span class="tb-s">s</span></span> ↗</a>
       <button class="btn accent" id="copilotBtn" data-act="copilot" hidden title="Copies a summary of the tracker and opens Microsoft 365 Copilot">Ask Copilot</button>
       <span id="whoName"></span><button type="button" class="dot" id="whoDot" data-act="who-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="whoMenu" hidden></button>
       <button class="btn sm ghost" id="pwBtn" data-act="change-pw" hidden>Change password</button>
@@ -2233,6 +2236,8 @@ const SUGGEST = [
 const AI_PANEL=false;
 function renderAI(){
   const root=document.getElementById("aiRoot"); const btn=document.getElementById("aiBtn");
+  // Team chat link: Corp Dev logins only, when TEAMS_CHAT_ID is set
+  const tb=document.getElementById("teamsBtn"); if(tb){ const show=!!(S.session && S.session.role==="corpdev" && tcChatId()); tb.hidden=!show; if(show) tb.href=tcLink(); }
   const cb=document.getElementById("copilotBtn"); if(cb){ cb.hidden=!S.session; cb.title=cpEnabled()?"Chat with Microsoft 365 Copilot about the tracker":"Copies a summary of the tracker and opens Microsoft 365 Copilot"; }
   if(!btn){ document.body.classList.remove("ai-docked"); if(root.innerHTML) root.innerHTML=""; return; }
   const available = AI_PANEL && !!S.sample && !!S.session && !isCEO();

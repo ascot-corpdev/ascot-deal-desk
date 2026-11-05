@@ -195,7 +195,7 @@ To test locally, put the same two IDs in `web/config.js` as `copilotClientId` an
 
 The card appears only in production: on the Deals tab, for a Corp Dev login that can edit live data. It never appears on the CEO view, for the CEO login, in view-only mode or with example data. It doesn't need the Copilot setup in step 8.
 
-**Link only (no IT needed).** In Teams, right-click the group chat and choose **Copy link**. In **GitHub > Settings > Secrets and variables > Actions > Variables**, add `TEAMS_CHAT_ID` and paste either the link or the chat ID inside it (`19:...@thread.v2`). You can also add `TEAMS_CHAT_NAME` for the heading, for example `The Strategizers`. Then rerun the deploy workflow. The card shows an **Open in Teams** button.
+**Link only (no IT needed).** In Teams, right-click the group chat and choose **Copy link**. In **GitHub > Settings > Secrets and variables > Actions > Variables**, add `TEAMS_CHAT_ID` and paste either the link or the chat ID inside it (`19:...@thread.v2`). You can also add `TEAMS_CHAT_NAME` for the heading, for example `The Strategizers`. Then rerun the deploy workflow. The card shows an **Open in Teams** button. Corp Dev logins also get a **Team chat** button in the header, next to Ask Copilot, that opens the chat in Teams ("Teams" on phones); the CEO login doesn't.
 
 **Messages in the page (needs a Microsoft app).** To show the latest messages in the card:
 
