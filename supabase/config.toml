@@ -8,3 +8,8 @@ verify_jwt = false
 # x-digest-secret header against the DIGEST_SECRET secret itself.
 [functions.digest]
 verify_jwt = false
+
+# The comps function checks the caller's login itself (any CEO or Corp Dev login),
+# like the claude function. Kensho credentials stay in its secrets.
+[functions.comps]
+verify_jwt = false

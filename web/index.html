@@ -139,6 +139,12 @@ th[aria-sort="none"] .sorth:is(:hover,:focus-visible) .ar::before{content:"↕";
 .fchip .sw.st-done{background:var(--teal)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .mob{display:none}
+.comps td,.comps th{white-space:nowrap}
+.comps td:first-child{white-space:normal;min-width:180px}
+.comps tr.med td{font-weight:bold;border-top:2px solid var(--ink);background:var(--tile)!important}
+.benchrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+@media (max-width:900px){.benchrow{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.linkbtn{text-decoration:none}
 .tgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr));gap:20px}
 .tcard{border:1px solid var(--grid);padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0}
 .tcard .th{display:flex;gap:12px;align-items:center}
@@ -351,7 +357,7 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
   #whoName,#pwBtn,#signoutBtn{display:none}
   .dot{width:34px;height:34px;font-size:13px}
   #aiBtn{padding:7px 10px}
-  nav.tabs a{padding:10px 10px}
+  nav.tabs a{padding:10px 7px}
   nav.tabs .tag{display:none}
   main .wrap{padding-block:16px 22px;gap:18px}
   .action-title{font-size:19px}
@@ -399,6 +405,7 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
       <a href="#deals" data-view="deals" id="tabDeals">Deals<span class="tag" id="tagDeals">production</span></a>
       <a href="#bankers" data-view="bankers">Banker CRM</a>
       <a href="#team" data-view="team">Team</a>
+      <a href="#comps" data-view="comps">Comps</a>
     </nav>
   </div>
 </header>
@@ -563,12 +570,12 @@ function parseHash(){ let h=(location.hash||"").replace(/^#/,""); try{ h=decodeU
 function route(){
   const r=parseHash();
   if(r.kind){
-    S.view = r.kind==="banker" ? "bankers" : (S.routed && ["ceo","team"].includes(S.view)) ? S.view : isCEO() ? "ceo" : "deals";
+    S.view = r.kind==="banker" ? "bankers" : (S.routed && ["ceo","team","comps"].includes(S.view)) ? S.view : isCEO() ? "ceo" : "deals";
     S.routed=true; render(); openRoute(r); return;
   }
   S.pushed=false;
   if(S.drawer && S.drawer.id && ["deal","view-deal","banker"].includes(S.drawer.kind)) S.drawer=null;
-  let v = ["ceo","deals","bankers","team"].includes(r.view) ? r.view : "ceo";
+  let v = ["ceo","deals","bankers","team","comps"].includes(r.view) ? r.view : "ceo";
   if(v==="deals" && isCEO()) v="ceo"; S.view=v; S.routed=true; render(); focusBack();
 }
 function openRoute(r){
@@ -624,7 +631,7 @@ function render(){
   document.querySelectorAll("nav.tabs a").forEach(a => a.setAttribute("aria-current", a.dataset.view===S.view ? "page" : "false"));
   document.getElementById("tagDeals").textContent = canEditNow() ? "production" : "view only";
   const v=document.getElementById("view");
-  const html = S.view==="ceo" ? renderCEO() : S.view==="deals" ? renderDeals() : S.view==="team" ? renderTeam() : renderBankers();
+  const html = S.view==="ceo" ? renderCEO() : S.view==="deals" ? renderDeals() : S.view==="team" ? renderTeam() : S.view==="comps" ? renderComps() : renderBankers();
   v.innerHTML = statusBanner() + html;
   const sq=document.getElementById("q"); if(sq){ sq.value=S.q; } const bq=document.getElementById("bq"); if(bq){ bq.value=S.bq; }
   renderDrawer(); renderAI();
@@ -685,6 +692,7 @@ function renderCEO(){
       return `<tr class="click" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${X}${stallTag(d)}</div><div class="t2">${esc(d.target||"")}</div>${meta?`<div class="t2 mob">${esc(meta)}</div>`:""}</td><td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="num c-hide">${esc(mnum(d.ev))}${moneyM(d.gwp)?`<div class="t2">GWP ${esc(mnum(d.gwp))}</div>`:""}</td><td class="summary c-full">${d.ceoSummary?`<div class="clamp">${esc(d.ceoSummary)}</div>${d.ceoSummary.length>150?`<span class="more">More</span>`:""}`:'<span class="t2">No summary yet</span>'}</td><td class="c-full" data-label="Decks">${links(d.links)}</td><td class="c-hide opt">${esc(d.lead||"")}</td></tr>`; }).join("")}
     </tbody></table></div>` : `<div class="empty"><p>No active deals.</p></div>`}
   </section>
+  ${benchStripHTML()}
   <section class="cols">
     <div><h3 class="sec">What changed</h3>${changesHTML()}</div>
     <div><h3 class="sec">Outcomes in ${yr}</h3>
@@ -723,7 +731,7 @@ function filteredDeals(){
   return sortWith(searchedDeals().filter(f), DEAL_SORTS, S.dsort, defaultDealOrder);
 }
 function setSort(which,k){
-  const so=(which==="b"?BANKER_SORTS:DEAL_SORTS)[k]; if(!so) return; const key=which+"sort"; const cur=S[key];
+  const so=({b:BANKER_SORTS,c:COMPS_SORTS}[which]||DEAL_SORTS)[k]; if(!so) return; const key=which+"sort"; const cur=S[key];
   if(!cur||cur.k!==k) S[key]={k, dir:so.dir};
   else if(cur.dir===so.dir) S[key]={k, dir:-so.dir};
   else S[key]=null;   // third click: back to the default order
@@ -801,6 +809,124 @@ function bankerChipsHTML(base){
     const cls = v==="cold" ? " late" : ""; const sw = RELS.includes(v) ? `<span class="sw rel rel-${esc(v)}" aria-hidden="true"></span>` : "";
     return `<button type="button" class="fchip${cls}" data-act="bfilter" data-v="${esc(v)}" aria-pressed="${on}">${sw}${esc(label)}<b>${n}</b></button>`; }).join("")}</div>`;
 }
+/* ---------- public comps (Kensho via the comps function) and the AGL financials link ----------
+   Comps are fetched live and kept in the page only. Settings (peer tickers, AGL link) live in the settings table (0004). */
+const DEFAULT_PEERS=["WRB","MKL","RLI","KNSL","SKWD","ACGL","AXS","EG","HG","BOW","PLMR","SIGI","LSE:HSX","LSE:LRE"];
+const TICKER_RE=/^[A-Z0-9][A-Z0-9:._-]{0,24}$/;
+async function loadSettings(){
+  if(!S.sb) return;
+  try{ const {data,error}=await S.sb.from("settings").select("id,doc");
+    if(error){ S.settingsMissing=true; } else { S.settingsMissing=false; S.settings=Object.fromEntries((data||[]).map(r=>[r.id, r.doc||{}])); } }
+  catch{ S.settingsMissing=true; }
+  if(["comps","ceo"].includes(S.view) && S.session) render();
+}
+function benchCfg(){
+  const b=(S.settings||{}).benchmark||{};
+  const peers=Array.isArray(b.peers)&&b.peers.length ? b.peers : DEFAULT_PEERS;
+  return {peers, aglUrl: safeUrl(b.aglUrl||"")||"", custom: Array.isArray(b.peers)&&b.peers.length>0};
+}
+async function loadComps(force){
+  if(!S.sb || !S.session) return;
+  const peers=benchCfg().peers, key=peers.join(",");
+  if(!force && S.comps && S.comps.key===key && (S.comps.data||S.comps.loading||S.comps.err)) return;
+  S.comps={key, loading:true};
+  let out;
+  try{
+    const {data:{session}}=await S.sb.auth.getSession(); if(!session) throw new Error("Your session ended. Sign in again.");
+    const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/comps", {method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":CFG.supabaseAnonKey}, body:JSON.stringify({tickers:peers})});
+    let body=null; try{ body=await res.json(); }catch{}
+    if(res.status===404) out={key, err:"not_deployed"};
+    else if(!res.ok) out={key, err:(body&&body.error)||("http_"+res.status), msg:(body&&(body.message||body.error))||`The comps function answered ${res.status}.`};
+    else out={key, data:body, at:Date.now()};
+  }catch(e){ out={key, err:"network", msg:(e&&e.message)||"Network error"}; }
+  if(S.comps && S.comps.key===key) S.comps=out;
+  if(["comps","ceo"].includes(S.view)) render();
+}
+const pctS = (v,sign) => v==null ? "n/d" : (v<0 ? `(${Math.abs(v).toFixed(1)}%)` : `${sign&&v>0?"+":""}${v.toFixed(1)}%`);
+const mS = v => v==null ? "n/d" : (v<0 ? `(${mnum(-v)})` : mnum(v));
+const xS = (v,dp) => v==null ? "n/d" : `${v.toFixed(dp)}x`;
+const COMPS_SORTS = {
+  name:{cmp:(a,b)=>a.name.localeCompare(b.name), dir:1},
+  revenue:{cmp:(a,b)=>a.revenue-b.revenue, dir:-1, blank:c=>c.revenue==null},
+  premiums:{cmp:(a,b)=>a.premiums-b.premiums, dir:-1, blank:c=>c.premiums==null},
+  premiumGrowth:{cmp:(a,b)=>a.premiumGrowth-b.premiumGrowth, dir:-1, blank:c=>c.premiumGrowth==null},
+  netIncome:{cmp:(a,b)=>a.netIncome-b.netIncome, dir:-1, blank:c=>c.netIncome==null},
+  lossRatio:{cmp:(a,b)=>a.lossRatio-b.lossRatio, dir:1, blank:c=>c.lossRatio==null},
+  roe:{cmp:(a,b)=>a.roe-b.roe, dir:-1, blank:c=>c.roe==null},
+  marketCap:{cmp:(a,b)=>a.marketCap-b.marketCap, dir:-1, blank:c=>c.marketCap==null},
+  pb:{cmp:(a,b)=>a.pb-b.pb, dir:-1, blank:c=>c.pb==null},
+  pe:{cmp:(a,b)=>a.pe-b.pe, dir:-1, blank:c=>c.pe==null}
+};
+function compsStatusHTML(){
+  const c=S.comps, edit=canEditNow();
+  if(!c || c.loading) return `<p class="t2">Loading the latest quarter from Kensho…</p>`;
+  if(c.err==="not_configured") return `<div class="banner"><span><b>Kensho isn't connected yet.</b> ${edit?"Set the Kensho credentials on the comps function (README, section 7).":"Ask the tracker owner to connect it."}</span></div>`;
+  if(c.err==="not_deployed") return `<div class="banner"><span><b>The comps function isn't deployed yet.</b> ${edit?"See README, section 7, to deploy it and connect Kensho.":"Ask the tracker owner to set it up."}</span></div>`;
+  if(c.err) return `<div class="banner"><span><b>Couldn't load the comps.</b> ${esc(c.msg||c.err)}</span><button class="btn sm" data-act="comps-refresh">Try again</button></div>`;
+  return "";
+}
+function aglButton(){
+  const {aglUrl}=benchCfg();
+  return aglUrl ? `<a class="btn sm linkbtn" href="${esc(aglUrl)}" target="_blank" rel="noopener noreferrer" title="Opens the AGL financials where they're kept; nothing is stored here">AGL financials ↗</a>` : "";
+}
+function renderComps(){
+  loadComps(false);
+  const edit=canEditNow(), cfg=benchCfg(), c=S.comps, d=c&&c.data;
+  const rows = d ? sortWith([...d.companies], COMPS_SORTS, S.csort, (a,b)=>(b.marketCap??-1)-(a.marketCap??-1)) : [];
+  const md = (d&&d.medians)||{};
+  const quarters=[...new Set(rows.map(r=>r.quarter))];
+  const errs = d ? Object.entries(d.errors||{}) : [];
+  const th=(l,k,cls)=>sortTh(l,k,cls,"c");
+  return `
+  <section class="ceohead"><div><h2 class="action-title">Public comps: latest quarter${quarters.length===1?` (${esc(quarters[0])})`:""}</h2>
+    <p class="sub">${cfg.peers.length} listed specialty insurance peers from S&P Global via Kensho. Fetched live when you open this page; nothing is stored.</p></div>
+    <div class="ceoacts">${aglButton()}${!cfg.aglUrl&&edit?`<button type="button" class="btn sm" data-act="comps-settings">Add AGL financials link</button>`:""}<button type="button" class="btn sm" data-act="comps-refresh">Refresh</button>${edit?`<button type="button" class="btn sm" data-act="comps-settings">Edit peers</button>`:""}</div></section>
+  ${S.settingsMissing&&edit?`<div class="banner"><span>Using the default peer list. To choose your own peers and save the AGL financials link, run <b>supabase/migrations/0004_settings.sql</b> in Supabase.</span></div>`:""}
+  ${compsStatusHTML()}
+  ${rows.length?`<section><div class="tbl-wrap cardwrap"><table class="cards comps"><thead><tr>${th("Company","name")}<th>Quarter</th>${th("Revenue ($M)","revenue","num")}${th("Premiums ($M)","premiums","num")}${th("Premium growth","premiumGrowth","num")}${th("Net income ($M)","netIncome","num")}${th("Loss ratio","lossRatio","num")}${th("ROE","roe","num")}${th("Market cap ($M)","marketCap","num")}${th("P/B","pb","num")}${th("P/E","pe","num")}<th>Earnings calls</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td><div class="t1">${esc(r.name)}</div><div class="t2">${esc(r.ticker)}${r.currency&&r.currency!=="USD"?` · ${esc(r.currency)}`:""}</div>${r.notes.map(n=>`<div class="t2">${esc(n)}</div>`).join("")}<div class="t2 mob">${esc(r.quarter)} · premium growth ${pctS(r.premiumGrowth,true)} · loss ratio ${pctS(r.lossRatio)} · ROE ${pctS(r.roe)} · P/B ${xS(r.pb,2)} · P/E ${xS(r.pe,1)}</div></td>
+      <td class="c-hide">${esc(r.quarter)}</td><td class="num c-hide">${mS(r.revenue)}</td><td class="num c-hide">${mS(r.premiums)}</td><td class="num c-hide">${pctS(r.premiumGrowth,true)}</td><td class="num c-hide">${mS(r.netIncome)}</td>
+      <td class="num c-hide">${pctS(r.lossRatio)}</td><td class="num c-hide">${pctS(r.roe)}</td><td class="num c-hide">${mS(r.marketCap)}${r.marketCapCurrency&&r.marketCapCurrency!==r.currency?` <span class="t2">${esc(r.marketCapCurrency)}</span>`:""}</td><td class="num c-hide">${xS(r.pb,2)}</td><td class="num c-hide">${xS(r.pe,1)}</td>
+      <td class="c-full" data-label="Earnings calls">${r.lastCall?`${fmtDate(r.lastCall.date.slice(0,10))}`:'<span class="t2">n/d</span>'}${r.nextCall?`<div class="t2">Next: ${fmtDate(r.nextCall.date.slice(0,10))}</div>`:""}</td></tr>`).join("")}
+    <tr class="med"><td>Median (derived)</td><td class="c-hide"></td><td class="c-hide"></td><td class="c-hide"></td><td class="num c-hide">${pctS(md.premiumGrowth,true)}</td><td class="c-hide"></td><td class="num c-hide">${pctS(md.lossRatio)}</td><td class="num c-hide">${pctS(md.roe)}</td><td class="c-hide"></td><td class="num c-hide">${xS(md.pb,2)}</td><td class="num c-hide">${xS(md.pe,1)}</td><td class="c-hide"></td></tr>
+    </tbody></table></div></section>`:""}
+  ${errs.length?`<p class="t2">Not shown: ${errs.map(([t,m])=>`<b>${esc(t)}</b> (${esc(m)})`).join("; ")}.</p>`:""}
+  <p class="source">Source: S&amp;P Global Capital IQ via Kensho${c&&c.at?`, fetched ${esc(fmtWhen(c.at))}`:""}. Each company's latest fiscal quarter, so period ends can differ. $M in each company's reporting currency. Premium growth versus the same quarter a year earlier. Loss ratio = policy benefits / premiums (derived); ROE = quarterly net income x 4 / equity (derived); equity = total assets - total liabilities - minority interest where not reported (derived); P/B and P/E (last four quarters) from the latest market cap (derived). AGL financials open where they're kept and are not stored here.</p>`;
+}
+/* CEO view strip: peer medians and the AGL link, only once Kensho answers */
+function benchStripHTML(){
+  loadComps(false);
+  const d=S.comps&&S.comps.data; if(!d || !d.companies.length) return "";
+  const md=d.medians||{}; const q=[...new Set(d.companies.map(r=>r.quarter))];
+  const tile=(v,l,c)=>`<div class="tile"><b class="${c}">${v}</b><span>${l}</span></div>`;
+  return `<section><h3 class="sec">Peer benchmarks</h3>
+    <div class="benchrow">${tile(pctS(md.premiumGrowth,true),"Median premium growth (YoY)","c-blue")}${tile(pctS(md.lossRatio),"Median loss ratio (derived)","c-navy")}${tile(pctS(md.roe),"Median ROE (derived)","c-teal")}${tile(xS(md.pb,2),"Median P/B (derived)","c-mag")}</div>
+    <p class="source" style="margin-top:8px">${d.companies.length} listed peers, latest quarter${q.length===1?` (${esc(q[0])})`:"s"}, S&amp;P Global via Kensho. <a href="#comps">All comps</a>${benchCfg().aglUrl?` · <a href="${esc(benchCfg().aglUrl)}" target="_blank" rel="noopener noreferrer">AGL financials ↗</a>`:""}</p></section>`;
+}
+function compsSettingsHTML(){
+  const cfg=benchCfg(); const b=(S.settings||{}).benchmark||{};
+  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">Comps</div><h2 id="drTitle">Peers and AGL link</h2></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
+  <form class="drawer-b" id="compsForm" novalidate>
+    <label class="f full">Peer tickers <em>(one per line or comma separated, up to 25; London listings like LSE:HSX)</em><textarea id="cs_peers" rows="8">${esc(cfg.peers.join("\n"))}</textarea></label>
+    <label class="f full">AGL financials link <em>(where the financials are kept, e.g. SharePoint; only the link is saved)</em><input type="url" id="cs_agl" value="${esc(b.aglUrl||"")}" placeholder="https://yourco.sharepoint.com/..."></label>
+    ${S.settingsMissing?`<p class="over" style="margin:0">Saving needs the settings table: run supabase/migrations/0004_settings.sql in Supabase first.</p>`:""}
+  </form>
+  <div class="drawer-f"><button type="button" class="btn ghost" data-act="cs-defaults">Reset peers to default</button><span class="sp"></span><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="comps-save">Save</button></div>`;
+}
+async function saveCompsSettings(){
+  const peers=[...new Set((document.getElementById("cs_peers")?.value||"").split(/[\s,;]+/).map(t=>t.trim().toUpperCase()).filter(Boolean))];
+  const bad=peers.find(t=>!TICKER_RE.test(t));
+  if(bad){ toast(`"${bad}" doesn't look like a ticker. Use letters, numbers and a colon, like LSE:HSX.`); return; }
+  if(!peers.length||peers.length>25){ toast("List between 1 and 25 tickers."); return; }
+  const raw=val("cs_agl"); const agl=raw?safeUrl(raw):"";
+  if(raw && (!agl || !agl.startsWith("https://"))){ toast("The AGL financials link must start with https://"); return; }
+  const doc={...(((S.settings||{}).benchmark)||{}), peers, aglUrl:agl||"", updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""};
+  const {error}=await S.sb.from("settings").upsert({id:"benchmark", doc});
+  if(error){ toast(/settings|PGRST205|42P01/i.test(String(error.code||"")+String(error.message||"")) ? "Run supabase/migrations/0004_settings.sql in Supabase first, then save again." : "Couldn't save: "+(error.message||"try again")); return; }
+  toast("Saved"); S.comps=null; closeDrawer(); await loadSettings();
+}
+
 /* ---------- team: who is working on which deal ----------
    A person is on a deal as Lead (the deal's lead names them) or Team (ticked under Deal team). */
 function teamMembers(){
@@ -932,6 +1058,7 @@ function renderDrawer(){
   else if(dr.kind==="password") body=passwordFormHTML();
   else if(dr.kind==="deal") body=dealFormHTML(dr);
   else if(dr.kind==="import") body=importHTML();
+  else if(dr.kind==="comps-settings") body=compsSettingsHTML();
   else body=bankerFormHTML(dr);
   root.innerHTML=`<div class="scrim" data-act="close"></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drTitle">${body}</aside>`;
   renderDrAlert(); renderPresence(); renderHistory(); loadHistory(histKey(dr));
@@ -1438,7 +1565,22 @@ async function exportBoardPack(){
   tbl(sl,rr,{x:8.42,y:3.6,w:4.38,colW:[3.38,1.0]});
   source(sl, `${src}${S.changes&&S.changes.err==="missing"?" Changes show latest updates only (change log not switched on).":" Changes from the tracker's change log."}`);
 
-  // 5. Bankers
+  // 5. Peer benchmarks (only when Kensho answered)
+  if(!S.comps || S.comps.loading) await loadComps(false);
+  const cd=S.comps&&S.comps.data;
+  if(cd && cd.companies.length){
+    sl=pptx.addSlide({masterName:"CONTENT"});
+    const md=cd.medians||{};
+    title(sl, `Peers: median ROE ${pctS(md.roe)}, P/B ${xS(md.pb,2)} (derived)`);
+    const top=[...cd.companies].sort((a,b)=>(b.marketCap??-1)-(a.marketCap??-1)).slice(0,12);
+    const cr=[head([["Company"],["Quarter"],["Premium growth",1],["Loss ratio",1],["ROE",1],["P/B",1],["P/E",1]])];
+    top.forEach((r,j)=>cr.push([{text:r.name,options:{...cellOpts(j),bold:true}},{text:r.quarter,options:cellOpts(j)},{text:pctS(r.premiumGrowth,true),options:cellOpts(j,1)},{text:pctS(r.lossRatio),options:cellOpts(j,1)},{text:pctS(r.roe),options:cellOpts(j,1)},{text:xS(r.pb,2),options:cellOpts(j,1)},{text:xS(r.pe,1),options:cellOpts(j,1)}]));
+    cr.push([{text:"Median (derived)",options:{bold:true,color:C.mag}},{text:""},{text:pctS(md.premiumGrowth,true),options:{align:"right",bold:true,color:C.mag}},{text:pctS(md.lossRatio),options:{align:"right",bold:true,color:C.mag}},{text:pctS(md.roe),options:{align:"right",bold:true,color:C.mag}},{text:xS(md.pb,2),options:{align:"right",bold:true,color:C.mag}},{text:xS(md.pe,1),options:{align:"right",bold:true,color:C.mag}}]);
+    tbl(sl,cr,{x:0.52,y:1.3,w:12.28,colW:[3.6,1.3,1.6,1.4,1.4,1.4,1.58]});
+    source(sl, `Source: S&P Global Capital IQ via Kensho, ${asOf}. Each company's latest fiscal quarter. Loss ratio, ROE (annualised), P/B and P/E (last four quarters) derived.`);
+  }
+
+  // 6. Bankers
   sl=pptx.addSlide({masterName:"CONTENT"});
   const coldN=bankers.filter(isColdB).length;
   title(sl, `${bankers.length} banker${bankers.length===1?"":"s"}; ${coldN} not contacted in 90 days`);
@@ -1840,6 +1982,11 @@ document.addEventListener("click", async e=>{
     case "fold": { const k=t.dataset.k; const open=!firmOpen(k); setFold(k,open); render();
       document.querySelector(`.fold[data-k="${CSS.escape(k)}"]`)?.focus(); break; }
     case "fold-all": { const open=t.dataset.open==="1"; firmKeysShown().forEach(k=>loadFolds()[k]=open); saveFolds(); render(); document.querySelector('[data-act="fold-all"]')?.focus(); break; }
+    case "comps-refresh": loadComps(true); render(); break;
+    case "cs-defaults": { const ta=document.getElementById("cs_peers"); if(ta) ta.value=DEFAULT_PEERS.join("\n"); break; }
+    case "comps-settings": if(!canEditNow()) return; S.lastFocusEl=t; S.drawer={kind:"comps-settings"}; renderDrawer(); break;
+    case "comps-save": t.disabled=true; await saveCompsSettings(); if(t.isConnected) t.disabled=false; break;
+    case "csort": setSort("c",t.dataset.k); break;
     case "team-closed": S.teamClosed=!S.teamClosed; render(); document.querySelector('[data-act="team-closed"]')?.focus(); break;
     case "bgroup": S.bgroup = S.bgroup===false; render(); document.querySelector('[data-act="bgroup"]')?.focus(); break;
     case "import-open": if(!canEditNow()) return; S.lastFocusEl=t; S.drawer={kind:"import"}; renderDrawer(); break;
@@ -1959,7 +2106,7 @@ function startData(){
   if(S.started) return; S.started=true;
   startPresence();
   startData.timer=setTimeout(()=>{ S.stale=true; render(); }, 10000);
-  loadProfiles().then(render);
+  loadProfiles().then(render); loadSettings();
   TABLES.forEach(refetch);
   let ch=S.sb.channel("deal-desk");
   TABLES.forEach(t=>{ ch=ch.on("postgres_changes",{event:"*",schema:"public",table:t},()=>refetchSoon(t)); });

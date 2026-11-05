@@ -14,7 +14,9 @@ M&A deal tracker and banker CRM for Corporate Development, styled on the Ascot P
 | `supabase/migrations/0001_deal_desk.sql` | Supabase Postgres | Tables, roles and row-level security: every login reads, only `corpdev` logins write, anonymous visitors get nothing. |
 | `supabase/migrations/0002_merge_stages.sql` | Supabase Postgres | Optional: rewrites stored IOI stages to LOI and Signed to Closed. The page already reads them that way. |
 | `supabase/migrations/0003_history.sql` | Supabase Postgres | Change history: a trigger records who changed which deal or banker field, from what, to what. Shown in each drawer and in "What changed" on the CEO view. Run once after 0001. |
+| `supabase/migrations/0004_settings.sql` | Supabase Postgres | Shared settings: the Comps peer list and the AGL financials link (link only). |
 | `supabase/functions/digest` | Supabase Edge Function | Optional weekly email digest (overdue, stalled, due this week, cold bankers, what changed), sent through Resend on a Supabase Cron schedule (`supabase/digest_schedule.sql`). |
+| `supabase/functions/comps` | Supabase Edge Function | Optional public comps from S&P Global via Kensho (kfinance) for the Comps tab, CEO view and board pack. Credentials stay in its secrets; nothing is stored. |
 | `supabase/functions/claude` | Supabase Edge Function | Checks the caller is a Corp Dev login, then calls Claude with the Anthropic API key kept server side. |
 | `scripts/logins.mjs` | Your machine | Creates, resets and removes logins with the Supabase service role key. |
 | `.github/workflows/pages.yml` | GitHub Actions | Writes `web/config.js` from repository variables and publishes `web/` to Pages. |
@@ -123,6 +125,33 @@ Every Monday morning the CEO and Corp Dev get an email with overdue next steps, 
 
    Drop `?dry=1` to send one now.
 5. Schedule it: open `supabase/digest_schedule.sql`, replace the two placeholders (your project URL and the same `DIGEST_SECRET`), and run it in the SQL editor. It sends on Mondays at 07:17 UTC; edit the schedule line to change that.
+
+### 7. Public comps from Kensho and the AGL financials link (optional)
+
+The **Comps** tab shows listed specialty insurance peers' latest quarter (revenue, premiums, premium growth, net income, loss ratio, ROE, market cap, P/B, P/E, earnings call dates), with medians. The CEO view shows the peer medians and the board pack gets a peers slide. Data comes from S&P Global through Kensho's API (kfinance), fetched when someone opens the page and never written to the database. You need Kensho API access (kfinance) for your firm; ask your S&P Global / Kensho contact.
+
+1. **SQL editor:** run `supabase/migrations/0004_settings.sql` once. It holds the peer list and the AGL financials link (the link only; AGL's financials are not stored). Without it the page uses a default peer list.
+2. Give the function Kensho credentials, either a refresh token:
+
+   ```bash
+   supabase secrets set KENSHO_REFRESH_TOKEN=...
+   ```
+
+   or a key pair registered with Kensho (the private key in PKCS#8 PEM form, `BEGIN PRIVATE KEY`; convert a `BEGIN RSA PRIVATE KEY` file with `openssl pkcs8 -topk8 -nocrypt -in key.pem -out key-pkcs8.pem`):
+
+   ```bash
+   supabase secrets set KENSHO_CLIENT_ID=... KENSHO_KEY_ID=... KENSHO_PRIVATE_KEY="$(cat key-pkcs8.pem)"
+   ```
+
+3. Deploy it. `--no-verify-jwt` is safe: the function checks the caller's login itself (CEO and Corp Dev logins).
+
+   ```bash
+   supabase functions deploy comps --no-verify-jwt
+   ```
+
+4. On the site, open **Comps**, then **Edit peers** to set the tickers (London listings as `LSE:HSX`) and paste the **AGL financials** link (for example the SharePoint file). The link then appears on the Comps tab and in the CEO view.
+
+Ratios are calculated by the function from the reported figures and labelled "(derived)". Each company shows its own latest fiscal quarter, so period ends can differ; P/B and P/E are left blank where the market cap and the accounts are in different currencies.
 
 ## Running locally
 

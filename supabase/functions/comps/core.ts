@@ -1,0 +1,123 @@
+// Public comps from Kensho (S&P Global) responses. Pure functions, no I/O, so they can be tested.
+// Response shapes follow Kensho's kfinance client (POST /statements/, GET /market_cap/, GET /earnings/).
+// Insurers report on S&P's insurance template, so line items are matched by name with fallbacks.
+
+export type LineItem = { name: string; value: string | number | null };
+export type Period = { period_end_date: string; num_months: number; statements: { name: string; line_items: LineItem[] }[] };
+export type StatementsResult = { currency: string | null; periods: Record<string, Period> };
+export type MarketCaps = { currency?: string | null; market_caps: { date: string; market_cap: string | number | null }[] };
+export type Earnings = { earnings: { name: string; key_dev_id: number; datetime: string }[] };
+
+export type CompanyIn = {
+  ticker: string; name: string; companyId: number;
+  income?: StatementsResult | null; balance?: StatementsResult | null;
+  marketCap?: MarketCaps | null; earnings?: Earnings | null;
+};
+export type CompanyOut = {
+  ticker: string; name: string; quarter: string; periodEnd: string; currency: string;
+  revenue: number | null; premiums: number | null; netIncome: number | null;
+  revenueGrowth: number | null; premiumGrowth: number | null;
+  lossRatio: number | null; roe: number | null; equity: number | null;
+  marketCap: number | null; marketCapCurrency: string | null; pb: number | null; pe: number | null;
+  lastCall: { name: string; date: string } | null; nextCall: { name: string; date: string } | null;
+  notes: string[];
+};
+
+const num = (v: unknown) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : Number(v));
+const M = (v: number | null) => (v === null ? null : v / 1e6);
+const round = (v: number | null, dp = 1) => (v === null || !isFinite(v) ? null : Math.round(v * 10 ** dp) / 10 ** dp);
+
+function itemsOf(p?: Period): Map<string, number | null> {
+  const m = new Map<string, number | null>();
+  for (const s of p?.statements ?? []) for (const li of s.line_items ?? []) if (!m.has(li.name)) m.set(li.name, num(li.value));
+  return m;
+}
+function pick(m: Map<string, number | null>, patterns: RegExp[]): number | null {
+  for (const re of patterns) for (const [k, v] of m) if (re.test(k) && v !== null) return v;
+  return null;
+}
+const REV = [/^Total Revenues?\b/i, /^Revenues?$/i];
+const PREM = [/^Net Premiums Earned/i, /^Premiums Earned/i, /^Premiums and Annuity Revenues/i, /^Premiums\b/i];
+const NI = [/^Net Income - \(IS\)$/i, /^Net Income to Common Incl/i, /^Net Income$/i, /^Net Income to Company$/i];
+const LOSS = [/^Policy Benefits/i, /Loss(es)? and (Loss )?Adjustment Expenses?/i, /^Losses and LAE/i, /^Net Losses/i];
+
+/** Quarters newest first. */
+function quarters(r?: StatementsResult | null): [string, Period][] {
+  return Object.entries(r?.periods ?? {}).sort((a, b) => b[1].period_end_date.localeCompare(a[1].period_end_date));
+}
+/** "FY2026Q3" -> "Q3 2026" */
+export function quarterLabel(key: string, end: string): string {
+  const m = key.match(/^FY(\d{4})Q([1-4])$/i);
+  return m ? `Q${m[2]} ${m[1]}` : end;
+}
+const days = (a: string, b: string) => (Date.parse(a) - Date.parse(b)) / 86_400_000;
+
+export function computeCompany(c: CompanyIn, now: number): CompanyOut {
+  const notes: string[] = [];
+  const qs = quarters(c.income);
+  const [latestKey, latest] = qs[0] ?? ["", undefined];
+  const li = itemsOf(latest);
+  const revenue = pick(li, REV), premiums = pick(li, PREM), netIncome = pick(li, NI), losses = pick(li, LOSS);
+  // same quarter a year earlier: the period ending roughly 12 months before
+  const yearAgo = latest ? qs.find(([, p]) => { const d = days(latest.period_end_date, p.period_end_date); return d > 330 && d < 400; })?.[1] : undefined;
+  const ya = itemsOf(yearAgo);
+  const growth = (now_: number | null, then: number | null) => (now_ === null || then === null || then === 0 ? null : ((now_ - then) / Math.abs(then)) * 100);
+  const revenueGrowth = growth(revenue, pick(ya, REV)), premiumGrowth = growth(premiums, pick(ya, PREM));
+  if (latest && !yearAgo) notes.push("No year-ago quarter for growth");
+  // last four quarters for P/E
+  const last4 = qs.slice(0, 4).map(([, p]) => pick(itemsOf(p), NI));
+  const ltmNI = last4.length === 4 && last4.every((v) => v !== null) ? (last4 as number[]).reduce((a, b) => a + b, 0) : null;
+
+  const bal = itemsOf(quarters(c.balance)[0]?.[1]);
+  let equity = pick(bal, [/^Total Equity$/i, /^Total Common Equity$/i]);
+  if (equity === null) {
+    const assets = pick(bal, [/^Total Assets$/i]);
+    const liabs = pick(bal, [/^Total Liabilities( - \(Template Specific\))?$/i]);
+    const minority = pick(bal, [/^Minority Interest, Total/i, /^Minority Interest$/i]) ?? 0;
+    equity = assets !== null && liabs !== null ? assets - liabs - minority : null;
+  }
+
+  const caps = [...(c.marketCap?.market_caps ?? [])].filter((x) => num(x.market_cap) !== null).sort((a, b) => b.date.localeCompare(a.date));
+  const marketCap = caps.length ? num(caps[0].market_cap) : null;
+  const capCcy = c.marketCap?.currency ?? null;
+  const ccy = c.income?.currency ?? c.balance?.currency ?? null;
+  const sameCcy = !capCcy || !ccy || capCcy === ccy;
+  if (!sameCcy) notes.push(`Market cap in ${capCcy}, accounts in ${ccy}: P/B and P/E not shown`);
+
+  const calls = [...(c.earnings?.earnings ?? [])].map((e) => ({ name: e.name, date: e.datetime })).sort((a, b) => a.date.localeCompare(b.date));
+  const past = calls.filter((e) => Date.parse(e.date) <= now), future = calls.filter((e) => Date.parse(e.date) > now);
+
+  return {
+    ticker: c.ticker, name: c.name, quarter: latest ? quarterLabel(latestKey, latest.period_end_date) : "n/d",
+    periodEnd: latest?.period_end_date ?? "", currency: ccy ?? "",
+    revenue: round(M(revenue)), premiums: round(M(premiums)), netIncome: round(M(netIncome)),
+    revenueGrowth: round(revenueGrowth), premiumGrowth: round(premiumGrowth),
+    lossRatio: losses !== null && premiums ? round((losses / premiums) * 100) : null,
+    roe: netIncome !== null && equity ? round(((netIncome * 4) / equity) * 100) : null,
+    equity: round(M(equity)),
+    marketCap: round(M(marketCap)), marketCapCurrency: capCcy,
+    pb: sameCcy && marketCap !== null && equity ? round(marketCap / equity, 2) : null,
+    pe: sameCcy && marketCap !== null && ltmNI && ltmNI > 0 ? round(marketCap / ltmNI, 1) : null,
+    lastCall: past.length ? past[past.length - 1] : null, nextCall: future.length ? future[0] : null,
+    notes,
+  };
+}
+
+export function median(vals: (number | null)[]): number | null {
+  const v = vals.filter((x): x is number => x !== null && isFinite(x)).sort((a, b) => a - b);
+  if (!v.length) return null;
+  const m = Math.floor(v.length / 2);
+  return round(v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2, 2);
+}
+export const MEDIAN_FIELDS = ["revenueGrowth", "premiumGrowth", "lossRatio", "roe", "pb", "pe"] as const;
+export function medians(rows: CompanyOut[]): Record<string, number | null> {
+  return Object.fromEntries(MEDIAN_FIELDS.map((k) => [k, median(rows.map((r) => r[k] as number | null))]));
+}
+
+/** Tickers as typed in the app: "WRB", "LSE:HSX". Anything else is refused before calling Kensho. */
+export function cleanTickers(input: unknown): string[] | null {
+  if (!Array.isArray(input)) return null;
+  const out = [...new Set(input.map((t) => String(t).trim().toUpperCase()).filter(Boolean))];
+  if (!out.length || out.length > 25 || out.some((t) => !/^[A-Z0-9][A-Z0-9:._-]{0,24}$/.test(t))) return null;
+  return out;
+}
