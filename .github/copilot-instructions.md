@@ -17,7 +17,7 @@ An M&A deal tracker and banker CRM for Ascot's Corporate Development team, style
 | --- | --- |
 | `web/index.html` | The whole site. |
 | `web/config.js` | Supabase URL and publishable key, plus the optional Entra app IDs for the Copilot panel (`copilotClientId`, `copilotTenantId`). Blank in the repo; the Pages workflow writes it from repository variables. Never commit real values or any `sb_secret_` key. |
-| (CEO view) Teams chat card | `tcSectionHTML()`, state `S.tc`, config `teamsChatId`. Read only: Graph v1.0 `/chats/{id}/messages` with the Copilot panel's sign-in (`Chat.Read`). Polls every 30 s while the CEO view is visible. Message HTML becomes text through `DOMParser`, then `esc()`. Never use `innerHTML` with message content. |
+| (Deals tab) Teams chat card | `tcSectionHTML()`, state `S.tc`, config `teamsChatId`. Production only (`tcEnabled()`: `canEditNow()`, not `demoMode()` or `S.dbMissing`); never on the CEO view. Read only: Graph v1.0 `/chats/{id}/messages` with the Copilot panel's sign-in (`Chat.Read`). Polls every 30 s while the Deals tab is visible. Message HTML becomes text through `DOMParser`, then `esc()`. Never use `innerHTML` with message content. |
 | `web/auth.html` | Redirect page for Microsoft sign-in in the Copilot panel. Posts the response to the tracker tab over `BroadcastChannel("dealdesk-auth")` and closes. Keep it self-contained: no external scripts. |
 | `.github/workflows/pages.yml` | On every push to `main`: writes `web/config.js` and publishes `web/` to GitHub Pages. **A merge to `main` is a deploy.** |
 | `supabase/migrations/0001..0004_*.sql` | Schema, roles, RLS, change history trigger, settings table. Run by hand in the Supabase SQL editor. |

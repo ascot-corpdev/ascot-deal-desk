@@ -723,7 +723,6 @@ function renderCEO(){
     <h3 class="sec">Latest context from the team</h3>
       ${recent.length ? `<ul class="mlist">${recent.map(n=>{ const d=deals.find(x=>x.id===n.dealId), b=bankers.find(x=>x.id===n.bankerId); return `<li><span class="d">${n.createdAt?new Date(n.createdAt).toLocaleDateString("en-GB",{day:"numeric",month:"short"}):""}</span><div><p><b>${esc(d?d.codename:b?b.name:"General")}</b>${X}: ${esc(n.text)}</p><p class="meta">${esc(n.kind||"Update")}${n.authorId||n.authorName?` · ${esc(nameOf(n.authorId,n.authorName))}`:""}</p></div></li>`; }).join("")}</ul>` : `<p class="t2">No notes yet.</p>`}
   </section>
-  ${tcSectionHTML()}
   <p class="source">Source: Corp Dev deal tracker${lastUpd?`, last updated ${esc(fmtWhen(lastUpd))} by ${esc(nameOf(lastBy, deals.find(d=>d.updatedAt===lastUpd)?.updatedByName))}`:""}. EV and GWP in $M as entered by deal teams; pipeline totals (derived).</p>`;
 }
 
@@ -801,7 +800,8 @@ function renderDeals(){
       <td class="c-hide"><div class="rowacts">${edit&&!ex?`<button class="btn sm" data-act="edit-deal" data-id="${esc(d.id)}">Edit</button>`:""}</div></td></tr>`; }).join("")}
     </tbody></table></div>` : `<div class="empty"><p>No deals match this filter.</p>${edit?`<button class="btn primary" data-act="new-deal">New deal</button>`:""}</div>`}
   </section>
-  <p class="source">Source: Corp Dev deal tracker. ${rows.length} deal${rows.length===1?"":"s"} shown.</p>`;
+  <p class="source">Source: Corp Dev deal tracker. ${rows.length} deal${rows.length===1?"":"s"} shown.</p>
+  ${tcSectionHTML()}`;
 }
 
 const REL_ORDER=["Strong","Active","Developing","Dormant"];
@@ -2036,7 +2036,7 @@ function renderCP(){
   const root=document.getElementById("cpRoot"); if(!root) return;
   if(!S.session && (S.cp.token||S.cp.refresh||S.cp.msgs.length)){ if(S.cp.ctrl) S.cp.ctrl.abort(); S.cp=cpFresh(); S.tc=tcFresh(); }
   tcRender();   // the Teams chat card shares this sign-in
-  if(S.view==="ceo" && tcEnabled() && cpSigned() && !S.tc.msgs && !S.tc.loading && !S.tc.err) tcRefresh();
+  if(S.view==="deals" && tcEnabled() && cpSigned() && !S.tc.msgs && !S.tc.loading && !S.tc.err) tcRefresh();
   const on=!!(S.cp.open && S.session && cpEnabled());
   document.body.classList.toggle("cp-docked", on);
   if(!on){ if(root.innerHTML) root.innerHTML=""; return; }
@@ -2058,11 +2058,12 @@ function renderCP(){
   const b=root.querySelector(".ai-b"); b.scrollTop=b.scrollHeight;
 }
 
-/* ---------- Teams group chat on the CEO view (optional, read only) ----------
-   When config.js has teamsChatId as well as copilotClientId, the CEO view shows the latest messages from that
+/* ---------- Teams group chat on the Deals tab (optional, read only) ----------
+   When config.js has teamsChatId as well as copilotClientId, the Deals tab shows the latest messages from that
    Teams group chat. It reads Microsoft Graph as the person's own Microsoft account (the same sign-in as the
    Copilot panel, permission Chat.Read), so it only works for members of the chat. Nothing is stored; replies
-   happen in Teams. Hidden for the CEO login, who isn't a member of the team chat. */
+   happen in Teams. Production only: shown when the Deals tab is the live, editable tracker (a Corp Dev login
+   with write access, real data), never in the CEO view, view-only mode or the example-data demo. */
 const TC_SHOW=10, TC_POLL_MS=30000;
 function tcFresh(){ return {msgs:null, chat:null, err:"", loading:false, at:0, more:false}; }
 function tcChatId(){
@@ -2070,7 +2071,7 @@ function tcChatId(){
   let id=v; if(m){ try{ id=decodeURIComponent(m[1]); }catch{ id=""; } }
   return /^19:[^\s/?#]+@thread\.(v2|skype)$/.test(id) ? id : "";
 }
-function tcEnabled(){ return cpEnabled() && !!tcChatId() && !!S.session && !isCEO(); }
+function tcEnabled(){ return cpEnabled() && !!tcChatId() && canEditNow() && !demoMode() && !S.dbMissing; }
 async function tcGet(path){
   const tok=await cpAccess();
   const r=await fetch("https://graph.microsoft.com/v1.0"+path, {headers:{"Authorization":"Bearer "+tok}});
@@ -2095,7 +2096,7 @@ async function tcRefresh(){
     if(c===401){ S.cp.token=null; }
   }finally{ S.tc.loading=false; tcRender(); }
 }
-function tcTick(){ if(S.view==="ceo" && document.visibilityState==="visible" && tcEnabled() && cpSigned()) tcRefresh(); }
+function tcTick(){ if(S.view==="deals" && document.visibilityState==="visible" && tcEnabled() && cpSigned()) tcRefresh(); }
 // One timer for the page; each tick checks whether there's anything to do.
 setInterval(tcTick, TC_POLL_MS);
 document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && Date.now()-S.tc.at>TC_POLL_MS) tcTick(); });
@@ -2130,7 +2131,7 @@ function tcInner(){
   if(!S.tc.msgs) return head+`<p class="t2">Loading messages…</p>`;
   const list=S.tc.msgs.slice(0, S.tc.more?30:TC_SHOW);
   return head+(list.length?`<ul class="mlist tc-list">${list.map(tcMsgHTML).join("")}</ul>`:`<div class="empty"><p>No messages yet.</p></div>`)
-    +`<p class="source">${S.tc.msgs.length>TC_SHOW?`<button type="button" class="btn sm ghost" data-act="tc-more">${S.tc.more?"Show fewer":"Show more"}</button> `:""}${S.tc.err?`${esc(S.tc.err)} `:""}Read only, from Microsoft Teams${S.tc.at?`; checked ${esc(tcWhen(new Date(S.tc.at).toISOString()))}`:""}. Refreshes every 30 seconds while this page is open.</p>`;
+    +`<p class="source">${S.tc.msgs.length>TC_SHOW?`<button type="button" class="btn sm ghost" data-act="tc-more">${S.tc.more?"Show fewer":"Show more"}</button> `:""}${S.tc.err?`${esc(S.tc.err)} `:""}Read only, from Microsoft Teams${S.tc.at?`; checked ${esc(tcWhen(new Date(S.tc.at).toISOString()))}`:""}. Refreshes every 30 seconds while this tab is open.</p>`;
 }
 function tcSectionHTML(){ return tcEnabled() ? `<section class="tchat" id="tcBox" aria-live="polite">${tcInner()}</section>` : ""; }
 function tcRender(){ const el=document.getElementById("tcBox"); if(el) el.innerHTML=tcInner(); }
