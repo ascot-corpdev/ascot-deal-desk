@@ -185,7 +185,7 @@ tr.inrow td:first-child{padding-left:24px}
   @page{size:A4 landscape;margin:12mm}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   body,body.ai-docked,body.cp-docked{padding-right:0!important;font-size:12px}
-  header.top .who,nav.tabs,.ceoacts,.toolbar,.fchips,.chgbar,#drawerRoot,#aiRoot,#cpRoot,#toastRoot,.rowacts,.banner .btn{display:none!important}
+  header.top .who,nav.tabs,.ceoacts,.toolbar,.fchips,.chgbar,#drawerRoot,#aiRoot,#cpRoot,.tchat,#toastRoot,.rowacts,.banner .btn{display:none!important}
   .wrap{max-width:none;padding-left:0;padding-right:0}
   main .wrap{gap:16px;padding-block:10px}
   .tbl-wrap{overflow:visible;border:0}
@@ -328,6 +328,10 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
 .cp .ai-f .row label.sp{display:flex;gap:6px;align-items:center;min-width:140px}
 .cp-src{margin-top:4px;font-size:11.5px;overflow-wrap:anywhere}
 .cp .acts{display:flex;gap:8px;flex-wrap:wrap}
+.tc-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.tc-h .sec{margin:0}.tc-h .grow{flex:1}
+.mlist.tc-list li{grid-template-columns:96px minmax(0,1fr)}
+.tc-t{white-space:pre-wrap;overflow-wrap:anywhere}
 .presence{margin-top:4px;font-size:12px;color:var(--blue)}
 .lastsaved{margin-top:4px;font-size:12px;color:var(--muted)}
 .presence:empty{display:none}
@@ -475,7 +479,7 @@ const S = {
   deals:[], bankers:[], notes:[], loaded:{deals:false,bankers:false,notes:false}, stale:false, dbMissing:false, configMissing:false,
   profiles:{}, q:"", stageFilter:"active", bq:"",
   drawer:null, sample:null, toolsOk:false, downloads:true,
-  ai:{open:false, msgs:[], api:[], busy:false, ctrl:null}, proposals:{}, cp:cpFresh(),
+  ai:{open:false, msgs:[], api:[], busy:false, ctrl:null}, proposals:{}, cp:cpFresh(), tc:tcFresh(),
   session:null, authChecked:false, started:false, channel:null, loginErr:"", loginBusy:false,
   presence:null, presenceReady:false, others:[], editing:null, hist:{}, changes:null, chgDays:7
 };
@@ -796,7 +800,8 @@ function renderDeals(){
       <td class="c-hide"><div class="rowacts">${edit&&!ex?`<button class="btn sm" data-act="edit-deal" data-id="${esc(d.id)}">Edit</button>`:""}</div></td></tr>`; }).join("")}
     </tbody></table></div>` : `<div class="empty"><p>No deals match this filter.</p>${edit?`<button class="btn primary" data-act="new-deal">New deal</button>`:""}</div>`}
   </section>
-  <p class="source">Source: Corp Dev deal tracker. ${rows.length} deal${rows.length===1?"":"s"} shown.</p>`;
+  <p class="source">Source: Corp Dev deal tracker. ${rows.length} deal${rows.length===1?"":"s"} shown.</p>
+  ${tcSectionHTML()}`;
 }
 
 const REL_ORDER=["Strong","Active","Developing","Dormant"];
@@ -2029,7 +2034,9 @@ function cpBodyHTML(){
 }
 function renderCP(){
   const root=document.getElementById("cpRoot"); if(!root) return;
-  if(!S.session && (S.cp.token||S.cp.refresh||S.cp.msgs.length)){ if(S.cp.ctrl) S.cp.ctrl.abort(); S.cp=cpFresh(); }
+  if(!S.session && (S.cp.token||S.cp.refresh||S.cp.msgs.length)){ if(S.cp.ctrl) S.cp.ctrl.abort(); S.cp=cpFresh(); S.tc=tcFresh(); }
+  tcRender();   // the Teams chat card shares this sign-in
+  if(S.view==="deals" && tcEnabled() && cpSigned() && !S.tc.msgs && !S.tc.loading && !S.tc.err) tcRefresh();
   const on=!!(S.cp.open && S.session && cpEnabled());
   document.body.classList.toggle("cp-docked", on);
   if(!on){ if(root.innerHTML) root.innerHTML=""; return; }
@@ -2050,6 +2057,84 @@ function renderCP(){
         <button type="button" class="btn sm" id="cpStop" data-act="cp-stop" ${S.cp.busy?"":"hidden"}>Stop</button><button class="btn sm accent" id="cpSend" ${S.cp.busy?"hidden":""}>Send</button></div></form></aside>`;
   const b=root.querySelector(".ai-b"); b.scrollTop=b.scrollHeight;
 }
+
+/* ---------- Teams group chat on the Deals tab (optional, read only) ----------
+   When config.js has teamsChatId as well as copilotClientId, the Deals tab shows the latest messages from that
+   Teams group chat. It reads Microsoft Graph as the person's own Microsoft account (the same sign-in as the
+   Copilot panel, permission Chat.Read), so it only works for members of the chat. Nothing is stored; replies
+   happen in Teams. Production only: shown when the Deals tab is the live, editable tracker (a Corp Dev login
+   with write access, real data), never in the CEO view, view-only mode or the example-data demo. */
+const TC_SHOW=10, TC_POLL_MS=30000;
+function tcFresh(){ return {msgs:null, chat:null, err:"", loading:false, at:0, more:false}; }
+function tcChatId(){
+  const v=String(CFG.teamsChatId||"").trim(); const m=v.match(/\/l\/chat\/([^/?#]+)/);   // accepts a "Copy link" URL too
+  let id=v; if(m){ try{ id=decodeURIComponent(m[1]); }catch{ id=""; } }
+  return /^19:[^\s/?#]+@thread\.(v2|skype)$/.test(id) ? id : "";
+}
+function tcEnabled(){ return cpEnabled() && !!tcChatId() && canEditNow() && !demoMode() && !S.dbMissing; }
+async function tcGet(path){
+  const tok=await cpAccess();
+  const r=await fetch("https://graph.microsoft.com/v1.0"+path, {headers:{"Authorization":"Bearer "+tok}});
+  let j=null; try{ j=await r.json(); }catch{}
+  if(!r.ok) throw {code:r.status, message:(j&&j.error&&j.error.message)||("Request failed ("+r.status+")")};
+  return j;
+}
+async function tcRefresh(){
+  if(!tcEnabled() || !cpSigned() || S.tc.loading) return;
+  S.tc.loading=true; tcRender();
+  const id=encodeURIComponent(tcChatId());
+  try{
+    if(!S.tc.chat){ const c=await tcGet("/chats/"+id+"?$select=topic,webUrl"); S.tc.chat={topic:c&&c.topic||"", url:safeUrl(c&&c.webUrl)}; }
+    const r=await tcGet("/chats/"+id+"/messages?$top=30&$orderby=createdDateTime%20desc");
+    S.tc.msgs=((r&&r.value)||[]).filter(m=>m&&m.messageType==="message"); S.tc.err=""; S.tc.at=Date.now();
+  }catch(e){
+    const c=e&&e.code;
+    S.tc.err = c==="signin" ? "" : (c===403||c===404) ? "Your Microsoft account can't read this chat. Only its members can see it here."
+      : c===401 ? "Microsoft 365 refused the request. Your IT admin may need to approve this site's Microsoft app."
+      : c===429 ? "Teams is busy. The chat will refresh again shortly."
+      : e instanceof TypeError ? "Couldn't reach Microsoft 365. It will try again shortly." : ((e&&e.message)||"Couldn't load the chat.");
+    if(c===401){ S.cp.token=null; }
+  }finally{ S.tc.loading=false; tcRender(); }
+}
+function tcTick(){ if(S.view==="deals" && document.visibilityState==="visible" && tcEnabled() && cpSigned()) tcRefresh(); }
+// One timer for the page; each tick checks whether there's anything to do.
+setInterval(tcTick, TC_POLL_MS);
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && Date.now()-S.tc.at>TC_POLL_MS) tcTick(); });
+
+function tcText(html, type){
+  if(type!=="html") return String(html||"");
+  const s=String(html||"").replace(/<br\s*\/?>/gi,"\n").replace(/<\/(p|div|li|h\d)>/gi,"\n").replace(/<img\b[^>]*>/gi," [image] ").replace(/<attachment\b[^>]*>\s*<\/attachment>/gi,"");
+  // DOMParser builds an inert document: nothing in it runs or loads. Only its text is used, and esc() runs on that.
+  return (new DOMParser().parseFromString(s,"text/html").body.textContent||"").replace(/\u00a0/g," ").replace(/[ \t]+\n/g,"\n").replace(/\n{3,}/g,"\n\n").trim();
+}
+function tcWhen(iso){
+  const d=new Date(iso); if(isNaN(d)) return "";
+  const yr=d.getFullYear()!==new Date().getFullYear();
+  return d.toLocaleDateString("en-GB",yr?{day:"numeric",month:"short",year:"numeric"}:{day:"numeric",month:"short"})+" "+d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+}
+function tcMsgHTML(m){
+  const who=(m.from&&((m.from.user&&m.from.user.displayName)||(m.from.application&&m.from.application.displayName)))||"Someone";
+  const files=(m.attachments||[]).filter(a=>a&&a.contentType==="reference"&&safeUrl(a.contentUrl));
+  const text = m.deletedDateTime ? "" : tcText(m.body&&m.body.content, m.body&&m.body.contentType);
+  const body = m.deletedDateTime ? `<span class="t2">Message deleted</span>` : text ? esc(text.length>600 ? text.slice(0,599).trimEnd()+"…" : text) : files.length ? "" : `<span class="t2">(no text)</span>`;
+  const att = files.length ? `<p class="meta">${files.map(a=>`<a href="${esc(safeUrl(a.contentUrl))}" target="_blank" rel="noopener noreferrer">${esc(a.name||"File")}</a>`).join(" · ")}</p>` : "";
+  return `<li><span class="d">${esc(tcWhen(m.createdDateTime))}</span><div><p><b>${esc(who)}</b>${body?": ":""}<span class="tc-t">${body}</span></p>${att}</div></li>`;
+}
+function tcInner(){
+  const topic=S.tc.chat&&S.tc.chat.topic, url=S.tc.chat&&S.tc.chat.url;
+  const head=`<div class="tc-h"><h3 class="sec">Team chat${topic?`: ${esc(topic)}`:""}</h3><span class="grow"></span>
+    ${cpSigned()?`<button type="button" class="btn sm ghost" data-act="tc-refresh" ${S.tc.loading?"disabled":""}>${S.tc.loading?"Refreshing…":"Refresh"}</button>`:""}
+    ${url?`<a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Reply in Teams ↗</a>`:""}</div>`;
+  if(!cpSigned()) return head+`<div class="empty"><p>Sign in with your Ascot Microsoft account to see the latest messages from the team's Teams chat. Only members of the chat can see it.</p>
+    <button type="button" class="btn sm accent" data-act="cp-signin" ${S.cp.signingIn?"disabled":""}>${S.cp.signingIn?"Waiting for Microsoft sign-in…":"Sign in with Microsoft"}</button>${S.cp.err?`<p class="t2">${esc(S.cp.err)}</p>`:""}</div>`;
+  if(S.tc.err && !S.tc.msgs) return head+`<div class="empty"><p>${esc(S.tc.err)}</p></div>`;
+  if(!S.tc.msgs) return head+`<p class="t2">Loading messages…</p>`;
+  const list=S.tc.msgs.slice(0, S.tc.more?30:TC_SHOW);
+  return head+(list.length?`<ul class="mlist tc-list">${list.map(tcMsgHTML).join("")}</ul>`:`<div class="empty"><p>No messages yet.</p></div>`)
+    +`<p class="source">${S.tc.msgs.length>TC_SHOW?`<button type="button" class="btn sm ghost" data-act="tc-more">${S.tc.more?"Show fewer":"Show more"}</button> `:""}${S.tc.err?`${esc(S.tc.err)} `:""}Read only, from Microsoft Teams${S.tc.at?`; checked ${esc(tcWhen(new Date(S.tc.at).toISOString()))}`:""}. Refreshes every 30 seconds while this tab is open.</p>`;
+}
+function tcSectionHTML(){ return tcEnabled() ? `<section class="tchat" id="tcBox" aria-live="polite">${tcInner()}</section>` : ""; }
+function tcRender(){ const el=document.getElementById("tcBox"); if(el) el.innerHTML=tcInner(); }
 
 /* ---------- Claude helper ---------- */
 const ALLOWED_DEAL_CHANGES = ["target","type","sector","stage","priority","ev","gwp","stake","origin","lead","nextStep","nextStepDate","ceoSummary","keyRisks","outcomeDate","deadReason","outcomeNote"];
@@ -2253,6 +2338,8 @@ document.addEventListener("click", async e=>{
     case "cp-stop": if(S.cp.ctrl) S.cp.ctrl.abort(); break;
     case "cp-suggest": askCP(t.textContent); break;
     case "cp-paste": openCopilot(copilotBrief(), "Tracker summary"); break;
+    case "tc-refresh": tcRefresh(); break;
+    case "tc-more": S.tc.more=!S.tc.more; tcRender(); break;
     case "mail-firm": mailFirm(t.dataset.firm); break;
     case "open-mate": e.preventDefault(); history.replaceState(null,"","#banker/"+encodeURIComponent(id)); S.lastFocusId=id; openRoute({kind:"banker",id}); break;
     case "fold": { const k=t.dataset.k; const open=!firmOpen(k); setFold(k,open); render();
@@ -2430,7 +2517,7 @@ async function doLogin(){
 async function signOut(){
   try{ await S.sb.auth.signOut(); }catch{}
   stopData(); S.session=null; S.drawer=null; S.ai.open=false; S.ai.msgs=[]; S.ai.api=[]; S.sample=null;
-  if(S.cp.ctrl) S.cp.ctrl.abort(); if(S.cp.cancelSignIn) S.cp.cancelSignIn(); S.cp=cpFresh();
+  if(S.cp.ctrl) S.cp.ctrl.abort(); if(S.cp.cancelSignIn) S.cp.cancelSignIn(); S.cp=cpFresh(); S.tc=tcFresh();
   document.getElementById("whoDot").hidden=true; history.replaceState(null,"",location.pathname); render();
 }
 function loginHTML(){
