@@ -137,10 +137,22 @@ The **Comps** tab shows listed specialty insurance peers' latest quarter (revenu
    supabase secrets set KENSHO_REFRESH_TOKEN=...
    ```
 
-   or a key pair registered with Kensho (the private key in PKCS#8 PEM form, `BEGIN PRIVATE KEY`; convert a `BEGIN RSA PRIVATE KEY` file with `openssl pkcs8 -topk8 -nocrypt -in key.pem -out key-pkcs8.pem`):
+   or, for ongoing use (Kensho recommends it), a key pair. Make it on a Mac, keeping the files outside this folder:
 
    ```bash
-   supabase secrets set KENSHO_CLIENT_ID=... KENSHO_KEY_ID=... KENSHO_PRIVATE_KEY="$(cat key-pkcs8.pem)"
+   mkdir -p ~/.kensho && cd ~/.kensho
+   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out kensho-private.pem
+   openssl pkey -in kensho-private.pem -pubout -out kensho-public.pem
+   KID=$(uuidgen | tr 'A-Z' 'a-z')
+   N=$(openssl rsa -pubin -in kensho-public.pem -noout -modulus | cut -d= -f2 | tr -d '\n' | perl -pe 's/([0-9a-fA-F]{2})/chr(hex($1))/ge' | base64 | tr -d '\n=' | tr '+/' '-_')
+   printf '{"kty":"RSA","alg":"RS256","use":"sig","kid":"%s","e":"AQAB","n":"%s"}\n' "$KID" "$N" > public-key.json
+   echo "Key ID: $KID"
+   ```
+
+   Email `public-key.json` (never the private key) to support.datafeed.mi@spglobal.com, asking to be added to the `users_kfinance` group. Kensho replies with your Client ID (allow up to three business days). Then save the Client ID, the Key ID printed above (it is also the `kid` in `public-key.json`) and the private key; it must be PKCS#8 (`BEGIN PRIVATE KEY`, as `openssl genpkey` makes it; convert a `BEGIN RSA PRIVATE KEY` file with `openssl pkcs8 -topk8 -nocrypt -in key.pem -out key-pkcs8.pem`):
+
+   ```bash
+   supabase secrets set KENSHO_CLIENT_ID=... KENSHO_KEY_ID=... KENSHO_PRIVATE_KEY="$(cat ~/.kensho/kensho-private.pem)"
    ```
 
 3. Deploy it. `--no-verify-jwt` is safe: the function checks the caller's login itself (CEO and Corp Dev logins).
