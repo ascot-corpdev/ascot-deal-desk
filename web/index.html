@@ -1914,15 +1914,20 @@ const CP_SUGGEST=[
   "What have I emailed or met about with our LOI-stage targets lately?"
 ];
 function cpFresh(){ return {open:false, msgs:[], conv:null, busy:false, ctrl:null, err:"", web:false, token:null, exp:0, refresh:null, user:"", hint:"", signingIn:false, cancelSignIn:null}; }
-function cpEnabled(){ return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(CFG.copilotClientId||"").trim()); }
+const GUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function cpEnabled(){ return GUID_RE.test(String(CFG.copilotClientId||"").trim()); }
+// The Microsoft sign-in app: msClientId (Teams chat on its own) or the Copilot app. Copilot's permissions are only
+// requested when the Copilot panel is switched on; otherwise sign-in asks for Chat.Read alone.
+function msClientId(){ const v=String(CFG.msClientId||"").trim(); return GUID_RE.test(v) ? v : cpEnabled() ? String(CFG.copilotClientId).trim() : ""; }
+function msScopes(){ return cpEnabled() ? CP_SCOPES : "https://graph.microsoft.com/Chat.Read openid profile offline_access"; }
 function cpSigned(){ return !!(S.cp.token||S.cp.refresh); }
-function cpAuthority(){ return "https://login.microsoftonline.com/"+encodeURIComponent(String(CFG.copilotTenantId||"").trim()||"organizations")+"/oauth2/v2.0/"; }
+function cpAuthority(){ return "https://login.microsoftonline.com/"+encodeURIComponent(String(CFG.msTenantId||CFG.copilotTenantId||"").trim()||"organizations")+"/oauth2/v2.0/"; }
 function cpRedirect(){ return new URL("auth.html", location.href.split("#")[0]).href; }
 function b64url(bytes){ let s=""; for(const b of bytes) s+=String.fromCharCode(b); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
 function randomStr(n){ return b64url(crypto.getRandomValues(new Uint8Array(n))); }
 
 function cpSignIn(){
-  if(S.cp.signingIn) return;
+  if(S.cp.signingIn || !msClientId()) return;
   // Open the window first, while the click still counts as a user action, or the browser blocks it.
   const popup=window.open("about:blank", "dealdeskSignIn", "popup,width=500,height=680");
   if(!popup){ S.cp.err="Your browser blocked the Microsoft sign-in window. Allow pop-ups for this site, then try again."; renderCP(); return; }
@@ -1931,8 +1936,8 @@ function cpSignIn(){
     try{
       const verifier=randomStr(48), state=randomStr(16);
       const challenge=b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
-      const q=new URLSearchParams({client_id:CFG.copilotClientId.trim(), response_type:"code", response_mode:"query", redirect_uri:cpRedirect(),
-        scope:CP_SCOPES, state, code_challenge:challenge, code_challenge_method:"S256"});
+      const q=new URLSearchParams({client_id:msClientId(), response_type:"code", response_mode:"query", redirect_uri:cpRedirect(),
+        scope:msScopes(), state, code_challenge:challenge, code_challenge_method:"S256"});
       if(S.cp.hint) q.set("login_hint", S.cp.hint);
       const answer=cpAwaitCode(state);
       popup.location.href=cpAuthority()+"authorize?"+q;
@@ -1943,7 +1948,7 @@ function cpSignIn(){
       try{ popup.close(); }catch{}
       const m=String(e&&e.message||e);
       S.cp.err = m==="cancelled" ? "" : m==="timeout" ? "Microsoft sign-in timed out. Try again."
-        : /AADSTS65001|consent/i.test(m) ? "Your IT admin needs to approve this site's Microsoft app before you can use Copilot here. Use “Copy and open Copilot” meanwhile."
+        : /AADSTS65001|consent/i.test(m) ? "Your IT admin needs to approve this site's Microsoft app before you can use it here."+(cpEnabled()?" Use “Copy and open Copilot” meanwhile.":"")
         : "Microsoft sign-in didn't finish: "+m.split(/\r?\n/)[0].slice(0,240);
     }finally{ S.cp.signingIn=false; renderCP(); if(cpSigned()) document.getElementById("cpInput")?.focus(); }
   })();
@@ -1959,7 +1964,7 @@ function cpAwaitCode(state){
 }
 async function cpToken(params){
   const r=await fetch(cpAuthority()+"token", {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
-    body:new URLSearchParams({client_id:CFG.copilotClientId.trim(), scope:CP_SCOPES, ...params})});
+    body:new URLSearchParams({client_id:msClientId(), scope:msScopes(), ...params})});
   const j=await r.json().catch(()=>({}));
   if(!r.ok||!j.access_token) throw new Error(j.error_description||j.error||("token request failed ("+r.status+")"));
   S.cp.token=j.access_token; S.cp.exp=Date.now()+(((+j.expires_in)||3600)-120)*1000;
@@ -2036,7 +2041,7 @@ function renderCP(){
   const root=document.getElementById("cpRoot"); if(!root) return;
   if(!S.session && (S.cp.token||S.cp.refresh||S.cp.msgs.length)){ if(S.cp.ctrl) S.cp.ctrl.abort(); S.cp=cpFresh(); S.tc=tcFresh(); }
   tcRender();   // the Teams chat card shares this sign-in
-  if(S.view==="deals" && tcEnabled() && cpSigned() && !S.tc.msgs && !S.tc.loading && !S.tc.err) tcRefresh();
+  if(S.view==="deals" && tcLive() && cpSigned() && !S.tc.msgs && !S.tc.loading && !S.tc.err) tcRefresh();
   const on=!!(S.cp.open && S.session && cpEnabled());
   document.body.classList.toggle("cp-docked", on);
   if(!on){ if(root.innerHTML) root.innerHTML=""; return; }
@@ -2059,9 +2064,9 @@ function renderCP(){
 }
 
 /* ---------- Teams group chat on the Deals tab (optional, read only) ----------
-   When config.js has teamsChatId as well as copilotClientId, the Deals tab shows the latest messages from that
-   Teams group chat. It reads Microsoft Graph as the person's own Microsoft account (the same sign-in as the
-   Copilot panel, permission Chat.Read), so it only works for members of the chat. Nothing is stored; replies
+   With teamsChatId alone, the Deals tab shows a card that opens the chat in Teams. With a Microsoft sign-in app
+   as well (msClientId, or the Copilot app), the card shows the latest messages, read from Microsoft Graph as the
+   person's own Microsoft account (permission Chat.Read), so it only works for members of the chat. Nothing is stored; replies
    happen in Teams. Production only: shown when the Deals tab is the live, editable tracker (a Corp Dev login
    with write access, real data), never in the CEO view, view-only mode or the example-data demo. */
 const TC_SHOW=10, TC_POLL_MS=30000;
@@ -2071,7 +2076,9 @@ function tcChatId(){
   let id=v; if(m){ try{ id=decodeURIComponent(m[1]); }catch{ id=""; } }
   return /^19:[^\s/?#]+@thread\.(v2|skype)$/.test(id) ? id : "";
 }
-function tcEnabled(){ return cpEnabled() && !!tcChatId() && canEditNow() && !demoMode() && !S.dbMissing; }
+function tcEnabled(){ return !!tcChatId() && canEditNow() && !demoMode() && !S.dbMissing; }
+function tcLive(){ return tcEnabled() && !!msClientId(); }   // messages in the page, not just the Teams link
+function tcLink(){ const t=String(CFG.msTenantId||CFG.copilotTenantId||"").trim(); return "https://teams.microsoft.com/l/chat/"+encodeURIComponent(tcChatId())+"/0"+(GUID_RE.test(t)?"?tenantId="+t:""); }
 async function tcGet(path){
   const tok=await cpAccess();
   const r=await fetch("https://graph.microsoft.com/v1.0"+path, {headers:{"Authorization":"Bearer "+tok}});
@@ -2080,7 +2087,7 @@ async function tcGet(path){
   return j;
 }
 async function tcRefresh(){
-  if(!tcEnabled() || !cpSigned() || S.tc.loading) return;
+  if(!tcLive() || !cpSigned() || S.tc.loading) return;
   S.tc.loading=true; tcRender();
   const id=encodeURIComponent(tcChatId());
   try{
@@ -2096,7 +2103,7 @@ async function tcRefresh(){
     if(c===401){ S.cp.token=null; }
   }finally{ S.tc.loading=false; tcRender(); }
 }
-function tcTick(){ if(S.view==="deals" && document.visibilityState==="visible" && tcEnabled() && cpSigned()) tcRefresh(); }
+function tcTick(){ if(S.view==="deals" && document.visibilityState==="visible" && tcLive() && cpSigned()) tcRefresh(); }
 // One timer for the page; each tick checks whether there's anything to do.
 setInterval(tcTick, TC_POLL_MS);
 document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && Date.now()-S.tc.at>TC_POLL_MS) tcTick(); });
@@ -2121,10 +2128,11 @@ function tcMsgHTML(m){
   return `<li><span class="d">${esc(tcWhen(m.createdDateTime))}</span><div><p><b>${esc(who)}</b>${body?": ":""}<span class="tc-t">${body}</span></p>${att}</div></li>`;
 }
 function tcInner(){
-  const topic=S.tc.chat&&S.tc.chat.topic, url=S.tc.chat&&S.tc.chat.url;
+  const topic=(S.tc.chat&&S.tc.chat.topic)||String(CFG.teamsChatName||"").trim(), url=(S.tc.chat&&S.tc.chat.url)||tcLink();
   const head=`<div class="tc-h"><h3 class="sec">Team chat${topic?`: ${esc(topic)}`:""}</h3><span class="grow"></span>
     ${cpSigned()?`<button type="button" class="btn sm ghost" data-act="tc-refresh" ${S.tc.loading?"disabled":""}>${S.tc.loading?"Refreshing…":"Refresh"}</button>`:""}
-    ${url?`<a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Reply in Teams ↗</a>`:""}</div>`;
+    ${url?`<a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${msClientId()?"Reply in Teams":"Open in Teams"} ↗</a>`:""}</div>`;
+  if(!msClientId()) return head+`<p class="t2">The team's Teams group chat. Opens in Teams.</p>`;
   if(!cpSigned()) return head+`<div class="empty"><p>Sign in with your Ascot Microsoft account to see the latest messages from the team's Teams chat. Only members of the chat can see it.</p>
     <button type="button" class="btn sm accent" data-act="cp-signin" ${S.cp.signingIn?"disabled":""}>${S.cp.signingIn?"Waiting for Microsoft sign-in…":"Sign in with Microsoft"}</button>${S.cp.err?`<p class="t2">${esc(S.cp.err)}</p>`:""}</div>`;
   if(S.tc.err && !S.tc.msgs) return head+`<div class="empty"><p>${esc(S.tc.err)}</p></div>`;

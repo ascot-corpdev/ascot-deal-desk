@@ -4,7 +4,7 @@ M&A deal tracker and banker CRM for Corporate Development, styled on the Ascot P
 
 - **CEO view (read only):** pipeline headline, stat tiles, pipeline by stage, next 30 days, deal summaries with each deal's profile and other docs (SharePoint links), latest team notes.
 - **Deals and Banker CRM (Corp Dev):** add, edit and delete deals, bankers and notes; SharePoint links per deal; CSV export.
-- **Team chat (production only, optional):** with step 9 set up, the Deals tab shows the latest messages from the team's Teams group chat, read only, with a **Reply in Teams** link. Each person signs in with their own Microsoft account and sees it only if they're a member of the chat.
+- **Team chat (production only, optional):** with step 9 set up, the Deals tab has a card for the team's Teams group chat. With only the chat ID set, it opens the chat in Teams. With a Microsoft sign-in app as well, it shows the latest messages, read only. Each person signs in with their own Microsoft account and sees the messages only if they're a member of the chat.
 - **Ask Copilot (every login):** with step 8 set up, opens a chat panel beside the tracker that asks Microsoft 365 Copilot through Microsoft's Copilot Chat API. You sign in with your Microsoft account, and each question carries a plain-text brief of the tracker (deals, bankers, latest notes; under 15,000 characters) as context. Without step 8, it copies that brief and opens Microsoft 365 Copilot in a new tab to paste it into. In a banker's email box, **Draft with Copilot** copies a drafting prompt the same way. Use your company's Microsoft 365 sign-in so Copilot's enterprise data protection applies.
 
 For Copilot (and other coding assistants): how the code works and the rules for changing it are in [`.github/copilot-instructions.md`](.github/copilot-instructions.md).
@@ -193,12 +193,19 @@ To test locally, put the same two IDs in `web/config.js` as `copilotClientId` an
 
 ### 9. Teams group chat on the Deals tab (optional)
 
-This needs step 8's app registration. It uses the `Chat.Read` permission already granted there, so IT doesn't have to approve anything new.
+The card appears only in production: on the Deals tab, for a Corp Dev login that can edit live data. It never appears on the CEO view, for the CEO login, in view-only mode or with example data. It doesn't need the Copilot setup in step 8.
 
-1. In Teams, right-click the group chat and choose **Copy link**.
-2. **GitHub > Settings > Secrets and variables > Actions > Variables:** add `TEAMS_CHAT_ID` and paste either the link or the chat ID inside it (`19:...@thread.v2`). Then rerun the deploy workflow.
+**Link only (no IT needed).** In Teams, right-click the group chat and choose **Copy link**. In **GitHub > Settings > Secrets and variables > Actions > Variables**, add `TEAMS_CHAT_ID` and paste either the link or the chat ID inside it (`19:...@thread.v2`). You can also add `TEAMS_CHAT_NAME` for the heading, for example `The Strategizers`. Then rerun the deploy workflow. The card shows an **Open in Teams** button.
 
-The card shows the 10 latest messages, with up to 30 behind **Show more**. Shared files appear as links, and images as "[image]". It refreshes every 30 seconds while the Deals tab is open in a visible tab. It's read only, so replies happen in Teams. It appears only in production: the Deals tab for a Corp Dev login that can edit live data. It never appears in the CEO view, for the CEO login, in view-only mode or with example data. People who aren't in the chat see a message saying they can't read it. Nothing from the chat is stored in Supabase or in the browser.
+**Messages in the page (needs a Microsoft app).** To show the latest messages in the card:
+
+1. **Entra admin center > App registrations > New registration.** Name it "Ascot deal desk", choose **Accounts in this organizational directory only**, and set the redirect URI platform to **Single-page application (SPA)** with `https://YOUR_GITHUB_USER.github.io/REPO_NAME/auth.html`.
+2. **API permissions:** add Microsoft Graph > Delegated > `Chat.Read`. It's the only permission the card uses. Depending on Ascot's Entra settings, people may be able to approve it for themselves the first time they sign in, or IT may need to **Grant admin consent**.
+3. Add the app's **Application (client) ID** as `MS_CLIENT_ID` and its **Directory (tenant) ID** as `MS_TENANT_ID` (repository variables), then rerun the deploy workflow.
+
+People then click **Sign in with Microsoft** on the card. It shows the 10 latest messages, with up to 30 behind **Show more**. Shared files appear as links, and images as "[image]". It refreshes every 30 seconds while the Deals tab is open in a visible tab. It's read only, so replies happen in Teams. People who aren't in the chat see a message saying they can't read it. Nothing from the chat is stored in Supabase or in the browser.
+
+If step 8's Copilot app is set up instead, the card uses that app and no `MS_` variables are needed.
 
 ## Running locally
 
