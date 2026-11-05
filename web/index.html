@@ -171,6 +171,7 @@ tr.firmrow td{vertical-align:top}
 tr.firmrow .firmdeals{font-size:13px}
 tr.inrow td:first-child{padding-left:24px}
 .btn[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.seg{display:inline-flex}.seg .btn+.btn{margin-left:-1px}
 .imtbl{font-size:12px}
 .imtbl td,.imtbl th{padding:5px 7px}
 .imtbl tr.skip td{color:var(--muted);text-decoration:line-through}
@@ -825,20 +826,36 @@ function benchCfg(){
   const peers=Array.isArray(b.peers)&&b.peers.length ? b.peers : DEFAULT_PEERS;
   return {peers, aglUrl: safeUrl(b.aglUrl||"")||"", custom: Array.isArray(b.peers)&&b.peers.length>0};
 }
+/* Period toggle for comps: latest quarter, year to date or last twelve months. Remembered per browser. */
+const COMPS_PERIODS={quarter:{btn:"Latest quarter",title:"latest quarter",strip:"latest quarter"},ytd:{btn:"YTD",title:"year to date",strip:"year to date"},ltm:{btn:"LTM",title:"last twelve months",strip:"last twelve months"}};
+const PERIOD_KEY="dealdesk.compsPeriod";
+function compsPeriod(){
+  if(!S.compsPeriod){ let v=null; try{ v=localStorage.getItem(PERIOD_KEY); }catch{} S.compsPeriod = v in COMPS_PERIODS ? v : "quarter"; }
+  return S.compsPeriod;
+}
+function setCompsPeriod(v){
+  if(!(v in COMPS_PERIODS) || v===compsPeriod()) return;
+  S.compsPeriod=v; try{ localStorage.setItem(PERIOD_KEY,v); }catch{}
+  loadComps(false);
+}
 async function loadComps(force){
   if(!S.sb || !S.session) return;
-  const peers=benchCfg().peers, key=peers.join(",");
+  const peers=benchCfg().peers, period=compsPeriod(), key=period+"|"+peers.join(",");
   if(!force && S.comps && S.comps.key===key && (S.comps.data||S.comps.loading||S.comps.err)) return;
+  // Switching back to a period already fetched shows it at once (the Refresh button refetches)
+  S.compsCache=S.compsCache||{};
+  const hit=S.compsCache[key];
+  if(!force && hit && Date.now()-hit.at<10*60_000){ S.comps=hit; return; }
   S.comps={key, loading:true};
   let out;
   try{
     const {data:{session}}=await S.sb.auth.getSession(); if(!session) throw new Error("Your session ended. Sign in again.");
     const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/comps", {method:"POST",
-      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":CFG.supabaseAnonKey}, body:JSON.stringify({tickers:peers})});
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":CFG.supabaseAnonKey}, body:JSON.stringify({tickers:peers, period})});
     let body=null; try{ body=await res.json(); }catch{}
     if(res.status===404) out={key, err:"not_deployed"};
     else if(!res.ok) out={key, err:(body&&body.error)||("http_"+res.status), msg:(body&&(body.message||body.error))||`The comps function answered ${res.status}.`};
-    else out={key, data:body, at:Date.now()};
+    else { out={key, data:body, at:Date.now()}; S.compsCache[key]=out; }
   }catch(e){ out={key, err:"network", msg:(e&&e.message)||"Network error"}; }
   if(S.comps && S.comps.key===key) S.comps=out;
   if(["comps","ceo"].includes(S.view)) render();
@@ -860,7 +877,7 @@ const COMPS_SORTS = {
 };
 function compsStatusHTML(){
   const c=S.comps, edit=canEditNow();
-  if(!c || c.loading) return `<p class="t2">Loading the latest quarter from Kensho…</p>`;
+  if(!c || c.loading) return `<p class="t2">Loading the ${COMPS_PERIODS[compsPeriod()].title} from Kensho…</p>`;
   if(c.err==="not_configured") return `<div class="banner"><span><b>Kensho isn't connected yet.</b> ${edit?"Set the Kensho credentials on the comps function (README, section 7).":"Ask the tracker owner to connect it."}</span></div>`;
   if(c.err==="not_deployed") return `<div class="banner"><span><b>The comps function isn't deployed yet.</b> ${edit?"See README, section 7, to deploy it and connect Kensho.":"Ask the tracker owner to set it up."}</span></div>`;
   if(c.err==="network") return `<div class="banner"><span><b>Couldn't reach the comps function.</b> ${edit?`The browser got no answer it could read. Check, in order: (1) the function is deployed: <code>supabase functions deploy comps --no-verify-jwt</code>; (2) it was deployed with <code>--no-verify-jwt</code> (redeploy with it if not); (3) the <code>ALLOWED_ORIGIN</code> secret is this site's address, <code>${esc(location.origin)}</code>. See README, section 7.`:"Ask the tracker owner to check the comps function."}</span><button class="btn sm" data-act="comps-refresh">Try again</button></div>`;
@@ -879,13 +896,18 @@ function renderComps(){
   const quarters=[...new Set(rows.map(r=>r.quarter))];
   const errs = d ? Object.entries(d.errors||{}) : [];
   const th=(l,k,cls)=>sortTh(l,k,cls,"c");
+  const per=compsPeriod(), P=COMPS_PERIODS[per];
+  const growthNote = per==="quarter" ? "Premium growth versus the same quarter a year earlier." : per==="ytd" ? "Premium growth versus the same months a year earlier." : "Premium growth versus the twelve months to a year earlier.";
+  const roeNote = per==="quarter" ? "ROE = quarterly net income x 4 / equity (derived)" : per==="ytd" ? "ROE = year-to-date net income annualised / equity (derived)" : "ROE = twelve-month net income / equity (derived)";
+  const periodNote = per==="quarter" ? "Each company's latest fiscal quarter, so period ends can differ." : per==="ytd" ? "Each company's fiscal year to date at its latest quarter, so period ends can differ." : "Each company's last twelve months to its latest quarter, so period ends can differ.";
   return `
-  <section class="ceohead"><div><h2 class="action-title">Public comps: latest quarter${quarters.length===1?` (${esc(quarters[0])})`:""}</h2>
+  <section class="ceohead"><div><h2 class="action-title">Public comps: ${P.title}${quarters.length===1?` (${esc(quarters[0])})`:""}</h2>
     <p class="sub">${cfg.peers.length} listed specialty insurance peers from S&P Global via Kensho. Fetched live when you open this page; nothing is stored.</p></div>
     <div class="ceoacts">${aglButton()}${!cfg.aglUrl&&edit?`<button type="button" class="btn sm" data-act="comps-settings">Add AGL financials link</button>`:""}<button type="button" class="btn sm" data-act="comps-refresh">Refresh</button>${edit?`<button type="button" class="btn sm" data-act="comps-settings">Edit peers</button>`:""}</div></section>
   ${S.settingsMissing&&edit?`<div class="banner"><span>Using the default peer list. To choose your own peers and save the AGL financials link, run <b>supabase/migrations/0004_settings.sql</b> in Supabase.</span></div>`:""}
+  <section class="toolbar"><div class="seg" role="group" aria-label="Period">${Object.entries(COMPS_PERIODS).map(([k,v])=>`<button type="button" class="btn sm" data-act="comps-period" data-v="${k}" aria-pressed="${k===per}">${v.btn}</button>`).join("")}</div></section>
   ${compsStatusHTML()}
-  ${rows.length?`<section><div class="tbl-wrap cardwrap"><table class="cards comps"><thead><tr>${th("Company","name")}<th>Quarter</th>${th("Revenue ($M)","revenue","num")}${th("Premiums ($M)","premiums","num")}${th("Premium growth","premiumGrowth","num")}${th("Net income ($M)","netIncome","num")}${th("Loss ratio","lossRatio","num")}${th("ROE","roe","num")}${th("Market cap ($M)","marketCap","num")}${th("P/B","pb","num")}${th("P/E","pe","num")}<th>Earnings calls</th></tr></thead><tbody>
+  ${rows.length?`<section><div class="tbl-wrap cardwrap"><table class="cards comps"><thead><tr>${th("Company","name")}<th>Period</th>${th("Revenue ($M)","revenue","num")}${th("Premiums ($M)","premiums","num")}${th("Premium growth","premiumGrowth","num")}${th("Net income ($M)","netIncome","num")}${th("Loss ratio","lossRatio","num")}${th("ROE","roe","num")}${th("Market cap ($M)","marketCap","num")}${th("P/B","pb","num")}${th("P/E","pe","num")}<th>Earnings calls</th></tr></thead><tbody>
     ${rows.map(r=>`<tr><td><div class="t1">${esc(r.name)}</div><div class="t2">${esc(r.ticker)}${r.currency&&r.currency!=="USD"?` · ${esc(r.currency)}`:""}</div>${r.notes.map(n=>`<div class="t2">${esc(n)}</div>`).join("")}<div class="t2 mob">${esc(r.quarter)} · premium growth ${pctS(r.premiumGrowth,true)} · loss ratio ${pctS(r.lossRatio)} · ROE ${pctS(r.roe)} · P/B ${xS(r.pb,2)} · P/E ${xS(r.pe,1)}</div></td>
       <td class="c-hide">${esc(r.quarter)}</td><td class="num c-hide">${mS(r.revenue)}</td><td class="num c-hide">${mS(r.premiums)}</td><td class="num c-hide">${pctS(r.premiumGrowth,true)}</td><td class="num c-hide">${mS(r.netIncome)}</td>
       <td class="num c-hide">${pctS(r.lossRatio)}</td><td class="num c-hide">${pctS(r.roe)}</td><td class="num c-hide">${mS(r.marketCap)}${r.marketCapCurrency&&r.marketCapCurrency!==r.currency?` <span class="t2">${esc(r.marketCapCurrency)}</span>`:""}</td><td class="num c-hide">${xS(r.pb,2)}</td><td class="num c-hide">${xS(r.pe,1)}</td>
@@ -893,7 +915,7 @@ function renderComps(){
     <tr class="med"><td>Median (derived)</td><td class="c-hide"></td><td class="c-hide"></td><td class="c-hide"></td><td class="num c-hide">${pctS(md.premiumGrowth,true)}</td><td class="c-hide"></td><td class="num c-hide">${pctS(md.lossRatio)}</td><td class="num c-hide">${pctS(md.roe)}</td><td class="c-hide"></td><td class="num c-hide">${xS(md.pb,2)}</td><td class="num c-hide">${xS(md.pe,1)}</td><td class="c-hide"></td></tr>
     </tbody></table></div></section>`:""}
   ${errs.length?`<p class="t2">Not shown: ${errs.map(([t,m])=>`<b>${esc(t)}</b> (${esc(m)})`).join("; ")}.</p>`:""}
-  <p class="source">Source: S&amp;P Global Capital IQ via Kensho${c&&c.at?`, fetched ${esc(fmtWhen(c.at))}`:""}. Each company's latest fiscal quarter, so period ends can differ. $M in each company's reporting currency. Premium growth versus the same quarter a year earlier. Loss ratio = policy benefits / premiums (derived); ROE = quarterly net income x 4 / equity (derived); equity = total assets - total liabilities - minority interest where not reported (derived); P/B and P/E (last four quarters) from the latest market cap (derived). AGL financials open where they're kept and are not stored here.</p>`;
+  <p class="source">Source: S&amp;P Global Capital IQ via Kensho${c&&c.at?`, fetched ${esc(fmtWhen(c.at))}`:""}. ${periodNote} $M in each company's reporting currency. ${growthNote} Loss ratio = policy benefits / premiums (derived); ${roeNote}; equity = total assets - total liabilities - minority interest where not reported (derived); P/B and P/E (twelve-month net income) from the latest market cap (derived). AGL financials open where they're kept and are not stored here.</p>`;
 }
 /* CEO view strip: peer medians and the AGL link, only once Kensho answers */
 function benchStripHTML(){
@@ -903,7 +925,7 @@ function benchStripHTML(){
   const tile=(v,l,c)=>`<div class="tile"><b class="${c}">${v}</b><span>${l}</span></div>`;
   return `<section><h3 class="sec">Peer benchmarks</h3>
     <div class="benchrow">${tile(pctS(md.premiumGrowth,true),"Median premium growth (YoY)","c-blue")}${tile(pctS(md.lossRatio),"Median loss ratio (derived)","c-navy")}${tile(pctS(md.roe),"Median ROE (derived)","c-teal")}${tile(xS(md.pb,2),"Median P/B (derived)","c-mag")}</div>
-    <p class="source" style="margin-top:8px">${d.companies.length} listed peers, latest quarter${q.length===1?` (${esc(q[0])})`:"s"}, S&amp;P Global via Kensho. <a href="#comps">All comps</a>${benchCfg().aglUrl?` · <a href="${esc(benchCfg().aglUrl)}" target="_blank" rel="noopener noreferrer">AGL financials ↗</a>`:""}</p></section>`;
+    <p class="source" style="margin-top:8px">${d.companies.length} listed peers, ${COMPS_PERIODS[compsPeriod()].strip}${q.length===1?` (${esc(q[0])})`:""}, S&amp;P Global via Kensho. <a href="#comps">All comps</a>${benchCfg().aglUrl?` · <a href="${esc(benchCfg().aglUrl)}" target="_blank" rel="noopener noreferrer">AGL financials ↗</a>`:""}</p></section>`;
 }
 function compsSettingsHTML(){
   const cfg=benchCfg(); const b=(S.settings||{}).benchmark||{};
@@ -1574,11 +1596,11 @@ async function exportBoardPack(){
     const md=cd.medians||{};
     title(sl, `Peers: median ROE ${pctS(md.roe)}, P/B ${xS(md.pb,2)} (derived)`);
     const top=[...cd.companies].sort((a,b)=>(b.marketCap??-1)-(a.marketCap??-1)).slice(0,12);
-    const cr=[head([["Company"],["Quarter"],["Premium growth",1],["Loss ratio",1],["ROE",1],["P/B",1],["P/E",1]])];
+    const cr=[head([["Company"],["Period"],["Premium growth",1],["Loss ratio",1],["ROE",1],["P/B",1],["P/E",1]])];
     top.forEach((r,j)=>cr.push([{text:r.name,options:{...cellOpts(j),bold:true}},{text:r.quarter,options:cellOpts(j)},{text:pctS(r.premiumGrowth,true),options:cellOpts(j,1)},{text:pctS(r.lossRatio),options:cellOpts(j,1)},{text:pctS(r.roe),options:cellOpts(j,1)},{text:xS(r.pb,2),options:cellOpts(j,1)},{text:xS(r.pe,1),options:cellOpts(j,1)}]));
     cr.push([{text:"Median (derived)",options:{bold:true,color:C.mag}},{text:""},{text:pctS(md.premiumGrowth,true),options:{align:"right",bold:true,color:C.mag}},{text:pctS(md.lossRatio),options:{align:"right",bold:true,color:C.mag}},{text:pctS(md.roe),options:{align:"right",bold:true,color:C.mag}},{text:xS(md.pb,2),options:{align:"right",bold:true,color:C.mag}},{text:xS(md.pe,1),options:{align:"right",bold:true,color:C.mag}}]);
     tbl(sl,cr,{x:0.52,y:1.3,w:12.28,colW:[3.6,1.3,1.6,1.4,1.4,1.4,1.58]});
-    source(sl, `Source: S&P Global Capital IQ via Kensho, ${asOf}. Each company's latest fiscal quarter. Loss ratio, ROE (annualised), P/B and P/E (last four quarters) derived.`);
+    source(sl, `Source: S&P Global Capital IQ via Kensho, ${asOf}. ${({quarter:"Each company's latest fiscal quarter.",ytd:"Each company's fiscal year to date.",ltm:"Each company's last twelve months."})[compsPeriod()]} Loss ratio, ROE${compsPeriod()==="ltm"?"":" (annualised)"}, P/B and P/E (twelve-month net income) derived.`);
   }
 
   // 6. Bankers
@@ -1984,6 +2006,7 @@ document.addEventListener("click", async e=>{
       document.querySelector(`.fold[data-k="${CSS.escape(k)}"]`)?.focus(); break; }
     case "fold-all": { const open=t.dataset.open==="1"; firmKeysShown().forEach(k=>loadFolds()[k]=open); saveFolds(); render(); document.querySelector('[data-act="fold-all"]')?.focus(); break; }
     case "comps-refresh": loadComps(true); render(); break;
+    case "comps-period": setCompsPeriod(t.dataset.v); render(); break;
     case "cs-defaults": { const ta=document.getElementById("cs_peers"); if(ta) ta.value=DEFAULT_PEERS.join("\n"); break; }
     case "comps-settings": if(!canEditNow()) return; S.lastFocusEl=t; S.drawer={kind:"comps-settings"}; renderDrawer(); break;
     case "comps-save": t.disabled=true; await saveCompsSettings(); if(t.isConnected) t.disabled=false; break;

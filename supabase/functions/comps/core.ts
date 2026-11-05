@@ -50,23 +50,42 @@ export function quarterLabel(key: string, end: string): string {
   const m = key.match(/^FY(\d{4})Q([1-4])$/i);
   return m ? `Q${m[2]} ${m[1]}` : end;
 }
+export type PeriodKind = "quarter" | "ytd" | "ltm";
+export const PERIOD_TYPE: Record<PeriodKind, string> = { quarter: "quarterly", ytd: "ytd", ltm: "ltm" };
+/** Label for the period a figure covers: "Q3 2026", "9M 2026" / "FY 2025" (year to date), "LTM Q3 2026". */
+export function periodLabel(kind: PeriodKind, key: string, p: Period): string {
+  const q = quarterLabel(key, p.period_end_date), y = key.match(/^FY(\d{4})/i)?.[1] ?? p.period_end_date.slice(0, 4);
+  if (kind === "ltm") return `LTM ${q}`;
+  if (kind === "ytd") return p.num_months >= 12 ? `FY ${y}` : `${p.num_months}M ${y}`;
+  return q;
+}
 const days = (a: string, b: string) => (Date.parse(a) - Date.parse(b)) / 86_400_000;
 
-export function computeCompany(c: CompanyIn, now: number): CompanyOut {
+export function computeCompany(c: CompanyIn, now: number, kind: PeriodKind = "quarter"): CompanyOut {
   const notes: string[] = [];
   const qs = quarters(c.income);
   const [latestKey, latest] = qs[0] ?? ["", undefined];
   const li = itemsOf(latest);
   const revenue = pick(li, REV), premiums = pick(li, PREM), netIncome = pick(li, NI), losses = pick(li, LOSS);
-  // same quarter a year earlier: the period ending roughly 12 months before
+  // same period a year earlier (same quarter, same months year to date, or the LTM ending a year before)
   const yearAgo = latest ? qs.find(([, p]) => { const d = days(latest.period_end_date, p.period_end_date); return d > 330 && d < 400; })?.[1] : undefined;
   const ya = itemsOf(yearAgo);
   const growth = (now_: number | null, then: number | null) => (now_ === null || then === null || then === 0 ? null : ((now_ - then) / Math.abs(then)) * 100);
   const revenueGrowth = growth(revenue, pick(ya, REV)), premiumGrowth = growth(premiums, pick(ya, PREM));
-  if (latest && !yearAgo) notes.push("No year-ago quarter for growth");
-  // last four quarters for P/E
-  const last4 = qs.slice(0, 4).map(([, p]) => pick(itemsOf(p), NI));
-  const ltmNI = last4.length === 4 && last4.every((v) => v !== null) ? (last4 as number[]).reduce((a, b) => a + b, 0) : null;
+  if (latest && !yearAgo) notes.push("No year-ago period for growth");
+  // last twelve months' net income, for P/E, from whichever series was fetched
+  let ltmNI: number | null = null;
+  if (kind === "ltm" || (latest && latest.num_months >= 12)) ltmNI = netIncome;
+  else if (kind === "quarter") {
+    const last4 = qs.slice(0, 4).map(([, p]) => pick(itemsOf(p), NI));
+    ltmNI = last4.length === 4 && last4.every((v) => v !== null) ? (last4 as number[]).reduce((a, b) => a + b, 0) : null;
+  } else if (latest && yearAgo) {
+    // year to date: this YTD + the last full fiscal year - the same YTD a year earlier
+    const fy = qs.find(([, p]) => p.num_months >= 12 && p.period_end_date < latest.period_end_date && p.period_end_date > yearAgo.period_end_date)?.[1];
+    const a = netIncome, b = fy ? pick(itemsOf(fy), NI) : null, cc = pick(ya, NI);
+    ltmNI = a !== null && b !== null && cc !== null ? a + b - cc : null;
+  }
+  const months = latest?.num_months && latest.num_months > 0 ? latest.num_months : 3;
 
   const bal = itemsOf(quarters(c.balance)[0]?.[1]);
   let equity = pick(bal, [/^Total Equity$/i, /^Total Common Equity$/i]);
@@ -88,12 +107,12 @@ export function computeCompany(c: CompanyIn, now: number): CompanyOut {
   const past = calls.filter((e) => Date.parse(e.date) <= now), future = calls.filter((e) => Date.parse(e.date) > now);
 
   return {
-    ticker: c.ticker, name: c.name, quarter: latest ? quarterLabel(latestKey, latest.period_end_date) : "n/d",
+    ticker: c.ticker, name: c.name, quarter: latest ? periodLabel(kind, latestKey, latest) : "n/d",
     periodEnd: latest?.period_end_date ?? "", currency: ccy ?? "",
     revenue: round(M(revenue)), premiums: round(M(premiums)), netIncome: round(M(netIncome)),
     revenueGrowth: round(revenueGrowth), premiumGrowth: round(premiumGrowth),
     lossRatio: losses !== null && premiums ? round((losses / premiums) * 100) : null,
-    roe: netIncome !== null && equity ? round(((netIncome * 4) / equity) * 100) : null,
+    roe: netIncome !== null && equity ? round(((netIncome * (12 / months)) / equity) * 100) : null,   // annualised
     equity: round(M(equity)),
     marketCap: round(M(marketCap)), marketCapCurrency: capCcy,
     pb: sameCcy && marketCap !== null && equity ? round(marketCap / equity, 2) : null,

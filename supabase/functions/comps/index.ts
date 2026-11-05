@@ -8,10 +8,10 @@
 //   KENSHO_CLIENT_ID, KENSHO_PRIVATE_KEY (PKCS#8 PEM), optional KENSHO_KEY_ID
 // Optional: ALLOWED_ORIGIN (the site's address, as for the claude function).
 //
-// POST /functions/v1/comps  {"tickers": ["WRB", "LSE:HSX", ...]}  ->  {asOf, companies, medians, errors}
+// POST /functions/v1/comps  {"tickers": ["WRB", "LSE:HSX", ...], "period": "quarter" | "ytd" | "ltm"}  ->  {asOf, period, companies, medians, errors}
 
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
-import { cleanTickers, computeCompany, medians, type CompanyIn, type Earnings, type MarketCaps, type StatementsResult } from "./core.ts";
+import { cleanTickers, computeCompany, medians, PERIOD_TYPE, type CompanyIn, type Earnings, type MarketCaps, type PeriodKind, type StatementsResult } from "./core.ts";
 import { Kensho, KenshoError } from "./kensho.ts";
 
 type Env = (k: string) => string | undefined;
@@ -52,12 +52,13 @@ async function serve(req: Request, deps: Deps, json: (status: number, body: unkn
   const creds = { refreshToken: deps.env("KENSHO_REFRESH_TOKEN"), clientId: deps.env("KENSHO_CLIENT_ID"), privateKey: deps.env("KENSHO_PRIVATE_KEY")?.replace(/\\n/g, "\n"), keyId: deps.env("KENSHO_KEY_ID") };
   if (!Kensho.configured(creds)) return json(503, { error: "not_configured", message: "Kensho isn't connected yet. Set KENSHO_REFRESH_TOKEN (or KENSHO_CLIENT_ID and KENSHO_PRIVATE_KEY) on the comps function." });
 
-  let tickers: string[] | null = null;
-  try { tickers = cleanTickers((await req.json()).tickers); } catch { /* fall through */ }
+  let tickers: string[] | null = null, period: PeriodKind = "quarter";
+  try { const body = await req.json(); tickers = cleanTickers(body.tickers); if (body.period !== undefined) period = body.period; } catch { /* fall through */ }
   if (!tickers) return json(400, { error: "Send 1 to 25 tickers, like WRB or LSE:HSX." });
+  if (!(period in PERIOD_TYPE)) return json(400, { error: 'period must be "quarter", "ytd" or "ltm".' });
 
   const now = (deps.now ?? Date.now)();
-  const key = [...tickers].sort().join(",");
+  const key = period + "|" + [...tickers].sort().join(",");
   const hit = cache.get(key);
   if (hit && now - hit.at < CACHE_MS) return json(200, hit.body);
 
@@ -75,12 +76,13 @@ async function serve(req: Request, deps: Deps, json: (status: number, body: unkn
       else errors[t] = r?.error ?? "Not found in Kensho";
     }
     const cids = found.map((f) => f.companyId);
-    if (!cids.length) return json(200, { asOf: new Date(now).toISOString(), companies: [], medians: {}, errors });
+    if (!cids.length) return json(200, { asOf: new Date(now).toISOString(), period, companies: [], medians: {}, errors });
 
-    // 2. statements for everyone at once: five quarters of income (latest, year-ago, last four), one balance sheet
+    // 2. statements for everyone at once: five periods of income in the chosen series (latest, year-ago, and
+    //    what's needed for twelve-month net income), one balance sheet
     type Post = { results: Record<string, StatementsResult>; errors?: Record<string, string> };
     const [inc, bal] = await Promise.all([
-      k.call<Post>("statements/", { company_ids: cids, statement_type: "income_statement", period_type: "quarterly", num_periods: 5 }),
+      k.call<Post>("statements/", { company_ids: cids, statement_type: "income_statement", period_type: PERIOD_TYPE[period], num_periods: 5 }),
       k.call<Post>("statements/", { company_ids: cids, statement_type: "balance_sheet", period_type: "quarterly", num_periods: 1 }),
     ]);
     // 3. market cap (last ten days, to cover weekends and holidays) and earnings calls, per company
@@ -98,10 +100,10 @@ async function serve(req: Request, deps: Deps, json: (status: number, body: unkn
         income: inc.results?.[String(f.companyId)] ?? null, balance: bal.results?.[String(f.companyId)] ?? null,
         marketCap: per[i].mc, earnings: per[i].ea };
       if (!c.income) errors[f.ticker] = inc.errors?.[String(f.companyId)] ?? "No quarterly statements";
-      return computeCompany(c, now);
+      return computeCompany(c, now, period);
     }).filter((c) => !errors[c.ticker] || c.quarter !== "n/d");
 
-    const body = { asOf: new Date(now).toISOString(), companies, medians: medians(companies), errors, source: "S&P Global Capital IQ via Kensho" };
+    const body = { asOf: new Date(now).toISOString(), period, companies, medians: medians(companies), errors, source: "S&P Global Capital IQ via Kensho" };
     cache.set(key, { at: now, body });
     return json(200, body);
   } catch (e) {
