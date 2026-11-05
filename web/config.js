@@ -7,5 +7,7 @@ window.DEALDESK_CONFIG = {
   usernameDomain: "deal-desk.local",
   // Optional: Ask Copilot chat panel (README step 8). Both are IDs, not secrets. Leave blank to keep copy-and-open.
   copilotClientId: "",   // Entra app registration's Application (client) ID
-  copilotTenantId: ""    // Ascot's Directory (tenant) ID
+  copilotTenantId: "",   // Ascot's Directory (tenant) ID
+  // Optional: Teams group chat on the CEO view (README step 9). Needs copilotClientId. A chat ID (19:...@thread.v2) or its Teams link.
+  teamsChatId: ""
 };
