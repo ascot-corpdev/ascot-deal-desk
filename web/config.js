@@ -8,6 +8,10 @@ window.DEALDESK_CONFIG = {
   // Optional: Ask Copilot chat panel (README step 8). Both are IDs, not secrets. Leave blank to keep copy-and-open.
   copilotClientId: "",   // Entra app registration's Application (client) ID
   copilotTenantId: "",   // Ascot's Directory (tenant) ID
-  // Optional: Teams group chat on the CEO view (README step 9). Needs copilotClientId. A chat ID (19:...@thread.v2) or its Teams link.
-  teamsChatId: ""
+  // Optional: Teams group chat card on the Deals tab (README step 9). A chat ID (19:...@thread.v2) or its Teams link.
+  teamsChatId: "",
+  teamsChatName: "",     // optional heading, e.g. "The Strategizers"
+  // Optional: Microsoft sign-in app for showing the chat's messages (Chat.Read only). Not needed for the Copilot panel.
+  msClientId: "",
+  msTenantId: ""
 };

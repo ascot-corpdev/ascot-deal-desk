@@ -31,6 +31,9 @@ jobs:
           COPILOT_CLIENT_ID: ${{ vars.COPILOT_CLIENT_ID }}
           COPILOT_TENANT_ID: ${{ vars.COPILOT_TENANT_ID }}
           TEAMS_CHAT_ID: ${{ vars.TEAMS_CHAT_ID }}
+          TEAMS_CHAT_NAME: ${{ vars.TEAMS_CHAT_NAME }}
+          MS_CLIENT_ID: ${{ vars.MS_CLIENT_ID }}
+          MS_TENANT_ID: ${{ vars.MS_TENANT_ID }}
         run: |
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
             echo "::error::Add repository variables SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (Settings > Secrets and variables > Actions > Variables)."
@@ -40,7 +43,7 @@ jobs:
             echo "::error::SUPABASE_PUBLISHABLE_KEY holds a secret key (sb_secret_...). Use the publishable key (sb_publishable_...) and delete this variable's value."
             exit 1;;
           esac
-          node -e 'const c={supabaseUrl:process.env.SUPABASE_URL.trim().replace(/\/+$/,"").replace(/\/(rest|auth)\/v1$/,""),supabaseAnonKey:process.env.SUPABASE_PUBLISHABLE_KEY,usernameDomain:process.env.USERNAME_DOMAIN||"deal-desk.local",copilotClientId:(process.env.COPILOT_CLIENT_ID||"").trim(),copilotTenantId:(process.env.COPILOT_TENANT_ID||"").trim(),teamsChatId:(process.env.TEAMS_CHAT_ID||"").trim()};require("fs").writeFileSync("web/config.js","window.DEALDESK_CONFIG = "+JSON.stringify(c,null,2)+";\n")'
+          node -e 'const c={supabaseUrl:process.env.SUPABASE_URL.trim().replace(/\/+$/,"").replace(/\/(rest|auth)\/v1$/,""),supabaseAnonKey:process.env.SUPABASE_PUBLISHABLE_KEY,usernameDomain:process.env.USERNAME_DOMAIN||"deal-desk.local",copilotClientId:(process.env.COPILOT_CLIENT_ID||"").trim(),copilotTenantId:(process.env.COPILOT_TENANT_ID||"").trim(),teamsChatId:(process.env.TEAMS_CHAT_ID||"").trim(),teamsChatName:(process.env.TEAMS_CHAT_NAME||"").trim(),msClientId:(process.env.MS_CLIENT_ID||"").trim(),msTenantId:(process.env.MS_TENANT_ID||"").trim()};require("fs").writeFileSync("web/config.js","window.DEALDESK_CONFIG = "+JSON.stringify(c,null,2)+";\n")'
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
