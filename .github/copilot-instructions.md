@@ -63,6 +63,10 @@ The patterns used throughout:
 - Peers and the AGL financials link live in the `settings` table (row `benchmark`). AGL financials themselves must never be stored; only the link.
 - Changes to `supabase/functions/comps/*` need a redeploy by the owner (below) as well as a merge.
 
+## Claude on the Comps tab
+
+`supabase/functions/comps-chat` runs a tool loop on Claude Opus 5.5 with two Kensho tools (`get_comps`, `get_statement`, built on `supabase/functions/comps/fetch.ts`, shared with the comps function). The page (`compsChatHTML`, `ccAsk` in `web/index.html`) sends only the Comps table on screen and the plain-text conversation: **never send deal, banker or note data to it**; the tests check this. Any login may use it.
+
 ## Assistant
 
 The header button is **Ask Copilot**. When `copilotClientId` is set (`cpEnabled()`), it opens a side panel (`renderCP()`, state `S.cp`, root `#cpRoot`, body class `cp-docked`) that calls the Microsoft 365 Copilot Chat API (Graph beta `/copilot/conversations`) as the user's Microsoft account. Sign-in is hand-written OAuth code flow with PKCE in a popup (`cpSignIn()`), with no MSAL library, so nothing is added from a CDN. Tokens stay in memory only and are cleared on tracker sign-out. Each question sends `copilotBrief(false)` as `additionalContext`; web grounding is off unless the user ticks "Include web results". The panel's **Copy and open Copilot** and the not-configured path both copy the brief (`copilotBrief()`, under 15,000 characters) and open Microsoft 365 Copilot in a new tab. "Draft with Copilot" in a banker's email box does the same with a drafting prompt. The older in-page Claude panel is switched off with `AI_PANEL = false`; its code and `supabase/functions/claude` remain so it can be turned back on.

@@ -13,3 +13,6 @@ verify_jwt = false
 # like the claude function. Kensho credentials stay in its secrets.
 [functions.comps]
 verify_jwt = false
+
+[functions.comps-chat]
+verify_jwt = false

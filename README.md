@@ -22,6 +22,7 @@ For Copilot (and other coding assistants): how the code works and the rules for 
 | `supabase/migrations/0005_ceo_questions.sql` | Supabase Postgres | CEO questions on deals: lets any login add a question to a deal in their own name. Corp Dev answers with notes. Run once after 0001. |
 | `supabase/functions/digest` | Supabase Edge Function | Optional weekly email digest (overdue, stalled, due this week, cold bankers, what changed), sent through Resend on a Supabase Cron schedule (`supabase/digest_schedule.sql`). |
 | `supabase/functions/comps` | Supabase Edge Function | Optional public comps from S&P Global via Kensho (kfinance) for the Comps tab, CEO view and board pack. Credentials stay in its secrets; nothing is stored. |
+| `supabase/functions/comps-chat` | Supabase Edge Function | Optional Claude chat on the Comps tab. Answers from S&P Global data via Kensho only (the table on screen plus lookups it makes itself); never sees the deal tracker. Any login. |
 | `supabase/functions/claude` | Supabase Edge Function | Not used by the site at present (the Claude panel is switched off with `AI_PANEL` in `web/index.html` in favour of Ask Copilot). Kept so it can be turned back on. |
 | `scripts/logins.mjs` | Your machine | Creates, resets and removes logins with the Supabase service role key. |
 | `web/auth.html` | GitHub Pages (static) | Return page for "Sign in with Microsoft" in the Ask Copilot panel. Hands the sign-in back to the tracker tab and closes. |
@@ -179,6 +180,24 @@ The **Comps** tab shows listed specialty insurance peers (revenue, premiums, pre
 4. On the site, open **Comps**, then **Edit peers** to set the tickers (London listings as `LSE:HSX`) and paste the **AGL financials** link (for example the SharePoint file). The link then appears on the Comps tab and in the CEO view.
 
 Ratios are calculated by the function from the reported figures and labelled "(derived)". ROE is annualised in the quarter and YTD views; P/E always uses twelve-month net income. Combined ratio = operating expenses excluding non-insurance businesses / premiums (S&P has no combined ratio line, so it can differ from the ratio a company reports). BVPS growth = equity / shares outstanding at the latest quarter end versus a year earlier, before dividends. Each company shows its own latest fiscal period, so period ends can differ; P/B and P/E are left blank where the market cap and the accounts are in different currencies.
+
+### 7a. Claude chat on the Comps tab (optional)
+
+The Comps tab gets an **Ask Claude about these comps** box for every login (CEO and Corp Dev). Claude answers from S&P Global data via Kensho only: the Comps table on screen, plus what it looks up itself (the same table for other tickers or periods, or one company's reported statements over up to 12 periods). It never sees deals, bankers or notes, doesn't search the web, and says so when the data doesn't cover a question. Each answer lists what it looked up. It uses Claude Opus 5.5 (set the secret `CLAUDE_MODEL` to change it), with Anthropic's server-side fallback switched on.
+
+Needs section 7 done (Kensho credentials) and an Anthropic API key from [console.anthropic.com](https://console.anthropic.com):
+
+```bash
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+```
+
+```bash
+supabase functions deploy comps-chat --no-verify-jwt
+```
+
+`--no-verify-jwt` is safe: the function checks the caller's login itself. It uses the same `ALLOWED_ORIGIN` secret as the other functions. The comps function shares its Kensho code, so after pulling this change also redeploy it: `supabase functions deploy comps --no-verify-jwt`.
+
+Cost: each question is billed to your Anthropic account (a few cents; more when Claude looks things up). Check that Ascot's Kensho / S&P Global licence allows its data to be sent to an AI provider before switching this on.
 
 ### 8. Copilot chat in the page (optional)
 

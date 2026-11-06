@@ -18,7 +18,7 @@ const deno = process.env.DENO_BIN || "deno";
 const hasDeno = spawnSync(deno, ["--version"], { stdio: "ignore" }).status === 0;
 
 const suites = [
-  ...readdirSync(join(here, "functions")).filter((f) => f.endsWith(".ts")).filter(pick).map((f) => ({ name: "functions/" + f, cmd: deno, args: ["run", "-A", join(here, "functions", f)], deno: true })),
+  ...readdirSync(join(here, "functions")).filter((f) => f.endsWith(".ts")).filter(pick).map((f) => ({ name: "functions/" + f, cmd: deno, args: ["run", "-A", "--node-modules-dir=none", join(here, "functions", f)], deno: true })),
   ...readdirSync(join(here, "web")).filter((f) => f.endsWith(".test.cjs")).filter(pick).map((f) => ({ name: "web/" + f, cmd: process.execPath, args: [join(here, "web", f)] })),
 ];
 

@@ -70,6 +70,17 @@ footer.foot .wrap{display:flex;justify-content:space-between;gap:12px;padding-bl
 .tiles.dealtiles{grid-template-columns:repeat(3,minmax(0,1fr))}
 .tile span em{font-style:normal;color:var(--muted);font-size:12px}
 .stagerow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* Claude on the Comps tab */
+.ccbox{border:1px solid var(--grid);padding:14px 16px;display:grid;gap:10px}
+.ccbox .cch{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.ccbox .cch h3{margin:0;font-size:15px}.ccbox .cch .grow{flex:1}
+.cclog{display:grid;gap:10px;max-height:460px;overflow:auto}
+.ccmsg{padding:8px 12px;max-width:100%;overflow-wrap:anywhere}.ccmsg.u{background:var(--tile);justify-self:end;max-width:85%}
+.ccmsg.a{border-left:3px solid var(--blue)}.ccmsg.a p{margin:0 0 6px}.ccmsg.a ul{margin:0 0 6px;padding-left:18px}
+.ccmsg.err{border-left:3px solid var(--magenta);color:var(--magenta)}
+.ccmsg .look{font-size:12px;color:var(--muted);margin-top:4px}
+.ccform{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}.ccform textarea{width:100%;min-height:44px}
+.ccchips{display:flex;gap:6px;flex-wrap:wrap}
+@media (max-width:560px){.ccform{grid-template-columns:1fr}}
 /* Add / Acquire */
 :root{--acq:var(--blue);--add:var(--teal)}
 .trk{display:inline-block;padding:1px 7px;font-size:11px;font-weight:bold;color:#fff;vertical-align:middle;white-space:nowrap;letter-spacing:.02em}
@@ -700,7 +711,9 @@ function render(){
   document.getElementById("tagDeals").textContent = canEditNow() ? "production" : "view only";
   const v=document.getElementById("view");
   const html = S.view==="ceo" ? renderCEO() : S.view==="deals" ? renderDeals() : S.view==="team" ? renderTeam() : S.view==="comps" ? renderComps() : renderBankers();
+  const keepCc=keepInputs(["cc_input"]);
   v.innerHTML = statusBanner() + html;
+  keepCc(); const ccl=document.getElementById("ccLog"); if(ccl) ccl.scrollTop=ccl.scrollHeight;
   const sq=document.getElementById("q"); if(sq){ sq.value=S.q; } const bq=document.getElementById("bq"); if(bq){ bq.value=S.bq; }
   renderDrawer(); renderAI(); renderCP();
 }
@@ -963,6 +976,56 @@ function aglButton(){
   const {aglUrl}=benchCfg();
   return aglUrl ? `<a class="btn sm linkbtn" href="${esc(aglUrl)}" target="_blank" rel="noopener noreferrer" title="Opens the AGL financials where they're kept; nothing is stored here">AGL financials ↗</a>` : "";
 }
+/* ---------- Claude on the Comps tab ----------
+   Answers questions about the peers from S&P Global data via Kensho only (supabase/functions/comps-chat): the page
+   sends the Comps table on screen and the conversation, never the deal tracker. Any login can use it. */
+const CC_SUGGEST=["Rank the peers by combined ratio and show how far each is from the median",
+  "Who grew premiums fastest, and at what loss ratio?",
+  "Compare P/B with ROE across the peers: who looks cheap or expensive?"];
+function ccState(){ return S.cc || (S.cc={msgs:[], busy:false, ctrl:null}); }
+function ccScreen(){
+  const d=S.comps&&S.comps.data; if(!d) return null;
+  const keep=["ticker","name","quarter","periodEnd","currency","revenue","premiums","netIncome","revenueGrowth","premiumGrowth","lossRatio","expenseRatio","combinedRatio","roe","equity","bvps","bvpsGrowth","marketCap","marketCapCurrency","pb","pe","lastCall","nextCall","notes"];
+  return {period:d.period||compsPeriod(), asOf:d.asOf, units:"$M in each company's reporting currency; ratios in %", companies:d.companies.map(c=>Object.fromEntries(keep.map(k=>[k,c[k]]))), medians:d.medians, notShown:d.errors};
+}
+function compsChatHTML(){
+  const st=ccState(), ready=!!(S.comps&&S.comps.data);
+  const log = st.msgs.map(m=> m.role==="user" ? `<div class="ccmsg u">${esc(m.text)}</div>`
+    : m.err ? `<div class="ccmsg err">${esc(m.err)}</div>`
+    : `<div class="ccmsg a">${md(m.text)}${m.lookups&&m.lookups.length?`<div class="look">Looked up in Kensho: ${m.lookups.map(l=>esc(l.detail)).join("; ")}</div>`:""}</div>`).join("")
+    + (st.busy?`<div class="ccmsg a"><span class="t2">Claude is reading the comps${st.msgs.length>1?"":" and may look up more from Kensho"}. This can take up to a minute.</span></div>`:"");
+  return `<section class="ccbox" aria-label="Ask Claude about these comps">
+    <div class="cch"><h3>Ask Claude about these comps</h3><span class="t2">Uses S&amp;P Global data via Kensho only, not the deal tracker. Check figures before you use them.</span><span class="grow"></span>
+      ${st.msgs.length?`<button type="button" class="btn sm ghost" data-act="cc-clear">New chat</button>`:""}</div>
+    ${st.msgs.length||st.busy?`<div class="cclog" id="ccLog" aria-live="polite">${log}</div>`:""}
+    ${!st.msgs.length&&ready?`<div class="ccchips">${CC_SUGGEST.map(x=>`<button type="button" class="chip" data-act="cc-suggest">${esc(x)}</button>`).join("")}</div>`:""}
+    <div class="ccform"><textarea id="cc_input" rows="2" placeholder="${ready?"e.g. How has W. R. Berkley's combined ratio moved over the last eight quarters?":"Load the comps first"}" aria-label="Question for Claude" ${ready?"":"disabled"}></textarea>
+      ${st.busy?`<button type="button" class="btn" data-act="cc-stop">Stop</button>`:`<button type="button" class="btn primary" data-act="cc-send" ${ready?"":"disabled"}>Ask</button>`}</div>
+  </section>`;
+}
+async function ccAsk(text){
+  const st=ccState(); text=String(text||"").trim(); if(!text||st.busy) return;
+  const screen=ccScreen(); if(!screen){ toast("Load the comps first."); return; }
+  st.msgs.push({role:"user", text}); st.busy=true; st.ctrl=new AbortController(); render();
+  let reply;
+  try{
+    const {data:{session}}=await S.sb.auth.getSession(); if(!session) throw {code:401};
+    // send the conversation as plain text (answers and questions), last 30 turns
+    const turns=st.msgs.filter(m=>m.text&&!m.err).slice(-30); while(turns.length&&turns[0].role!=="user") turns.shift();
+    const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/comps-chat", {method:"POST", signal:st.ctrl.signal,
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":CFG.supabaseAnonKey},
+      body:JSON.stringify({messages:turns.map(m=>({role:m.role,text:m.text})), screen})});
+    let body=null; try{ body=await res.json(); }catch{}
+    if(res.status===404) reply={role:"assistant", err: canEditNow() ? "The comps chat isn't deployed yet. Run: supabase functions deploy comps-chat --no-verify-jwt (README, section 7)." : "The comps chat isn't set up yet. Ask Corp Dev."};
+    else if(!res.ok) reply={role:"assistant", err:(body&&(body.message||body.error))||`The comps chat answered ${res.status}.`};
+    else reply={role:"assistant", text:String(body.text||""), lookups:body.lookups||[]};
+  }catch(e){
+    reply={role:"assistant", err: e&&e.name==="AbortError" ? "Stopped." : e&&e.code===401 ? "Your session ended. Sign in again." : "Couldn't reach the comps chat. Check your connection and try again."};
+  }
+  st.msgs.push(reply); st.busy=false; st.ctrl=null;
+  if(S.view==="comps") render();
+}
+
 function renderComps(){
   loadComps(false);
   const edit=canEditNow(), cfg=benchCfg(), c=S.comps, d=c&&c.data;
@@ -989,6 +1052,7 @@ function renderComps(){
       <td class="c-full" data-label="Earnings calls">${r.lastCall?`${fmtDate(r.lastCall.date.slice(0,10))}`:'<span class="t2">n/d</span>'}${r.nextCall?`<div class="t2">Next: ${fmtDate(r.nextCall.date.slice(0,10))} ${calBtn("ics-call",`data-t="${esc(r.ticker)}"`)}</div>`:""}</td></tr>`).join("")}
     <tr class="med"><td>Median (derived)</td><td class="c-hide"></td><td class="c-hide"></td><td class="c-hide"></td><td class="num c-hide">${pctS(md.premiumGrowth,true)}</td><td class="c-hide"></td><td class="num c-hide">${pctS(md.lossRatio)}</td><td class="num c-hide">${pctS(md.combinedRatio)}</td><td class="num c-hide">${pctS(md.roe)}</td><td class="num c-hide">${pctS(md.bvpsGrowth,true)}</td><td class="c-hide"></td><td class="num c-hide">${xS(md.pb,2)}</td><td class="num c-hide">${xS(md.pe,1)}</td><td class="c-hide"></td></tr>
     </tbody></table></div></section>`:""}
+  ${compsChatHTML()}
   ${errs.length?`<p class="t2">Not shown: ${errs.map(([t,m])=>`<b>${esc(t)}</b> (${esc(m)})`).join("; ")}.</p>`:""}
   <p class="source">Source: S&amp;P Global Capital IQ via Kensho${c&&c.at?`, fetched ${esc(fmtWhen(c.at))}`:""}. ${periodNote} $M in each company's reporting currency. ${growthNote} Loss ratio = policy benefits / premiums (derived); combined ratio = operating expenses excluding non-insurance businesses / premiums, so loss ratio plus expense ratio (derived; hover for the expense ratio); ${roeNote}; BVPS growth = equity / shares outstanding at the latest quarter end versus a year earlier, before dividends (derived); equity = total assets - total liabilities - minority interest where not reported (derived); P/B and P/E (twelve-month net income) from the latest market cap (derived). AGL financials open where they're kept and are not stored here.</p>`;
 }
@@ -2573,6 +2637,10 @@ document.addEventListener("click", async e=>{
       document.querySelector(`.fold[data-k="${CSS.escape(k)}"]`)?.focus(); break; }
     case "fold-all": { const open=t.dataset.open==="1"; firmKeysShown().forEach(k=>loadFolds()[k]=open); saveFolds(); render(); document.querySelector('[data-act="fold-all"]')?.focus(); break; }
     case "ceo-track": setCeoTrack(t.dataset.v); render(); break;
+    case "cc-send": { const i=document.getElementById("cc_input"); const v=i?i.value:""; if(!v.trim()){ toast("Type a question first."); i&&i.focus(); return; } if(i) i.value=""; ccAsk(v); break; }
+    case "cc-suggest": ccAsk(t.textContent); break;
+    case "cc-stop": if(ccState().ctrl) ccState().ctrl.abort(); break;
+    case "cc-clear": if(ccState().ctrl) ccState().ctrl.abort(); S.cc=null; render(); document.getElementById("cc_input")?.focus(); break;
     case "comps-refresh": loadComps(true); render(); break;
     case "comps-period": setCompsPeriod(t.dataset.v); render(); break;
     case "cs-defaults": { const ta=document.getElementById("cs_peers"); if(ta) ta.value=DEFAULT_PEERS.join("\n"); break; }
@@ -2612,6 +2680,7 @@ document.addEventListener("click", async e=>{
   }
 });
 document.addEventListener("keydown", e=>{
+  if(e.target.id==="cc_input" && e.key==="Enter" && !e.shiftKey && !e.isComposing){ e.preventDefault(); document.querySelector('button[data-act="cc-send"]')?.click(); return; }
   if(e.key==="Tab" && S.drawer){
     const d=document.querySelector("#drawerRoot .drawer"); const ai=document.querySelector("#aiRoot .ai"), cp=document.querySelector("#cpRoot .ai");
     if(d && !(ai && ai.contains(document.activeElement)) && !(cp && cp.contains(document.activeElement))){
@@ -2748,7 +2817,7 @@ async function doLogin(){
 async function signOut(){
   try{ await S.sb.auth.signOut(); }catch{}
   stopData(); S.session=null; S.drawer=null; S.ai.open=false; S.ai.msgs=[]; S.ai.api=[]; S.sample=null;
-  if(S.cp.ctrl) S.cp.ctrl.abort(); if(S.cp.cancelSignIn) S.cp.cancelSignIn(); S.cp=cpFresh(); S.tc=tcFresh();
+  if(S.cp.ctrl) S.cp.ctrl.abort(); if(S.cp.cancelSignIn) S.cp.cancelSignIn(); S.cp=cpFresh(); S.tc=tcFresh(); if(S.cc&&S.cc.ctrl) S.cc.ctrl.abort(); S.cc=null;
   document.getElementById("whoDot").hidden=true; history.replaceState(null,"",location.pathname); render();
 }
 function loginHTML(){

@@ -11,7 +11,8 @@
 // POST /functions/v1/comps  {"tickers": ["WRB", "LSE:HSX", ...], "period": "quarter" | "ytd" | "ltm"}  ->  {asOf, period, companies, medians, errors}
 
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
-import { cleanTickers, computeCompany, medians, PERIOD_TYPE, type CompanyIn, type Earnings, type MarketCaps, type PeriodKind, type StatementsResult } from "./core.ts";
+import { cleanTickers, PERIOD_TYPE, type PeriodKind } from "./core.ts";
+import { buildComps } from "./fetch.ts";
 import { Kensho, KenshoError } from "./kensho.ts";
 
 type Env = (k: string) => string | undefined;
@@ -66,47 +67,8 @@ async function serve(req: Request, deps: Deps, json: (status: number, body: unkn
   if (!client || client.key !== ckey || client.f !== deps.fetch) client = { key: ckey, f: deps.fetch, k: new Kensho(creds, deps.fetch, deps.now ?? Date.now) };
   const k = client.k;
   try {
-    // 1. tickers -> company ids
-    const ids = await k.call<{ data: Record<string, { company_id?: number; error?: string; company_name?: string; name?: string }> }>("ids", { identifiers: tickers });
-    const errors: Record<string, string> = {};
-    const found: { ticker: string; companyId: number; name: string }[] = [];
-    for (const t of tickers) {
-      const r = ids.data?.[t] ?? ids.data?.[t.toLowerCase()];
-      if (r?.company_id) found.push({ ticker: t, companyId: r.company_id, name: r.company_name ?? r.name ?? t });
-      else errors[t] = r?.error ?? "Not found in Kensho";
-    }
-    const cids = found.map((f) => f.companyId);
-    if (!cids.length) return json(200, { asOf: new Date(now).toISOString(), period, companies: [], medians: {}, errors });
-
-    // 2. statements for everyone at once: five periods of income in the chosen series (latest, year-ago, and
-    //    what's needed for twelve-month net income), one balance sheet
-    type Post = { results: Record<string, StatementsResult>; errors?: Record<string, string> };
-    const [inc, bal] = await Promise.all([
-      k.call<Post>("statements/", { company_ids: cids, statement_type: "income_statement", period_type: PERIOD_TYPE[period], num_periods: 5 }),
-      k.call<Post>("statements/", { company_ids: cids, statement_type: "balance_sheet", period_type: "quarterly", num_periods: 5 }),
-    ]);
-    // 3. market cap and shares outstanding (from ten days before the year-ago balance sheet to today, so the
-    //    latest market cap and the share counts for book value per share come in one call) and earnings calls
-    const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-    const per = await Promise.all(found.map(async (f) => {
-      const ends = Object.values(bal.results?.[String(f.companyId)]?.periods ?? {}).map((p) => Date.parse(p.period_end_date)).filter((t) => isFinite(t));
-      const oldest = Math.max(Math.min(now, ...ends.filter((t) => now - t < 500 * 86_400_000)), now - 500 * 86_400_000);
-      const [mc, ea] = await Promise.all([
-        k.call<MarketCaps>(`market_cap/${f.companyId}/${day(oldest - 10 * 86_400_000)}/${day(now)}`).catch(() => null),
-        k.call<Earnings>(`earnings/${f.companyId}`).catch(() => null),
-      ]);
-      return { mc, ea };
-    }));
-
-    const companies = found.map((f, i) => {
-      const c: CompanyIn = { ticker: f.ticker, name: f.name, companyId: f.companyId,
-        income: inc.results?.[String(f.companyId)] ?? null, balance: bal.results?.[String(f.companyId)] ?? null,
-        marketCap: per[i].mc, earnings: per[i].ea };
-      if (!c.income) errors[f.ticker] = inc.errors?.[String(f.companyId)] ?? "No quarterly statements";
-      return computeCompany(c, now, period);
-    }).filter((c) => !errors[c.ticker] || c.quarter !== "n/d");
-
-    const body = { asOf: new Date(now).toISOString(), period, companies, medians: medians(companies), errors, source: "S&P Global Capital IQ via Kensho" };
+    const { companies, medians: md, errors } = await buildComps(k, tickers, period, now);
+    const body = { asOf: new Date(now).toISOString(), period, companies, medians: md, errors, source: "S&P Global Capital IQ via Kensho" };
     cache.set(key, { at: now, body });
     return json(200, body);
   } catch (e) {
