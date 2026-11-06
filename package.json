@@ -4,9 +4,14 @@
   "type": "module",
   "scripts": {
     "logins": "node scripts/logins.mjs",
-    "serve": "npx --yes http-server@14.1.1 web -p 8080 -c-1"
+    "serve": "npx --yes http-server@14.1.1 web -p 8080 -c-1",
+    "test": "node tests/run.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.2"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0",
+    "pptxgenjs": "4.0.1"
   }
 }

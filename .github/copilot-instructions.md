@@ -92,9 +92,14 @@ SQL migrations: paste into **Supabase > SQL editor** and run.
 
 ## Checking changes
 
-There's no automated test suite in the repo yet. Before opening a pull request:
+Run the tests before opening a pull request (see `tests/README.md`):
 
-1. Serve the site and open every tab (CEO view, Deals, Banker CRM, Team, Comps) as a Corp Dev login and as the CEO login, at desktop width and at 390px.
-2. Open, edit and save a deal and a banker; check the change appears in the drawer's History.
-3. Check the browser console has no errors.
-4. For `supabase/functions/*` changes, run `deno check` on the function's `index.ts`.
+```bash
+npm install && npx playwright install chromium
+npm test                 # everything (function suites need Deno)
+npm test -- comps        # just the suites whose names contain "comps"
+```
+
+The **Tests** workflow runs the same on every pull request; don't merge with a red check. If a change is meant to alter something a test checks, update that test in the same pull request, and add a test for new behaviour (copy the nearest `tests/web/*.test.cjs`). Never weaken or delete a check just to get it green.
+
+The repository is public: test data must use made-up people, emails and deal codenames (see `tests/fixtures/`), never real ones.

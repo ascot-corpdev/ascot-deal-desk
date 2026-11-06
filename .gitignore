@@ -8,3 +8,6 @@ supabase/.temp/
 *.pem
 *.key
 *.p8
+
+# Test output (screenshots, board packs)
+tests/out/

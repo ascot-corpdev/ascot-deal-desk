@@ -1806,7 +1806,7 @@ const isEmail = v => /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(String(v||"")
 function mailBoxHTML(b){
   return `<div><h3 class="sec">Email</h3><div class="mailbox">
     <div class="to" id="mailTo">${isEmail(b.email)?`To: <a href="mailto:${esc(String(b.email).trim())}">${esc(String(b.email).trim())}</a>`:`<span class="t2">No email address yet. Add it under Contact above, then write here.</span>`}</div>
-    <label class="f">Subject<input type="text" id="m_subject" placeholder="Following up on Project Otter"></label>
+    <label class="f">Subject<input type="text" id="m_subject" placeholder="Following up on our call"></label>
     <label class="f">Message<textarea id="m_body" rows="4" placeholder="Write it here, or draft it with Copilot"></textarea></label>
     <label class="chk"><input type="checkbox" id="m_log" checked> Log it as an email interaction (updates last contact)</label>
     <div class="acts"><button type="button" class="btn primary sm" data-act="mail-send">Open in email app</button><button type="button" class="btn sm" data-act="mail-copilot" title="Copies a drafting prompt and opens Microsoft 365 Copilot">Draft with Copilot</button></div>

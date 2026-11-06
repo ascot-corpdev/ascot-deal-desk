@@ -1,0 +1,10 @@
+const { chromium } = require("playwright"); const fs=require("fs");
+const OUTDIR=require("path").join(__dirname,"../out"); require("fs").mkdirSync(OUTDIR,{recursive:true});
+const WEB=require("path").join(__dirname,"../../web"); const MOCK=fs.readFileSync(__dirname+"/mock-supabase.js","utf8"); const BASE="http://localhost:8123/";
+(async()=>{ const b=await chromium.launch(); const p=await b.newPage(); const errs=[]; p.on("pageerror",e=>errs.push(String(e)));
+  await p.route("**/*",r=>{const u=r.request().url(); if(/supabase\.js/.test(u)) return r.fulfill({contentType:"application/javascript",body:MOCK}); if(/config\.js/.test(u)) return r.fulfill({contentType:"application/javascript",body:'window.DEALDESK_CONFIG={supabaseUrl:"https://a.supabase.co",supabaseAnonKey:"k"};'}); if(u.startsWith(BASE)) return r.fulfill({contentType:"text/html",body:fs.readFileSync(WEB+"/index.html","utf8")}); return r.fulfill({status:404,body:""});});
+  await p.addInitScript(()=>{ window.__seed=[["deals","d1",{codename:"Harbor",stage:"LOI",ev:100,updatedAt:Date.now()}],["notes","n1",{kind:"Call",text:"Secret context",dealId:"d1",createdAt:Date.now()}]]; });
+  await p.goto(BASE+"#ceo"); await p.waitForTimeout(500);
+  const t=await p.textContent("main"); const ok=!t.includes("Latest context from the team") && !t.includes("Secret context") && t.includes("Outcomes in");
+  await p.goto(BASE+"#deal/d1"); await p.waitForTimeout(200); const still=(await p.textContent("#drawerRoot")).includes("Secret context");
+  console.log(ok && still && !errs.length ? "3 passed, 0 failed" : "FAIL "+JSON.stringify({ok,still,errs})); await b.close(); })();

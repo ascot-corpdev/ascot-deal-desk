@@ -25,6 +25,7 @@ For Copilot (and other coding assistants): how the code works and the rules for 
 | `scripts/logins.mjs` | Your machine | Creates, resets and removes logins with the Supabase service role key. |
 | `web/auth.html` | GitHub Pages (static) | Return page for "Sign in with Microsoft" in the Ask Copilot panel. Hands the sign-in back to the tracker tab and closes. |
 | `.github/workflows/pages.yml` | GitHub Actions | Writes `web/config.js` from repository variables and publishes `web/` to Pages. |
+| `tests/`, `.github/workflows/tests.yml` | GitHub Actions | About 500 automated checks of the site and the functions, run on every pull request (`npm test` locally). See `tests/README.md`. |
 
 Passwords are checked by Supabase Auth on the server, and the database refuses reads and writes that a login's role does not allow, so the public URL shows nothing without a valid login.
 
