@@ -11,3 +11,4 @@ supabase/.temp/
 
 # Test output (screenshots, board packs)
 tests/out/
+deno.lock
