@@ -184,6 +184,7 @@ tr.inrow td:first-child{padding-left:24px}
 .colleagues a{font-size:13px}
 .ceohead{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-start;justify-content:space-between}
 .ceohead>div:first-child{flex:1 1 420px;min-width:0}
+.ceohead.ceoacts-only{justify-content:flex-end}.ceohead.ceoacts-only>div:first-child{flex:0 1 auto}
 .ceoacts{display:flex;gap:8px;flex-wrap:wrap}
 @media print{
   @page{size:A4 landscape;margin:12mm}
@@ -681,7 +682,6 @@ function renderCEO(){
   const outYear = d => d.outcomeDate ? +String(d.outcomeDate).slice(0,4) : new Date(d.stageSince||d.updatedAt||0).getFullYear();
   const closedY = deals.filter(d=>d.stage==="Closed" && outYear(d)===yr), deadY = deals.filter(d=>d.stage==="Dead" && outYear(d)===yr);
   const reasons = Object.entries(deadY.reduce((m,d)=>{ const r=d.deadReason||"No reason recorded"; m[r]=(m[r]||0)+1; return m; },{})).sort((a,b)=>b[1]-a[1]);
-  const title = `${active.length} active deal${active.length===1?"":"s"}; ${late.length} at LOI or later worth ${money(lateEv)} EV`;
   const byStage = ACTIVE.map(st => { const ds=active.filter(d=>d.stage===st); return {st, n:ds.length, ev:ds.reduce((s,d)=>s+(+d.ev||0),0)}; });
   const maxEv = Math.max(1,...byStage.map(b=>b.ev));
   const upcoming = active.filter(d=>d.nextStepDate && daysUntil(d.nextStepDate) <= 30).sort((a,b)=>a.nextStepDate.localeCompare(b.nextStepDate)).slice(0,7);
@@ -691,8 +691,7 @@ function renderCEO(){
   const X = ex ? `<span class="ex">Example</span>` : "";
 
   return `
-  <section class="ceohead"><div><h2 class="action-title">${esc(title)}</h2>
-    <p class="sub">${overdue.length ? `<span class="over">${overdue.length} next step${overdue.length===1?" is":"s are"} past due.</span> ` : ""}${stalled.length ? `<b>${stalled.length} deal${stalled.length===1?" has":"s have"} stalled</b> (no updates or notes in ${STALL_DAYS} days). ` : ""}Pipeline EV ${money(ev)} across ${active.length} live situation${active.length===1?"":"s"}.</p></div>
+  <section class="ceohead ceoacts-only">
     <div class="ceoacts"><button type="button" class="btn sm" data-act="board-pack">Board pack (.pptx)</button><button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></section>
   <section class="tiles" aria-label="Headline numbers">
     <div class="tile"><b class="c-navy">${active.length}</b><span>Active deals</span><small>${deals.length - active.length} closed, held or dead</small></div>
