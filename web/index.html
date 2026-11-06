@@ -70,6 +70,17 @@ footer.foot .wrap{display:flex;justify-content:space-between;gap:12px;padding-bl
 .tiles.dealtiles{grid-template-columns:repeat(3,minmax(0,1fr))}
 .tile span em{font-style:normal;color:var(--muted);font-size:12px}
 .stagerow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* Add / Acquire */
+:root{--acq:var(--blue);--add:var(--teal)}
+.trk{display:inline-block;padding:1px 7px;font-size:11px;font-weight:bold;color:#fff;vertical-align:middle;white-space:nowrap;letter-spacing:.02em}
+.t1 .trk{margin-left:6px}
+.trk.trk-acq{background:var(--acq)}.trk.trk-add{background:var(--add)}
+tr.trk-acq>td:first-child{box-shadow:inset 4px 0 0 var(--acq)}tr.trk-add>td:first-child{box-shadow:inset 4px 0 0 var(--add)}
+.fchip .sw.trk-acq{background:var(--acq)}.fchip .sw.trk-add{background:var(--add)}
+.ptrack.split{display:flex}.ptrack.split i{flex:none}
+.ptrack i.trk-acq{background:var(--acq)}.ptrack i.trk-add{background:var(--add)}
+.tlegend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin:0 0 6px}.tlegend span{display:inline-flex;align-items:center;gap:6px}
+.tlegend i{display:inline-block;width:12px;height:12px}.tlegend i.trk-acq{background:var(--acq)}.tlegend i.trk-add{background:var(--add)}
 /* CEO questions on a deal */
 .drawer.still{animation:none!important}
 .qtag{display:inline-block;margin-left:6px;padding:1px 6px;font-size:11px;font-weight:bold;color:#fff;background:var(--magenta);vertical-align:middle;white-space:nowrap}
@@ -398,6 +409,7 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
   table.cards,table.cards tbody{display:block;width:100%}
   table.cards thead{display:none}
   table.cards tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;padding:12px;border:1px solid var(--grid);margin-bottom:10px;background:var(--surface)}
+  table.cards tr.trk-acq{border-left:4px solid var(--acq)}table.cards tr.trk-add{border-left:4px solid var(--add)}table.cards tr.trk-acq>td:first-child,table.cards tr.trk-add>td:first-child{box-shadow:none}
   table.cards tr.late{border-left:4px solid var(--magenta)}
   table.cards tr.late td:first-child{box-shadow:none}
   table.cards td{display:block;padding:0;border:0;min-width:0;max-width:none;text-align:left;white-space:normal}
@@ -462,11 +474,19 @@ const STAGE_CLASS = {"Screening":"st-1","NDA signed":"st-2","LOI":"st-3","Dilige
 const STAGE_ALIAS = {"IOI":"LOI","Signed":"Closed"};
 function normDeal(d){ if(d && STAGE_ALIAS[d.stage]) d.stage=STAGE_ALIAS[d.stage]; return d; }
 const TYPES = ["Acquisition","Minority investment","MGA / program","Reinsurance / capacity","Divestiture","Partnership","Other"];
+/* Two tracks: Acquire (buying all or part of a company) and Add (bringing in business or capacity without buying a
+   company). A deal's track follows its type unless someone sets it on the deal (d.track). */
+const TRACKS = ["Acquire","Add"];
+const ADD_TYPES = ["MGA / program","Reinsurance / capacity","Partnership"];
+const defaultTrack = type => ADD_TYPES.includes(type) ? "Add" : "Acquire";
+const trackOf = d => TRACKS.includes(d.track) ? d.track : defaultTrack(d.type);
+const TRACK_CLASS = {Acquire:"trk-acq", Add:"trk-add"};
+const trackPill = d => `<span class="trk ${TRACK_CLASS[trackOf(d)]}" title="${trackOf(d)==="Add"?"Add: business or capacity without buying a company":"Acquire: buying all or part of a company"}">${trackOf(d)}</span>`;
 const PRIORITIES = ["High","Medium","Low"];
 const ORIGINS = ["Banker-led","Proprietary","Inbound","Auction"];
 const RELS = ["Strong","Active","Developing","Dormant"];
 const NOTE_KINDS = ["Update","Call","Email","Meeting","Diligence","Board / IC","Decision"];
-const DEAL_FIELDS = ["codename","target","type","sector","stage","priority","origin","ev","gwp","equity","netIncome","stake","lead","nextStep","nextStepDate","ceoSummary","keyRisks","bankerIds","links"];
+const DEAL_FIELDS = ["codename","target","type","sector","stage","priority","origin","track","ev","gwp","equity","netIncome","stake","lead","nextStep","nextStepDate","ceoSummary","keyRisks","bankerIds","links"];
 const BANKER_FIELDS = ["name","firm","title","email","phone","coverage","relationship","lastContact","context"];
 
 /* ---------- example data (in memory only, never written) ---------- */
@@ -698,7 +718,10 @@ function renderCEO(){
   const outYear = d => d.outcomeDate ? +String(d.outcomeDate).slice(0,4) : new Date(d.stageSince||d.updatedAt||0).getFullYear();
   const closedY = deals.filter(d=>d.stage==="Closed" && outYear(d)===yr), deadY = deals.filter(d=>d.stage==="Dead" && outYear(d)===yr);
   const reasons = Object.entries(deadY.reduce((m,d)=>{ const r=d.deadReason||"No reason recorded"; m[r]=(m[r]||0)+1; return m; },{})).sort((a,b)=>b[1]-a[1]);
-  const byStage = ACTIVE.map(st => { const ds=active.filter(d=>d.stage===st); return {st, n:ds.length, ev:ds.reduce((s,d)=>s+(+d.ev||0),0)}; });
+  const byStage = ACTIVE.map(st => { const ds=active.filter(d=>d.stage===st); const sum=a=>a.reduce((s,d)=>s+(+d.ev||0),0);
+    return {st, n:ds.length, ev:sum(ds), acq:sum(ds.filter(d=>trackOf(d)==="Acquire")), add:sum(ds.filter(d=>trackOf(d)==="Add")), nAcq:ds.filter(d=>trackOf(d)==="Acquire").length, nAdd:ds.filter(d=>trackOf(d)==="Add").length}; });
+  const nAcq=active.filter(d=>trackOf(d)==="Acquire").length, nAdd=active.length-nAcq;
+  const evAcq=active.filter(d=>trackOf(d)==="Acquire").reduce((s,d)=>s+(+d.ev||0),0), evAdd=ev-evAcq;
   const maxEv = Math.max(1,...byStage.map(b=>b.ev));
   const upcoming = active.filter(d=>d.nextStepDate && daysUntil(d.nextStepDate) <= 30).sort((a,b)=>a.nextStepDate.localeCompare(b.nextStepDate)).slice(0,7);
   const sorted = [...active].sort((a,b)=>ACTIVE.indexOf(b.stage)-ACTIVE.indexOf(a.stage) || (+b.ev||0)-(+a.ev||0));
@@ -710,16 +733,17 @@ function renderCEO(){
   <section class="ceohead ceoacts-only">
     <div class="ceoacts"><button type="button" class="btn sm" data-act="board-pack">Board pack (.pptx)</button><button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></section>
   <section class="tiles" aria-label="Headline numbers">
-    <div class="tile"><b class="c-navy">${active.length}</b><span>Active deals</span><small>${deals.length - active.length} closed, held or dead</small></div>
+    <div class="tile"><b class="c-navy">${active.length}</b><span>Active deals</span><small>${nAcq} Acquire · ${nAdd} Add</small></div>
     <div class="tile"><b class="c-mag">${late.length}</b><span>At LOI or diligence</span><small>${money(lateEv)} EV</small></div>
-    <div class="tile"><b class="c-blue">${money(ev)}</b><span>Active pipeline EV</span><small>Sum of enterprise value (derived)</small></div>
+    <div class="tile"><b class="c-blue">${money(ev)}</b><span>Active pipeline EV</span><small>Acquire ${money(evAcq)} · Add ${money(evAdd)} (derived)</small></div>
     <div class="tile"><b class="c-teal">${engaged}</b><span>Bankers engaged</span><small>Contact in the last 90 days</small></div>
   </section>
   <section class="cols">
     <div><h3 class="sec">Pipeline by stage</h3>
       <div class="pipe" role="table" aria-label="Active pipeline by stage">
+        <div class="tlegend" aria-label="Colour key"><span><i class="trk-acq"></i>Acquire ${esc(money(evAcq))} (${nAcq})</span><span><i class="trk-add"></i>Add ${esc(money(evAdd))} (${nAdd})</span></div>
         <div class="pr ph" role="row"><span role="columnheader">Stage</span><span role="columnheader" class="num">Deals</span><span role="columnheader" class="num">EV ($M)</span><span role="columnheader">Share of pipeline EV</span></div>
-        ${byStage.map(b=>{ const pct = ev ? Math.round(b.ev/ev*100) : 0; return `<div class="pr" role="row"><span role="cell">${stagePill(b.st)}</span><span role="cell" class="num pn">${b.n}</span><span role="cell" class="num pn">${b.n?esc(mnum(b.ev)):"0"}</span><span role="cell" class="pshare"><span class="ptrack"><i class="${STAGE_CLASS[b.st]}" style="width:${pct}%"></i></span><span class="ppct">${pct}%</span></span></div>`; }).join("")}
+        ${byStage.map(b=>{ const pct = ev ? Math.round(b.ev/ev*100) : 0; return `<div class="pr" role="row"><span role="cell">${stagePill(b.st)}</span><span role="cell" class="num pn">${b.n}</span><span role="cell" class="num pn">${b.n?esc(mnum(b.ev)):"0"}</span><span role="cell" class="pshare"><span class="ptrack split" title="Acquire ${esc(money(b.acq))} (${b.nAcq}) · Add ${esc(money(b.add))} (${b.nAdd})"><i class="trk-acq" style="width:${ev?b.acq/ev*100:0}%"></i><i class="trk-add" style="width:${ev?b.add/ev*100:0}%"></i></span><span class="ppct">${pct}%</span></span></div>`; }).join("")}
         <div class="pr pt" role="row"><span role="cell">Active pipeline</span><span role="cell" class="num pn">${active.length}</span><span role="cell" class="num pn">${esc(mnum(ev))}</span><span role="cell"></span></div>
       </div>
     </div>
@@ -730,7 +754,7 @@ function renderCEO(){
   <section><h3 class="sec">Deal summaries and documents</h3>
     ${sorted.length ? `<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr><th>Deal</th><th>Stage</th><th>Summary</th><th>Profile</th><th>Other docs</th></tr></thead><tbody>
     ${sorted.map(d=>{
-      return `<tr class="click" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${X}${stallTag(d)}${qTag(d)}</div><div class="t2">${esc(d.target||"")}</div></td><td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="summary c-full">${d.ceoSummary?`<div class="clamp">${esc(d.ceoSummary)}</div>${d.ceoSummary.length>150?`<span class="more">More</span>`:""}`:'<span class="t2">No summary yet</span>'}</td><td class="c-full" data-label="Profile">${links(profileLinks(d.links),"No profile yet")}</td><td class="c-full" data-label="Other docs">${links(otherLinks(d.links),"None")}</td></tr>`; }).join("")}
+      return `<tr class="click ${TRACK_CLASS[trackOf(d)]}" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${trackPill(d)}${X}${stallTag(d)}${qTag(d)}</div><div class="t2">${esc(d.target||"")}</div></td><td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="summary c-full">${d.ceoSummary?`<div class="clamp">${esc(d.ceoSummary)}</div>${d.ceoSummary.length>150?`<span class="more">More</span>`:""}`:'<span class="t2">No summary yet</span>'}</td><td class="c-full" data-label="Profile">${links(profileLinks(d.links),"No profile yet")}</td><td class="c-full" data-label="Other docs">${links(otherLinks(d.links),"None")}</td></tr>`; }).join("")}
     </tbody></table></div>` : `<div class="empty"><p>No active deals.</p></div>`}
   </section>
   ${benchStripHTML()}
@@ -748,7 +772,7 @@ function renderCEO(){
 }
 
 const PRIORITY_ORDER=["High","Medium","Low"];
-const DEAL_FILTERS = [["active","Active",isActive],["mine","Mine",d=>isActive(d)&&!!S.meId&&!!roleOn(d,S.meId)],["overdue","Overdue",isOverdue],["stalled","Stalled",isStalled],["questions","Open questions",d=>openQs(d)>0]].concat(STAGES.map(st=>[st,st,d=>d.stage===st])).concat([["all","All",()=>true]]);
+const DEAL_FILTERS = [["active","Active",isActive],["acquire","Acquire",d=>isActive(d)&&trackOf(d)==="Acquire"],["add","Add",d=>isActive(d)&&trackOf(d)==="Add"],["mine","Mine",d=>isActive(d)&&!!S.meId&&!!roleOn(d,S.meId)],["overdue","Overdue",isOverdue],["stalled","Stalled",isStalled],["questions","Open questions",d=>openQs(d)>0]].concat(STAGES.map(st=>[st,st,d=>d.stage===st])).concat([["all","All",()=>true]]);
 const DEAL_SORTS = {
   deal:{cmp:(a,b)=>String(a.codename||"").localeCompare(String(b.codename||"")), dir:1},
   stage:{cmp:(a,b)=>STAGES.indexOf(a.stage)-STAGES.indexOf(b.stage), dir:1},
@@ -791,7 +815,7 @@ function dealChipsHTML(){
     const n=base.filter(f).length; const on=S.stageFilter===v;
     if(!on && !n && !["active","all"].includes(v)) return "";
     const cls = v==="overdue" ? " late" : v==="stalled" ? " stale" : v==="questions" ? " qchip" : "";
-    const sw = STAGE_CLASS[v] ? `<span class="sw ${STAGE_CLASS[v]}" aria-hidden="true"></span>` : "";
+    const sw = STAGE_CLASS[v] ? `<span class="sw ${STAGE_CLASS[v]}" aria-hidden="true"></span>` : v==="acquire"||v==="add" ? `<span class="sw ${v==="add"?"trk-add":"trk-acq"}" aria-hidden="true"></span>` : "";
     return `<button type="button" class="fchip${cls}" data-act="dfilter" data-v="${esc(v)}" aria-pressed="${on}">${sw}${esc(label)}<b>${n}</b></button>`; }).join("")}</div>`;
 }
 
@@ -810,8 +834,8 @@ function renderDeals(){
     ${rows.length ? `<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr>${sortTh("Deal","deal")}${sortTh("Stage","stage")}${sortTh("Priority","priority")}${sortTh("EV ($M)","ev","num")}${sortTh("Next step","next")}<th>Bankers</th>${sortTh("Lead","lead","opt")}${sortTh("Updated","updated","opt")}<th><span class="sr">Actions</span></th></tr></thead><tbody>
     ${rows.map(d=>{ const late=isOverdue(d); const bk=(d.bankerIds||[]).map(id=>bankers.find(b=>b.id===id)).filter(Boolean);
       const meta=[moneyM(d.ev)&&("EV "+moneyM(d.ev)), stakeNote(d), d.priority&&(d.priority+" priority"), d.lead].filter(Boolean).join(" · ");
-      return `<tr class="click${late?" late":""}" data-act="${ex||!edit?"view-deal":"edit-deal"}" data-id="${esc(d.id)}" tabindex="0">
-      <td><div class="t1">${esc(d.codename)}${X}${stallTag(d)}${qTag(d)}</div><div class="t2">${esc(d.target||"")}</div><div class="t2">${esc([d.type,d.sector].filter(Boolean).join(" · "))}</div>${meta?`<div class="t2 mob">${esc(meta)}</div>`:""}${S.noteHits&&S.noteHits[d.id]?`<div class="t2 hit">In a note: ${S.noteHits[d.id]}</div>`:""}</td>
+      return `<tr class="click ${TRACK_CLASS[trackOf(d)]}${late?" late":""}" data-act="${ex||!edit?"view-deal":"edit-deal"}" data-id="${esc(d.id)}" tabindex="0">
+      <td><div class="t1">${esc(d.codename)}${trackPill(d)}${X}${stallTag(d)}${qTag(d)}</div><div class="t2">${esc(d.target||"")}</div><div class="t2">${esc([d.type,d.sector].filter(Boolean).join(" · "))}</div>${meta?`<div class="t2 mob">${esc(meta)}</div>`:""}${S.noteHits&&S.noteHits[d.id]?`<div class="t2 hit">In a note: ${S.noteHits[d.id]}</div>`:""}</td>
       <td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="c-hide">${esc(d.priority||"")}</td>
       <td class="num c-hide">${esc(mnum(d.ev))}${stakeNote(d)?`<div class="t2">${esc(stakeNote(d))}</div>`:""}</td>
       <td class="c-full" data-label="Next step">${esc(d.nextStep||"")||'<span class="t2">None set</span>'}${d.nextStepDate?`<div class="t2${late?" over":""}">${late?"Overdue: ":""}${fmtDate(d.nextStepDate)}</div>`:""}</td>
@@ -1228,6 +1252,11 @@ function icsNextStep(d){
 }
 function calBtn(act, attrs){ return S.downloads ? `<button type="button" class="calbtn" data-act="${act}" ${attrs} title="Downloads a calendar file for Outlook">Add to calendar</button>` : ""; }
 
+/* Store a track only when it differs from what the type implies, or was set on the deal already: then deals keep
+   following their type, and the change history shows only real choices. */
+function trackField(){ const el=document.getElementById("f_track"); if(!el) return undefined;
+  const d=S.drawer&&S.drawer.id?S.deals.find(x=>x.id===S.drawer.id):null, v=el.value;
+  return (d&&TRACKS.includes(d.track)) || v!==defaultTrack(val("f_type")) ? v : (d&&d.track!==undefined?d.track:undefined); }
 function multiplesLine(d){ return `P/BV ${multS(dealPB(d),2)} · P/E ${multS(dealPE(d),1)} (calculated from the valuation)`; }
 function viewDealHTML(id){
   const {deals,bankers,notes}=D(); const d=deals.find(x=>x.id===id); if(!d) return `<div class="drawer-h"><h2 id="drTitle">Deal not found</h2><button class="btn ghost" data-act="close">Close</button></div>`;
@@ -1235,7 +1264,7 @@ function viewDealHTML(id){
   const ns=notes.filter(n=>n.dealId===id && !isQA(n)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,8);
   return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${esc([d.type||"Deal",d.sector].filter(Boolean).join(" · "))}</div><h2 id="drTitle">${esc(d.codename)}${d.target?`: ${esc(d.target)}`:""}</h2></div>${linkBtn("deal",d.id)}<button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
   <div class="drawer-b">
-    <div class="stagerow">${stagePill(d.stage)}${ageHTML(d).replace('class="t2 age"','class="t2"')}</div>
+    <div class="stagerow">${trackPill(d)}${stagePill(d.stage)}${ageHTML(d).replace('class="t2 age"','class="t2"')}</div>
     <div class="tiles dealtiles">${[[money(d.ev),"Valuation"+(stakeNote(d)?` <em>(100%; ${esc(stakeNote(d))})</em>`:"")],[money(d.gwp),"GWP"],[money(d.equity),"Equity"],[money(d.netIncome),"Net income <em>(LTM)</em>"],
       [multS(dealPB(d),2),"P/BV <em>(calculated)</em>"],[multS(dealPE(d),1),"P/E <em>(calculated)</em>"]].map(([v,l])=>`<div class="tile"><b style="font-size:22px">${esc(v)}</b><span>${l}</span></div>`).join("")}</div>
     <div><h3 class="sec">Summary</h3><p class="prose">${esc(d.ceoSummary||"No summary yet.")}</p></div>
@@ -1283,6 +1312,7 @@ function dealFormHTML(dr){
       <label class="f">Codename<input type="text" id="f_codename" required value="${esc(d.codename||"")}" placeholder="Project Harbor"></label>
       <label class="f">Target<input type="text" id="f_target" value="${esc(d.target||"")}" placeholder="Company or description"></label>
       <label class="f">Deal type${sel("f_type",TYPES,d.type||TYPES[0])}</label>
+      <label class="f">Add or Acquire <em>(follows the deal type unless you change it)</em><select id="f_track" data-auto="${TRACKS.includes(d.track)?"0":"1"}">${TRACKS.map(t=>`<option${t===trackOf({...d,type:d.type||TYPES[0]})?" selected":""}>${t}</option>`).join("")}</select></label>
       <label class="f">Sector / line<input type="text" id="f_sector" value="${esc(d.sector||"")}" placeholder="E&amp;S casualty"></label>
       <label class="f">Stage${sel("f_stage",STAGES,d.stage||"Screening")}</label>
       <label class="f">Priority${sel("f_priority",PRIORITIES,d.priority||"Medium")}</label>
@@ -1395,7 +1425,7 @@ const numOrBlank = s => s==="" ? "" : (isNaN(+s) ? "" : +s);
 
 function dealFormValues(){
   readLinks();
-  return {codename:val("f_codename"), target:val("f_target"), type:val("f_type"), sector:val("f_sector"), stage:val("f_stage"), priority:val("f_priority"),
+  return {codename:val("f_codename"), target:val("f_target"), type:val("f_type"), track:trackField(), sector:val("f_sector"), stage:val("f_stage"), priority:val("f_priority"),
     ev:numOrBlank(val("f_ev")), gwp:numOrBlank(val("f_gwp")), equity:numOrBlank(val("f_equity")), netIncome:numOrBlank(val("f_netIncome")), stake:numOrBlank(val("f_stake")), origin:val("f_origin"), lead:val("f_lead"),
     nextStep:val("f_nextStep"), nextStepDate:val("f_nextStepDate"), ceoSummary:val("f_ceoSummary"), keyRisks:val("f_keyRisks"),
     outcomeDate:val("f_outcomeDate"), deadReason:val("f_deadReason"), outcomeNote:val("f_outcomeNote"),
@@ -1442,7 +1472,7 @@ async function casWrite(table,id,build){
   throw {message:"someone else keeps saving this record. Wait a moment and try again"};
 }
 function whoChanged(row){ const d=row.doc||{}; return (row.updated_by && d.updatedBy && d.updatedBy!==row.updated_by) ? nameOf(row.updated_by) : nameOf(row.updated_by, d.updatedByName); }
-const FIELD_LABELS={codename:"Codename",target:"Target",type:"Deal type",sector:"Sector",stage:"Stage",priority:"Priority",ev:"Valuation",gwp:"Target GWP",equity:"Equity",netIncome:"Net income",stake:"Stake",
+const FIELD_LABELS={codename:"Codename",target:"Target",type:"Deal type",sector:"Sector",stage:"Stage",priority:"Priority",track:"Add / Acquire",ev:"Valuation",gwp:"Target GWP",equity:"Equity",netIncome:"Net income",stake:"Stake",
   origin:"Origin",lead:"Deal lead",nextStep:"Next step",nextStepDate:"Next step date",ceoSummary:"CEO summary",keyRisks:"Key risks",bankerIds:"Bankers",teamIds:"Deal team",links:"Profile and other docs",
   name:"Name",firm:"Firm",website:"Firm website",title:"Title",coverage:"Coverage",email:"Email",phone:"Phone",relationship:"Relationship",lastContact:"Last contact",context:"Relationship context",outcomeDate:"Outcome date",deadReason:"Reason dropped",outcomeNote:"Outcome note"};
 /* ---------- change history (supabase/migrations/0003_history.sql) ---------- */
@@ -1691,11 +1721,12 @@ async function exportBoardPack(){
   const tw=(12.28-0.9)/4;
   [[String(active.length),"Active deals",C.navy],[String(late.length),`At LOI or diligence (${money(lateEv)} EV)`,C.mag],[money(ev),"Active pipeline EV (derived)",C.blue],[String(engaged),"Bankers contacted in 90 days",C.teal]]
     .forEach(([v,l,c],i)=>tile(sl,0.52+i*(tw+0.3),1.3,tw,1.1,v,l,c));
-  sec(sl,"Pipeline EV by stage ($M)",0.52,2.7,7.4);
+  sec(sl,"Pipeline EV by stage ($M): Acquire and Add",0.52,2.7,7.4);
   const bs=ACTIVE.map(st=>{ const ds=active.filter(d=>d.stage===st); return {st,n:ds.length,ev:ds.reduce((t,d)=>t+(+d.ev||0),0)}; });
-  sl.addChart(pptx.ChartType.bar,[{name:"EV ($M)",labels:bs.map(b=>`${b.st} (${b.n})`),values:bs.map(b=>Math.round(b.ev*10)/10)}],
-    {x:0.52,y:3.1,w:7.4,h:3.4,barDir:"bar",chartColors:[C.navy],showValue:true,dataLabelColor:C.navy,dataLabelFontFace:F,dataLabelFontSize:11,dataLabelPosition:"outEnd",
-     catAxisLabelFontFace:F,catAxisLabelFontSize:11,catAxisLabelColor:C.navy,catAxisOrientation:"maxMin",valAxisHidden:true,valGridLine:{style:"none"},catGridLine:{style:"none"},showLegend:false,barGapWidthPct:60});
+  const tsum=(st,t)=>Math.round(active.filter(d=>d.stage===st&&trackOf(d)===t).reduce((x,d)=>x+(+d.ev||0),0)*10)/10;
+  sl.addChart(pptx.ChartType.bar,["Acquire","Add"].map(t=>({name:t,labels:bs.map(b=>`${b.st} (${b.n})`),values:bs.map(b=>tsum(b.st,t))})),
+    {x:0.52,y:3.1,w:7.4,h:3.4,barDir:"bar",barGrouping:"stacked",chartColors:[C.blue,C.teal],showValue:false,showLegend:true,legendPos:"b",legendFontFace:F,legendFontSize:11,legendColor:C.navy,dataLabelColor:C.navy,dataLabelFontFace:F,dataLabelFontSize:11,dataLabelPosition:"outEnd",
+     catAxisLabelFontFace:F,catAxisLabelFontSize:11,catAxisLabelColor:C.navy,catAxisOrientation:"maxMin",valAxisHidden:true,valGridLine:{style:"none"},catGridLine:{style:"none"},barGapWidthPct:60});
   sec(sl,"Needs attention",8.42,2.7,4.38);
   const att=[];
   if(overdue.length) att.push({lead:`${overdue.length} overdue next step${overdue.length===1?"":"s"}`,text:clip(overdue.map(d=>d.codename).join(", "),80)});
@@ -1714,7 +1745,7 @@ async function exportBoardPack(){
     order.slice(i,i+5).forEach((d,j)=>{ const a=stageAge(d); const o=cellOpts(j);
       rows.push([
         {text:[{text:d.codename,options:{bold:true,breakLine:!!d.target}},...(d.target?[{text:clip(d.target,60)}]:[])],options:o},
-        {text:[{text:d.stage,options:{breakLine:!!a}},...(a?[{text:`${a.n}${a.exact?"":"+"} days in stage`,options:{color:C.grey}}]:[])],options:o},
+        {text:[{text:trackOf(d)+" | ",options:{bold:true,color:trackOf(d)==="Add"?C.teal:C.blue}},{text:d.stage,options:{breakLine:!!a}},...(a?[{text:`${a.n}${a.exact?"":"+"} days in stage`,options:{color:C.grey}}]:[])],options:o},
         {text:mnum(d.ev),options:cellOpts(j,1)},
         {text:[{text:clip(d.nextStep||"Not set",90),options:{breakLine:!!d.nextStepDate}},...(d.nextStepDate?[{text:(isOverdue(d)?"Overdue: ":"")+fmtDate(d.nextStepDate),options:{color:isOverdue(d)?C.mag:C.grey,bold:isOverdue(d)}}]:[])],options:o},
         {text:clip(d.ceoSummary||"n/d",260),options:o}]); });
@@ -1729,7 +1760,7 @@ async function exportBoardPack(){
     const first=String(d.ceoSummary||"").trim().split(/(?<=[.!?])\s+/)[0].replace(/[.!?]$/,"");
     title(sl, first ? `${d.codename}: ${first}` : `${d.codename}: ${d.stage}${moneyM(d.ev)?`, ${moneyM(d.ev)} valuation`:""}`);
     const a=stageAge(d);
-    sl.addText([d.target, d.type, d.sector, `${d.stage}${a?`, ${a.n}${a.exact?"":"+"} days in stage`:""}`, d.lead?`Lead: ${d.lead}`:""].filter(Boolean).join("  |  "),
+    sl.addText([trackOf(d), d.target, d.type, d.sector, `${d.stage}${a?`, ${a.n}${a.exact?"":"+"} days in stage`:""}`, d.lead?`Lead: ${d.lead}`:""].filter(Boolean).join("  |  "),
       {x:0.52,y:1.1,w:12.28,h:0.32,fontFace:F,fontSize:13,bold:true,color:C.navy,margin:0});
     // left: summary and key risks
     sec(sl,"Summary for the CEO",0.52,1.65,7.6);
@@ -2000,9 +2031,9 @@ async function importSave(){
 /* ---------- CSV export ---------- */
 async function exportCSV(){
   const {bankers}=D(); const rows=filteredDeals();
-  const cols=["Codename","Target","Type","Sector","Stage","Priority","Valuation ($M)","GWP ($M)","Equity ($M)","Net income ($M)","P/BV (calculated)","P/E (calculated)","Stake (%)","Origin","Lead","Deal team","Next step","Next step date","Bankers","CEO summary","Key risks","Links"];
+  const cols=["Codename","Target","Type","Add / Acquire","Sector","Stage","Priority","Valuation ($M)","GWP ($M)","Equity ($M)","Net income ($M)","P/BV (calculated)","P/E (calculated)","Stake (%)","Origin","Lead","Deal team","Next step","Next step date","Bankers","CEO summary","Key risks","Links"];
   const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
-  const lines=[cols.map(q).join(",")].concat(rows.map(d=>[d.codename,d.target,d.type,d.sector,d.stage,d.priority,d.ev,d.gwp,d.equity,d.netIncome,dealPB(d)==null?"":dealPB(d).toFixed(2),dealPE(d)==null?"":dealPE(d).toFixed(1),d.stake,d.origin,d.lead,(d.teamIds||[]).map(i=>nameOf(i)).join("; "),d.nextStep,d.nextStepDate,(d.bankerIds||[]).map(i=>bankers.find(b=>b.id===i)).filter(Boolean).map(b=>`${b.name} (${b.firm})`).join("; "),d.ceoSummary,d.keyRisks,(d.links||[]).map(l=>l.url).join(" ")].map(q).join(",")));
+  const lines=[cols.map(q).join(",")].concat(rows.map(d=>[d.codename,d.target,d.type,trackOf(d),d.sector,d.stage,d.priority,d.ev,d.gwp,d.equity,d.netIncome,dealPB(d)==null?"":dealPB(d).toFixed(2),dealPE(d)==null?"":dealPE(d).toFixed(1),d.stake,d.origin,d.lead,(d.teamIds||[]).map(i=>nameOf(i)).join("; "),d.nextStep,d.nextStepDate,(d.bankerIds||[]).map(i=>bankers.find(b=>b.id===i)).filter(Boolean).map(b=>`${b.name} (${b.firm})`).join("; "),d.ceoSummary,d.keyRisks,(d.links||[]).map(l=>l.url).join(" ")].map(q).join(",")));
   const url=URL.createObjectURL(new Blob(["\ufeff"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"}));
   const a=document.createElement("a"); a.href=url; a.download=`deal-tracker-${TODAY()}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
@@ -2016,7 +2047,7 @@ function plainNote(n){ return String(n.text||n.html||"").replace(/<[^>]*>/g," ")
 function copilotBrief(withHead=true){
   const {deals,bankers,notes}=D(), d10=t=>t?new Date(t).toISOString().slice(0,10):"";
   const act=deals.filter(isActive), other=deals.filter(d=>!isActive(d));
-  const dealLine=d=>`- ${d.codename}${d.target?` (${d.target})`:""}: ${d.stage}${d.type?`, ${d.type}`:""}${d.sector?`, ${d.sector}`:""}${moneyM(d.ev)?`, valuation $${mnum(d.ev)}M`:""}${moneyM(d.gwp)?`, GWP $${mnum(d.gwp)}M`:""}${moneyM(d.equity)?`, equity $${mnum(d.equity)}M`:""}${moneyM(d.netIncome)?`, net income $${mnum(d.netIncome)}M`:""}${dealPB(d)!=null?`, P/BV ${dealPB(d).toFixed(2)}x`:""}${dealPE(d)!=null?`, P/E ${dealPE(d).toFixed(1)}x`:""}${d.priority?`, ${d.priority} priority`:""}${d.lead?`, lead ${d.lead}`:""}${d.nextStep?`. Next step: ${d.nextStep}${d.nextStepDate?` by ${d.nextStepDate}`:""}`:""}${isOverdue(d)?" (overdue)":""}${isStalled(d)?" (stalled)":""}${d.ceoSummary?`. Summary: ${clip(d.ceoSummary,300)}`:""}${d.keyRisks?`. Risks: ${clip(d.keyRisks,200)}`:""}${!isActive(d)&&(d.deadReason||d.outcomeNote)?`. Outcome: ${clip([d.deadReason,d.outcomeNote].filter(Boolean).join("; "),150)}`:""}`;
+  const dealLine=d=>`- ${d.codename}${d.target?` (${d.target})`:""}: ${trackOf(d)}, ${d.stage}${d.type?`, ${d.type}`:""}${d.sector?`, ${d.sector}`:""}${moneyM(d.ev)?`, valuation $${mnum(d.ev)}M`:""}${moneyM(d.gwp)?`, GWP $${mnum(d.gwp)}M`:""}${moneyM(d.equity)?`, equity $${mnum(d.equity)}M`:""}${moneyM(d.netIncome)?`, net income $${mnum(d.netIncome)}M`:""}${dealPB(d)!=null?`, P/BV ${dealPB(d).toFixed(2)}x`:""}${dealPE(d)!=null?`, P/E ${dealPE(d).toFixed(1)}x`:""}${d.priority?`, ${d.priority} priority`:""}${d.lead?`, lead ${d.lead}`:""}${d.nextStep?`. Next step: ${d.nextStep}${d.nextStepDate?` by ${d.nextStepDate}`:""}`:""}${isOverdue(d)?" (overdue)":""}${isStalled(d)?" (stalled)":""}${d.ceoSummary?`. Summary: ${clip(d.ceoSummary,300)}`:""}${d.keyRisks?`. Risks: ${clip(d.keyRisks,200)}`:""}${!isActive(d)&&(d.deadReason||d.outcomeNote)?`. Outcome: ${clip([d.deadReason,d.outcomeNote].filter(Boolean).join("; "),150)}`:""}`;
   const bLine=b=>`- ${b.name}${b.firm?`, ${b.firm}`:""}${b.coverage?` (${clip(b.coverage,60)})`:""}: ${b.relationship||"no relationship set"}, last contact ${b.lastContact||"never"}`;
   const head=!withHead ? "" : `You're helping Ascot's Corporate Development team. Below is our M&A deal tracker as of ${TODAY()}. Use only this information; say so if something isn't in it. Confidential: internal use only.\n\nMy question: \n\n`;
   const parts=[`ACTIVE DEALS (${act.length})\n${act.map(dealLine).join("\n")||"- none"}`];
@@ -2306,7 +2337,7 @@ function tcSectionHTML(){ return tcEnabled() ? `<section class="tchat" id="tcBox
 function tcRender(){ const el=document.getElementById("tcBox"); if(el) el.innerHTML=tcInner(); }
 
 /* ---------- Claude helper ---------- */
-const ALLOWED_DEAL_CHANGES = ["target","type","sector","stage","priority","ev","gwp","equity","netIncome","stake","origin","lead","nextStep","nextStepDate","ceoSummary","keyRisks","outcomeDate","deadReason","outcomeNote"];
+const ALLOWED_DEAL_CHANGES = ["target","type","track","sector","stage","priority","ev","gwp","equity","netIncome","stake","origin","lead","nextStep","nextStepDate","ceoSummary","keyRisks","outcomeDate","deadReason","outcomeNote"];
 const ALLOWED_BANKER_CHANGES = ["firm","website","title","coverage","relationship","lastContact","context","email","phone"];
 
 function aiData(){
@@ -2314,7 +2345,7 @@ function aiData(){
   return {
     today:TODAY(), viewer:(S.session&&S.session.name)||"", example_data:demoMode(), can_propose_changes:canEditNow(),
     open_record: S.drawer && S.drawer.id ? {kind:S.drawer.kind==="banker"?"banker":"deal", id:S.drawer.id} : null,
-    deals:deals.map(d=>({id:d.id,codename:d.codename,target:d.target,type:d.type,sector:d.sector,stage:d.stage,priority:d.priority,ev_musd:d.ev,gwp_musd:d.gwp,stake_pct:d.stake,origin:d.origin,lead:d.lead,deal_team:(d.teamIds||[]).map(i=>nameOf(i)),next_step:d.nextStep,next_step_date:d.nextStepDate,ceo_summary:d.ceoSummary,key_risks:d.keyRisks,banker_ids:d.bankerIds,profile_labels:profileLinks(d.links).map(l=>l.label),other_doc_labels:otherLinks(d.links).map(l=>l.label),updated:d.updatedAt?new Date(d.updatedAt).toISOString().slice(0,10):""})),
+    deals:deals.map(d=>({id:d.id,codename:d.codename,target:d.target,type:d.type,track:trackOf(d),sector:d.sector,stage:d.stage,priority:d.priority,ev_musd:d.ev,gwp_musd:d.gwp,stake_pct:d.stake,origin:d.origin,lead:d.lead,deal_team:(d.teamIds||[]).map(i=>nameOf(i)),next_step:d.nextStep,next_step_date:d.nextStepDate,ceo_summary:d.ceoSummary,key_risks:d.keyRisks,banker_ids:d.bankerIds,profile_labels:profileLinks(d.links).map(l=>l.label),other_doc_labels:otherLinks(d.links).map(l=>l.label),updated:d.updatedAt?new Date(d.updatedAt).toISOString().slice(0,10):""})),
     bankers:bankers.map(b=>({id:b.id,name:b.name,firm:b.firm,title:b.title,coverage:b.coverage,relationship:b.relationship,last_contact:b.lastContact,context:b.context})),
     recent_notes:[...notes].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,120).map(n=>({deal_id:n.dealId||null,banker_id:n.bankerId||null,kind:n.kind,date:n.createdAt?new Date(n.createdAt).toISOString().slice(0,10):"",author:nameOf(n.authorId,n.authorName),text:String(n.text||"").slice(0,600)}))
   };
@@ -2600,6 +2631,8 @@ document.addEventListener("change", e=>{
   if(e.target.id==="cpWeb"){ S.cp.web=e.target.checked; return; }
   if(e.target.matches && e.target.matches("input[data-imi]")){ const p=S.drawer&&S.drawer.im&&S.drawer.im.people[+e.target.dataset.imi]; if(p){ p.take=e.target.checked; renderImportPreview(); } return; }
   if(e.target.id==="chgDays"){ S.chgDays=+e.target.value; S.changes=null; render(); document.getElementById("chgDays")?.focus(); return; }
+  if(e.target.id==="f_type"){ const t=document.getElementById("f_track"); if(t && t.dataset.auto==="1") t.value=defaultTrack(e.target.value); }
+  if(e.target.id==="f_track"){ e.target.dataset.auto="0"; }
   if(e.target.id==="f_stage"){ const st=e.target.value, box=document.getElementById("outcomeBox"); if(!box) return;
     const done=["Closed","Dead"].includes(st); box.hidden=!done; document.getElementById("reasonWrap").hidden = st!=="Dead";
     const od=document.getElementById("f_outcomeDate"); if(done && od && !od.value) od.value=TODAY(); }

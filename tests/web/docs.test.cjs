@@ -19,7 +19,7 @@ const seed=[
   const sec='section:has(h3.sec:text-is("Deal summaries and documents"))';
   const heads=await p.$$eval(sec+" thead th",x=>x.map(e=>e.textContent.trim()));
   ok("columns: Deal, Stage, Summary, Profile, Other docs", JSON.stringify(heads)==='["Deal","Stage","Summary","Profile","Other docs"]', heads);
-  const rows=await p.$$eval(sec+" tbody tr",r=>Object.fromEntries(r.map(x=>{ const t=[...x.querySelectorAll("td")]; return [t[0].querySelector(".t1").textContent.trim(), t.map(c=>c.textContent.replace(/\s+/g," ").trim())]; })));
+  const rows=await p.$$eval(sec+" tbody tr",r=>Object.fromEntries(r.map(x=>{ const t=[...x.querySelectorAll("td")]; return [t[0].querySelector(".t1").firstChild.textContent.trim(), t.map(c=>c.textContent.replace(/\s+/g," ").trim())]; })));
   ok("Harbor: profile and two other docs", rows.Harbor[3]==="PPTHarbor profile" && rows.Harbor[4].includes("IC memo") && rows.Harbor[4].includes("Model") && !rows.Harbor[4].includes("profile"), rows.Harbor);
   ok("older link labelled profile counts as the profile", rows.Summit[3].includes("Company profile") && rows.Summit[4]==="None", rows.Summit);
   ok("no links: placeholders", rows.Cedar[3]==="No profile yet" && rows.Cedar[4]==="None", rows.Cedar);

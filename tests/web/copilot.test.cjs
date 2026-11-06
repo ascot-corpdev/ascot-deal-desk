@@ -28,8 +28,8 @@ const seed=[
   const t=await p.evaluate(()=>window.__copied), op=await p.evaluate(()=>window.__opened);
   ok("opens M365 Copilot in a new tab", op.length===1 && op[0][0]==="https://m365.cloud.microsoft/chat" && op[0][1]==="_blank", op);
   ok("brief: instructions and question slot", t.startsWith("You're helping Ascot's Corporate Development team.") && t.includes("My question:") && t.includes("Confidential"), t.slice(0,200));
-  ok("brief: active deal line", t.includes("ACTIVE DEALS (1)") && t.includes("- Harbor (Harbor MGA): LOI, Acquisition, valuation $100M, GWP $40M") && t.includes("lead A. Chen") && t.includes("Next step: QoE kickoff by 2026-01-01 (overdue)") && t.includes("Summary: Good fit.") && t.includes("Risks: Reserves"), t);
-  ok("brief: dead deal with reason", t.includes("CLOSED, ON HOLD OR DEAD (1)") && t.includes("- Oak: Dead") && t.includes("Outcome: Price"), t);
+  ok("brief: active deal line", t.includes("ACTIVE DEALS (1)") && t.includes("- Harbor (Harbor MGA): Acquire, LOI, Acquisition, valuation $100M, GWP $40M") && t.includes("lead A. Chen") && t.includes("Next step: QoE kickoff by 2026-01-01 (overdue)") && t.includes("Summary: Good fit.") && t.includes("Risks: Reserves"), t);
+  ok("brief: dead deal with reason", t.includes("CLOSED, ON HOLD OR DEAD (1)") && t.includes("- Oak: Acquire, Dead") && t.includes("Outcome: Price"), t);
   ok("brief: bankers", t.includes("BANKERS (1)") && t.includes("- Ann Lee, Marsh: Strong, last contact 2026-10-01"), t);
   ok("brief: notes newest first, tags stripped", /LATEST NOTES \(2\)\n- \S+ Harbor \[Update\]: Data room open\n- \S+ Ann Lee \(Marsh\) \[Call\]: Ann says pricing firm/.test(t), t.slice(t.indexOf("LATEST")));
   ok("toast says to paste", ((await p.textContent("#toastRoot"))||"").includes("Tracker summary copied. Paste it into Copilot"));

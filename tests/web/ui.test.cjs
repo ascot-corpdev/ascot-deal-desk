@@ -21,7 +21,7 @@ const seed=[["bankers","b1",{name:"Ann",firm:"Marsh",relationship:"Strong",lastC
  await p.click('button[data-k="priority"]'); ok("priority High>Med>Low", await order(p)==="BAEC", await order(p));
  await p.click('button[data-k="updated"]'); ok("updated newest first", await order(p)==="EACB", await order(p));
  await p.click('button[data-k="deal"]');
- ok("chip counts", (await p.$$eval(".fchip",c=>c.map(x=>x.dataset.v+":"+x.querySelector("b").textContent).join(" ")))==="active:4 overdue:2 stalled:4 Screening:1 LOI:2 Diligence:1 Dead:1 all:5");
+ const chips=await p.$$eval(".fchip",c=>c.map(x=>x.dataset.v+":"+x.querySelector("b").textContent).join(" ")); ok("chip counts", chips==="active:4 acquire:4 overdue:2 stalled:4 Screening:1 LOI:2 Diligence:1 Dead:1 all:5", chips);
  await p.click('.fchip[data-v="overdue"]'); ok("overdue filter", await order(p)==="BE" && await p.getAttribute('.fchip[data-v="overdue"]',"aria-pressed")==="true", await order(p));
  await p.click('.fchip[data-v="Dead"]'); ok("stage filter Dead", await order(p)==="D");
  await p.click('.fchip[data-v="all"]'); ok("all", await order(p)==="ABCDE", await order(p));
