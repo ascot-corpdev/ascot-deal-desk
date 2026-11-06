@@ -41,6 +41,7 @@ export function buildDigest(input: {
 
   const lastNote: Record<string, number> = {};
   for (const n of notes) {
+    if (n.kind === "Question") continue;   // a CEO question isn't deal activity; Corp Dev's answer is
     const k = n.dealId ? "d:" + n.dealId : n.bankerId ? "b:" + n.bankerId : "";
     if (k) lastNote[k] = Math.max(lastNote[k] ?? 0, Number(n.createdAt) || 0);
   }

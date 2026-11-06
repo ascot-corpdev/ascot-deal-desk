@@ -70,6 +70,22 @@ footer.foot .wrap{display:flex;justify-content:space-between;gap:12px;padding-bl
 .tiles.dealtiles{grid-template-columns:repeat(3,minmax(0,1fr))}
 .tile span em{font-style:normal;color:var(--muted);font-size:12px}
 .stagerow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* CEO questions on a deal */
+.drawer.still{animation:none!important}
+.qtag{display:inline-block;margin-left:6px;padding:1px 6px;font-size:11px;font-weight:bold;color:#fff;background:var(--magenta);vertical-align:middle;white-space:nowrap}
+.fchip.qchip[aria-pressed="true"]{background:var(--magenta);border-color:var(--magenta);color:#fff}
+.qthread{border-left:3px solid var(--grid);padding:4px 0 4px 12px;margin:0 0 14px}
+.qthread.open{border-left-color:var(--magenta)}
+.qthread .qst{margin-bottom:4px}
+.pill.qopen{color:var(--magenta)}.pill.qdone{color:var(--teal)}.pill.qclosed{color:var(--muted)}
+.qmsg .h{display:flex;gap:8px;align-items:baseline;font-size:12px;flex-wrap:wrap}.qmsg .h .m{color:var(--muted)}
+.qmsg p{margin:2px 0 8px;white-space:pre-wrap;overflow-wrap:anywhere}
+.qmsg.ans{margin-left:14px;padding-left:10px;border-left:2px solid var(--teal)}
+.qreply,.qask{display:grid;gap:6px;margin-top:4px}.qreply textarea,.qask textarea{width:100%}.qreply textarea{min-height:0;height:40px}
+.qreply .acts,.qask .acts{display:flex;gap:6px;flex-wrap:wrap}
+/* Add to calendar */
+.calbtn{background:none;border:0;padding:0;margin:0;font:inherit;font-size:12px;color:var(--blue);text-decoration:underline;cursor:pointer;white-space:nowrap}
+.calbtn:hover{color:var(--magenta)}
 .tile span{display:block;font-size:12px;margin-top:6px}
 .tile small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
 .c-navy{color:var(--ink)}.c-mag{color:var(--magenta)}.c-blue{color:var(--blue)}.c-teal{color:var(--teal)}
@@ -551,7 +567,7 @@ function ageHTML(d){
   return `<div class="t2 age"${a.exact?"":` title="Stage start not recorded; counted from when the deal was added"`}>${a.n}${a.exact?"":"+"} day${a.n===1?"":"s"} in stage</div>`;
 }
 function lastNoteAt(kind,id){
-  const {notes}=D(); if(lastNoteAt.src!==notes){ lastNoteAt.src=notes; lastNoteAt.m={}; for(const n of notes){ const k=n.dealId?"d:"+n.dealId:n.bankerId?"b:"+n.bankerId:""; if(k) lastNoteAt.m[k]=Math.max(lastNoteAt.m[k]||0, n.createdAt||0); } }
+  const {notes}=D(); if(lastNoteAt.src!==notes){ lastNoteAt.src=notes; lastNoteAt.m={}; for(const n of notes){ if(n.kind==="Question") continue; const k=n.dealId?"d:"+n.dealId:n.bankerId?"b:"+n.bankerId:""; if(k) lastNoteAt.m[k]=Math.max(lastNoteAt.m[k]||0, n.createdAt||0); } }
   return lastNoteAt.m[(kind==="deal"?"d:":"b:")+id]||0;
 }
 function lastActivity(d){ return Math.max(d.updatedAt||0, d.createdAt>1e11?d.createdAt:0, lastNoteAt("deal",d.id)); }
@@ -708,13 +724,13 @@ function renderCEO(){
       </div>
     </div>
     <div><h3 class="sec">Next 30 days</h3>
-      ${upcoming.length ? `<ul class="mlist">${upcoming.map(d=>{ const n=daysUntil(d.nextStepDate); return `<li><span class="d ${n<0?"over":""}">${n<0?"Overdue":fmtDate(d.nextStepDate)}</span><div><p><b>${esc(d.codename)}</b>${X}: ${esc(d.nextStep||"Next step not set")}</p><p class="meta">${esc(d.stage)} · ${esc(d.lead||"No lead")}${n<0?` · due ${fmtDate(d.nextStepDate)}`:""}</p></div></li>`; }).join("")}</ul>` : `<p class="t2">No milestones in the next 30 days.</p>`}
+      ${upcoming.length ? `<ul class="mlist">${upcoming.map(d=>{ const n=daysUntil(d.nextStepDate); return `<li><span class="d ${n<0?"over":""}">${n<0?"Overdue":fmtDate(d.nextStepDate)}</span><div><p><b>${esc(d.codename)}</b>${X}: ${esc(d.nextStep||"Next step not set")}</p><p class="meta">${esc(d.stage)} · ${esc(d.lead||"No lead")}${n<0?` · due ${fmtDate(d.nextStepDate)}`:""}${ex?"":` · ${calBtn("ics-next",`data-id="${esc(d.id)}"`)}`}</p></div></li>`; }).join("")}</ul>` : `<p class="t2">No milestones in the next 30 days.</p>`}
     </div>
   </section>
   <section><h3 class="sec">Deal summaries and documents</h3>
     ${sorted.length ? `<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr><th>Deal</th><th>Stage</th><th>Summary</th><th>Profile</th><th>Other docs</th></tr></thead><tbody>
     ${sorted.map(d=>{
-      return `<tr class="click" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${X}${stallTag(d)}</div><div class="t2">${esc(d.target||"")}</div></td><td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="summary c-full">${d.ceoSummary?`<div class="clamp">${esc(d.ceoSummary)}</div>${d.ceoSummary.length>150?`<span class="more">More</span>`:""}`:'<span class="t2">No summary yet</span>'}</td><td class="c-full" data-label="Profile">${links(profileLinks(d.links),"No profile yet")}</td><td class="c-full" data-label="Other docs">${links(otherLinks(d.links),"None")}</td></tr>`; }).join("")}
+      return `<tr class="click" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${X}${stallTag(d)}${qTag(d)}</div><div class="t2">${esc(d.target||"")}</div></td><td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="summary c-full">${d.ceoSummary?`<div class="clamp">${esc(d.ceoSummary)}</div>${d.ceoSummary.length>150?`<span class="more">More</span>`:""}`:'<span class="t2">No summary yet</span>'}</td><td class="c-full" data-label="Profile">${links(profileLinks(d.links),"No profile yet")}</td><td class="c-full" data-label="Other docs">${links(otherLinks(d.links),"None")}</td></tr>`; }).join("")}
     </tbody></table></div>` : `<div class="empty"><p>No active deals.</p></div>`}
   </section>
   ${benchStripHTML()}
@@ -732,7 +748,7 @@ function renderCEO(){
 }
 
 const PRIORITY_ORDER=["High","Medium","Low"];
-const DEAL_FILTERS = [["active","Active",isActive],["mine","Mine",d=>isActive(d)&&!!S.meId&&!!roleOn(d,S.meId)],["overdue","Overdue",isOverdue],["stalled","Stalled",isStalled]].concat(STAGES.map(st=>[st,st,d=>d.stage===st])).concat([["all","All",()=>true]]);
+const DEAL_FILTERS = [["active","Active",isActive],["mine","Mine",d=>isActive(d)&&!!S.meId&&!!roleOn(d,S.meId)],["overdue","Overdue",isOverdue],["stalled","Stalled",isStalled],["questions","Open questions",d=>openQs(d)>0]].concat(STAGES.map(st=>[st,st,d=>d.stage===st])).concat([["all","All",()=>true]]);
 const DEAL_SORTS = {
   deal:{cmp:(a,b)=>String(a.codename||"").localeCompare(String(b.codename||"")), dir:1},
   stage:{cmp:(a,b)=>STAGES.indexOf(a.stage)-STAGES.indexOf(b.stage), dir:1},
@@ -774,7 +790,7 @@ function dealChipsHTML(){
   return `<div class="fchips" role="group" aria-label="Filter deals">${DEAL_FILTERS.map(([v,label,f])=>{
     const n=base.filter(f).length; const on=S.stageFilter===v;
     if(!on && !n && !["active","all"].includes(v)) return "";
-    const cls = v==="overdue" ? " late" : v==="stalled" ? " stale" : "";
+    const cls = v==="overdue" ? " late" : v==="stalled" ? " stale" : v==="questions" ? " qchip" : "";
     const sw = STAGE_CLASS[v] ? `<span class="sw ${STAGE_CLASS[v]}" aria-hidden="true"></span>` : "";
     return `<button type="button" class="fchip${cls}" data-act="dfilter" data-v="${esc(v)}" aria-pressed="${on}">${sw}${esc(label)}<b>${n}</b></button>`; }).join("")}</div>`;
 }
@@ -795,7 +811,7 @@ function renderDeals(){
     ${rows.map(d=>{ const late=isOverdue(d); const bk=(d.bankerIds||[]).map(id=>bankers.find(b=>b.id===id)).filter(Boolean);
       const meta=[moneyM(d.ev)&&("EV "+moneyM(d.ev)), stakeNote(d), d.priority&&(d.priority+" priority"), d.lead].filter(Boolean).join(" · ");
       return `<tr class="click${late?" late":""}" data-act="${ex||!edit?"view-deal":"edit-deal"}" data-id="${esc(d.id)}" tabindex="0">
-      <td><div class="t1">${esc(d.codename)}${X}${stallTag(d)}</div><div class="t2">${esc(d.target||"")}</div><div class="t2">${esc([d.type,d.sector].filter(Boolean).join(" · "))}</div>${meta?`<div class="t2 mob">${esc(meta)}</div>`:""}${S.noteHits&&S.noteHits[d.id]?`<div class="t2 hit">In a note: ${S.noteHits[d.id]}</div>`:""}</td>
+      <td><div class="t1">${esc(d.codename)}${X}${stallTag(d)}${qTag(d)}</div><div class="t2">${esc(d.target||"")}</div><div class="t2">${esc([d.type,d.sector].filter(Boolean).join(" · "))}</div>${meta?`<div class="t2 mob">${esc(meta)}</div>`:""}${S.noteHits&&S.noteHits[d.id]?`<div class="t2 hit">In a note: ${S.noteHits[d.id]}</div>`:""}</td>
       <td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="c-hide">${esc(d.priority||"")}</td>
       <td class="num c-hide">${esc(mnum(d.ev))}${stakeNote(d)?`<div class="t2">${esc(stakeNote(d))}</div>`:""}</td>
       <td class="c-full" data-label="Next step">${esc(d.nextStep||"")||'<span class="t2">None set</span>'}${d.nextStepDate?`<div class="t2${late?" over":""}">${late?"Overdue: ":""}${fmtDate(d.nextStepDate)}</div>`:""}</td>
@@ -934,7 +950,7 @@ function renderComps(){
     ${rows.map(r=>`<tr><td><div class="t1">${esc(r.name)}</div><div class="t2">${esc(r.ticker)}${r.currency&&r.currency!=="USD"?` · ${esc(r.currency)}`:""}</div>${r.notes.map(n=>`<div class="t2">${esc(n)}</div>`).join("")}<div class="t2 mob">${esc(r.quarter)} · premium growth ${pctS(r.premiumGrowth,true)} · loss ratio ${pctS(r.lossRatio)} · combined ratio ${pctS(r.combinedRatio)} · ROE ${pctS(r.roe)} · BVPS growth ${pctS(r.bvpsGrowth,true)} · P/B ${xS(r.pb,2)} · P/E ${xS(r.pe,1)}</div></td>
       <td class="c-hide">${esc(r.quarter)}</td><td class="num c-hide">${mS(r.revenue)}</td><td class="num c-hide">${mS(r.premiums)}</td><td class="num c-hide">${pctS(r.premiumGrowth,true)}</td><td class="num c-hide">${mS(r.netIncome)}</td>
       <td class="num c-hide">${pctS(r.lossRatio)}</td><td class="num c-hide" title="${r.expenseRatio!=null?`Expense ratio ${pctS(r.expenseRatio)}`:""}">${pctS(r.combinedRatio)}</td><td class="num c-hide">${pctS(r.roe)}</td><td class="num c-hide">${pctS(r.bvpsGrowth,true)}${r.bvps!=null?`<div class="t2">BVPS ${r.bvps.toFixed(2)}</div>`:""}</td><td class="num c-hide">${mS(r.marketCap)}${r.marketCapCurrency&&r.marketCapCurrency!==r.currency?` <span class="t2">${esc(r.marketCapCurrency)}</span>`:""}</td><td class="num c-hide">${xS(r.pb,2)}</td><td class="num c-hide">${xS(r.pe,1)}</td>
-      <td class="c-full" data-label="Earnings calls">${r.lastCall?`${fmtDate(r.lastCall.date.slice(0,10))}`:'<span class="t2">n/d</span>'}${r.nextCall?`<div class="t2">Next: ${fmtDate(r.nextCall.date.slice(0,10))}</div>`:""}</td></tr>`).join("")}
+      <td class="c-full" data-label="Earnings calls">${r.lastCall?`${fmtDate(r.lastCall.date.slice(0,10))}`:'<span class="t2">n/d</span>'}${r.nextCall?`<div class="t2">Next: ${fmtDate(r.nextCall.date.slice(0,10))} ${calBtn("ics-call",`data-t="${esc(r.ticker)}"`)}</div>`:""}</td></tr>`).join("")}
     <tr class="med"><td>Median (derived)</td><td class="c-hide"></td><td class="c-hide"></td><td class="c-hide"></td><td class="num c-hide">${pctS(md.premiumGrowth,true)}</td><td class="c-hide"></td><td class="num c-hide">${pctS(md.lossRatio)}</td><td class="num c-hide">${pctS(md.combinedRatio)}</td><td class="num c-hide">${pctS(md.roe)}</td><td class="num c-hide">${pctS(md.bvpsGrowth,true)}</td><td class="c-hide"></td><td class="num c-hide">${xS(md.pb,2)}</td><td class="num c-hide">${xS(md.pe,1)}</td><td class="c-hide"></td></tr>
     </tbody></table></div></section>`:""}
   ${errs.length?`<p class="t2">Not shown: ${errs.map(([t,m])=>`<b>${esc(t)}</b> (${esc(m)})`).join("; ")}.</p>`:""}
@@ -1107,16 +1123,116 @@ function renderDrawer(){
   else if(dr.kind==="comps-settings") body=compsSettingsHTML();
   else if(dr.kind==="copilot") body=copilotHTML(dr);
   else body=bankerFormHTML(dr);
-  root.innerHTML=`<div class="scrim" data-act="close"></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drTitle">${body}</aside>`;
+  // The read-only deal drawer is rebuilt when data changes: keep the scroll position, anything half-typed
+  // (question boxes) and the cursor, and don't replay the slide-in animation.
+  const key=dr.kind+":"+(dr.id||""), same=root.dataset.key===key && !!root.querySelector(".drawer");
+  const keep = same ? {top:root.querySelector(".drawer-b")?.scrollTop||0, typed:[...root.querySelectorAll("textarea[id]")].filter(t=>t.value).map(t=>[t.id,t.value]),
+    act:document.activeElement&&root.contains(document.activeElement)&&document.activeElement.id, sel:document.activeElement&&document.activeElement.selectionStart} : null;
+  root.innerHTML=`<div class="scrim" data-act="close"></div><aside class="drawer${same?" still":""}" role="dialog" aria-modal="true" aria-labelledby="drTitle">${body}</aside>`;
+  root.dataset.key=key;
+  if(keep){ for(const [id,v] of keep.typed){ const t=document.getElementById(id); if(t) t.value=v; }
+    const b=root.querySelector(".drawer-b"); if(b) b.scrollTop=keep.top;
+    if(keep.act){ const a=document.getElementById(keep.act); if(a){ a.focus({preventScroll:true}); if(keep.sel!=null&&a.setSelectionRange) try{ a.setSelectionRange(keep.sel,keep.sel); }catch{} } } }
   renderDrAlert(); renderPresence(); renderHistory(); loadHistory(histKey(dr));
-  const f=root.querySelector("input,textarea,select"); if(f && dr.kind!=="view-deal") f.focus();
+  const f=root.querySelector("input,textarea,select"); if(f && dr.kind!=="view-deal" && !same) f.focus();
 }
+
+/* ---------- CEO questions on a deal ----------
+   A question is a note of kind "Question" on a deal (any login may add one in their own name:
+   supabase/migrations/0005_ceo_questions.sql). Replies are notes with replyTo = the question's id: Corp Dev
+   replies are kind "Answer"; the CEO's follow-ups are further "Question"s. A thread is open while its latest
+   message is a question, unless Corp Dev marked it answered (closedAt) after that. */
+const QA_KINDS=["Question","Answer"];
+const isQA = n => QA_KINDS.includes(n.kind);
+function qThreads(dealId){
+  const {notes}=D();
+  if(qThreads.src!==notes){ qThreads.src=notes; const by={};
+    for(const n of notes) if(n.dealId && isQA(n)) (by[n.dealId]=by[n.dealId]||[]).push(n);
+    qThreads.m={}; for(const [id,all] of Object.entries(by)){
+      qThreads.m[id]=all.filter(n=>n.kind==="Question" && !n.replyTo).map(q=>{
+        const replies=all.filter(n=>n.replyTo===q.id).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+        const last=replies.length?replies[replies.length-1]:q;
+        const closed=!!(q.closedAt && q.closedAt>=(last.createdAt||0));
+        const open=last.kind==="Question" && !closed;
+        return {q, replies, open, status: open?"Open": last.kind==="Answer"?"Answered":"Closed", lastAt:last.createdAt||0};
+      }).sort((a,b)=>(b.open-a.open)||(b.lastAt-a.lastAt)); } }
+  return qThreads.m[dealId]||[];
+}
+const openQs = d => qThreads(d.id).filter(t=>t.open).length;
+function qTag(d){ const n=openQs(d); return n?`<span class="qtag" title="${n} open question${n===1?"":"s"} on this deal">${n} question${n===1?"":"s"}</span>`:""; }
+function qSig(dealId){ return JSON.stringify(qThreads(dealId).map(t=>[t.q.id,t.replies.length,t.status])); }
+function questionsHTML(dealId){
+  const ts=qThreads(dealId), corp=canEditNow(), live=!!S.session && !demoMode() && !S.dbMissing;
+  const msg=n=>`<div class="qmsg${n.kind==="Answer"?" ans":""}"><div class="h"><b>${esc(nameOf(n.authorId,n.authorName))}</b><span class="m">${n.createdAt?esc(fmtWhen(n.createdAt)):""}</span></div><p>${esc(n.text)}</p></div>`;
+  const thread=t=>`<div class="qthread${t.open?" open":""}"><div class="qst"><span class="pill ${t.open?"qopen":t.status==="Answered"?"qdone":"qclosed"}">${t.status}</span></div>
+    ${[t.q,...t.replies].map(msg).join("")}
+    ${live?`<div class="qreply"><textarea id="qr_${esc(t.q.id)}" rows="1" placeholder="${corp?"Reply":"Ask a follow-up"}" aria-label="${corp?"Reply to this question":"Ask a follow-up"}"></textarea>
+      <div class="acts"><button type="button" class="btn sm${corp?" primary":""}" data-act="q-reply" data-id="${esc(t.q.id)}">${corp?"Reply":"Send follow-up"}</button>${corp&&t.open?`<button type="button" class="btn sm ghost" data-act="q-close" data-id="${esc(t.q.id)}">Mark answered</button>`:""}</div></div>`:""}</div>`;
+  const ask = live ? `<div class="qask"><textarea id="q_new" rows="2" placeholder="${corp?"Add a question for the team":"Ask Corp Dev a question about this deal"}" aria-label="New question"></textarea>
+    <div class="acts"><button type="button" class="btn sm${corp?"":" primary"}" data-act="q-ask">Ask</button></div></div>` : "";
+  return (ts.length?ts.map(thread).join(""):`<p class="t2">No questions yet.</p>`)+ask;
+}
+function questionsSectionHTML(dealId, heading){ return `<div><h3 class="sec">${heading}</h3><div id="qBox" data-sig="${esc(qSig(dealId))}">${questionsHTML(dealId)}</div></div>`; }
+/* Live refresh keeps whatever is half-typed in the reply boxes. */
+function refreshQuestions(){
+  const dr=S.drawer, el=document.getElementById("qBox"); if(!dr||!el||!dr.id) return;
+  const sig=qSig(dr.id); if(el.dataset.sig===sig) return;
+  const typed={}; el.querySelectorAll("textarea").forEach(t=>{ if(t.value) typed[t.id]=t.value; });
+  const a=document.activeElement&&document.activeElement.id;
+  el.innerHTML=questionsHTML(dr.id); el.dataset.sig=sig;
+  for(const [id,v] of Object.entries(typed)){ const t=document.getElementById(id); if(t) t.value=v; }
+  if(a){ const f=document.getElementById(a); if(f) f.focus(); }
+}
+async function postQuestion(dealId, text, replyTo){
+  const corp=canEditNow();
+  const doc={kind:corp&&replyTo?"Answer":"Question", text, dealId, createdAt:Date.now(), authorId:S.meId||"", authorName:(S.session&&S.session.name)||""};
+  if(replyTo) doc.replyTo=replyTo;
+  const {error}=await S.sb.from("notes").insert({id:"n"+uid(), doc});
+  if(error){
+    toast(error.code==="42501" ? (corp?"Couldn't save it. Try again.":"Questions aren't switched on yet. Ask Corp Dev to run supabase/migrations/0005_ceo_questions.sql in Supabase.")
+      : "Couldn't send it: "+(error.message||"try again"));
+    return false;
+  }
+  await refetch("notes"); return true;
+}
+
+/* ---------- Add to calendar: a one-event .ics file that Outlook (or any calendar) opens ---------- */
+function icsEsc(v){ return String(v||"").replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\r?\n/g,"\\n"); }
+function icsFold(line){ const out=[]; let r=line; while(r.length>73){ out.push(r.slice(0,73)); r=" "+r.slice(73); } out.push(r); return out.join("\r\n"); }
+const icsStamp = d => d.toISOString().replace(/[-:]/g,"").replace(/\.\d{3}/,"");
+function icsText({uid, title, date, start, mins, desc, url}){
+  const L=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Ascot Group//Deal desk//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH","BEGIN:VEVENT",
+    "UID:"+uid+"@ascot-deal-desk","DTSTAMP:"+icsStamp(new Date())];
+  if(date){ const nx=new Date(date+"T00:00:00Z"); nx.setUTCDate(nx.getUTCDate()+1);
+    L.push("DTSTART;VALUE=DATE:"+date.replace(/-/g,""), "DTEND;VALUE=DATE:"+nx.toISOString().slice(0,10).replace(/-/g,""), "TRANSP:TRANSPARENT"); }
+  else { const st=new Date(start); L.push("DTSTART:"+icsStamp(st), "DTEND:"+icsStamp(new Date(st.getTime()+(mins||60)*60000))); }
+  L.push("SUMMARY:"+icsEsc(title));
+  if(desc) L.push("DESCRIPTION:"+icsEsc(desc));
+  if(url) L.push("URL:"+url);
+  // reminder: 9am the day before for a due date, 30 minutes before a call
+  L.push("BEGIN:VALARM","ACTION:DISPLAY","DESCRIPTION:"+icsEsc(title),"TRIGGER:"+(date?"-PT15H":"-PT30M"),"END:VALARM","END:VEVENT","END:VCALENDAR");
+  return L.map(icsFold).join("\r\n")+"\r\n";
+}
+function icsSave(ev, file){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([icsText(ev)],{type:"text/calendar;charset=utf-8"}));
+  a.download=String(file).replace(/[^\w.-]+/g,"-").slice(0,80)+".ics"; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 1000);
+  S.lastIcs=ev; toast("Calendar file downloaded. Open it to add the event to Outlook.");
+}
+const recordUrl = (kind,id) => location.href.split("#")[0]+"#"+kind+"/"+encodeURIComponent(id);
+function icsNextStep(d){
+  if(!d || !/^\d{4}-\d{2}-\d{2}$/.test(String(d.nextStepDate||""))){ toast("Set a due date for the next step first."); return; }
+  icsSave({uid:"next-"+d.id, title:`${d.codename}: ${d.nextStep||"next step due"}`, date:d.nextStepDate,
+    desc:`Next step on ${d.codename}${d.target?` (${d.target})`:""}${d.stage?`, ${d.stage}`:""}.${d.lead?` Deal lead: ${d.lead}.`:""}\nOpen in the deal desk: ${recordUrl("deal",d.id)}`,
+    url:recordUrl("deal",d.id)}, `${d.codename} next step ${d.nextStepDate}`);
+}
+function calBtn(act, attrs){ return S.downloads ? `<button type="button" class="calbtn" data-act="${act}" ${attrs} title="Downloads a calendar file for Outlook">Add to calendar</button>` : ""; }
 
 function multiplesLine(d){ return `P/BV ${multS(dealPB(d),2)} · P/E ${multS(dealPE(d),1)} (calculated from the valuation)`; }
 function viewDealHTML(id){
   const {deals,bankers,notes}=D(); const d=deals.find(x=>x.id===id); if(!d) return `<div class="drawer-h"><h2 id="drTitle">Deal not found</h2><button class="btn ghost" data-act="close">Close</button></div>`;
   const bk=(d.bankerIds||[]).map(i=>bankers.find(b=>b.id===i)).filter(Boolean);
-  const ns=notes.filter(n=>n.dealId===id).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,8);
+  const ns=notes.filter(n=>n.dealId===id && !isQA(n)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,8);
   return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">${esc([d.type||"Deal",d.sector].filter(Boolean).join(" · "))}</div><h2 id="drTitle">${esc(d.codename)}${d.target?`: ${esc(d.target)}`:""}</h2></div>${linkBtn("deal",d.id)}<button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
   <div class="drawer-b">
     <div class="stagerow">${stagePill(d.stage)}${ageHTML(d).replace('class="t2 age"','class="t2"')}</div>
@@ -1124,9 +1240,10 @@ function viewDealHTML(id){
       [multS(dealPB(d),2),"P/BV <em>(calculated)</em>"],[multS(dealPE(d),1),"P/E <em>(calculated)</em>"]].map(([v,l])=>`<div class="tile"><b style="font-size:22px">${esc(v)}</b><span>${l}</span></div>`).join("")}</div>
     <div><h3 class="sec">Summary</h3><p class="prose">${esc(d.ceoSummary||"No summary yet.")}</p></div>
     ${d.keyRisks?`<div><h3 class="sec">Key risks</h3><p class="prose">${esc(d.keyRisks)}</p></div>`:""}
+    ${questionsSectionHTML(d.id, "Questions")}
     <div><h3 class="sec">Profile</h3>${links(profileLinks(d.links),"No profile yet")}</div>
     <div><h3 class="sec">Other docs</h3>${links(otherLinks(d.links),"None")}</div>
-    <dl class="kv"><dt>Next step</dt><dd>${esc(d.nextStep||"n/d")}${d.nextStepDate?` (${fmtDate(d.nextStepDate)})`:""}</dd><dt>Deal lead</dt><dd>${esc(d.lead||"n/d")}</dd><dt>Origin</dt><dd>${esc(d.origin||"n/d")}</dd><dt>Bankers</dt><dd>${bk.map(b=>`${esc(b.name)} (${esc(b.firm)})`).join(", ")||"None"}</dd><dt>Stake</dt><dd>${d.stake!==""&&d.stake!=null?esc(d.stake)+"%":"n/d"}</dd><dt>Priority</dt><dd>${esc(d.priority||"n/d")}</dd>${["Closed","Dead"].includes(d.stage)?`<dt>Outcome</dt><dd>${esc(d.stage)}${d.outcomeDate?` on ${fmtDate(d.outcomeDate)}`:""}${d.stage==="Dead"&&d.deadReason?`: ${esc(d.deadReason)}`:""}${d.outcomeNote?`. ${esc(d.outcomeNote)}`:""}</dd>`:""}</dl>
+    <dl class="kv"><dt>Next step</dt><dd>${esc(d.nextStep||"n/d")}${d.nextStepDate?` (${fmtDate(d.nextStepDate)}) ${calBtn("ics-next",`data-id="${esc(d.id)}"`)}`:""}</dd><dt>Deal lead</dt><dd>${esc(d.lead||"n/d")}</dd><dt>Origin</dt><dd>${esc(d.origin||"n/d")}</dd><dt>Bankers</dt><dd>${bk.map(b=>`${esc(b.name)} (${esc(b.firm)})`).join(", ")||"None"}</dd><dt>Stake</dt><dd>${d.stake!==""&&d.stake!=null?esc(d.stake)+"%":"n/d"}</dd><dt>Priority</dt><dd>${esc(d.priority||"n/d")}</dd>${["Closed","Dead"].includes(d.stage)?`<dt>Outcome</dt><dd>${esc(d.stage)}${d.outcomeDate?` on ${fmtDate(d.outcomeDate)}`:""}${d.stage==="Dead"&&d.deadReason?`: ${esc(d.deadReason)}`:""}${d.outcomeNote?`. ${esc(d.outcomeNote)}`:""}</dd>`:""}</dl>
     <div><h3 class="sec">Recent context</h3>${ns.length?`<div class="notes">${ns.map(noteHTML).join("")}</div>`:`<p class="t2">No notes yet.</p>`}</div>
     <div><h3 class="sec">History</h3><ul class="mlist hist" id="histList"></ul></div>
   </div>
@@ -1184,6 +1301,7 @@ function dealFormHTML(dr){
     <div><h3 class="sec">Next step</h3><div class="fgrid">
       <label class="f full">Next step<input type="text" id="f_nextStep" value="${esc(d.nextStep||"")}" placeholder="What happens next, and who owns it"></label>
       <label class="f">Due date<input type="date" id="f_nextStepDate" value="${esc(d.nextStepDate||"")}"></label>
+      ${isNew?"":`<p class="f" style="align-self:end;margin:0 0 8px">${calBtn("ics-next-form","")}</p>`}
     </div></div>
     <div id="outcomeBox"${["Closed","Dead"].includes(d.stage)?"":" hidden"}><h3 class="sec">Outcome</h3><div class="fgrid">
       <label class="f">Date closed or dropped<input type="date" id="f_outcomeDate" value="${esc(d.outcomeDate||"")}"></label>
@@ -1202,6 +1320,7 @@ function dealFormHTML(dr){
     <div><h3 class="sec">Bankers on this deal</h3>
       ${S.bankers.length?`<div class="checks">${S.bankers.map(b=>`<label><input type="checkbox" name="bk" value="${esc(b.id)}"${(d.bankerIds||[]).includes(b.id)?" checked":""}><span>${esc(b.name)} <span class="t2">${esc(b.firm||"")}</span></span></label>`).join("")}</div>`:`<p class="t2">Add bankers in the Banker CRM tab to link them here.</p>`}
     </div>
+    ${isNew?"":questionsSectionHTML(d.id, "Questions")}
     ${isNew?"":`<div><h3 class="sec">Context and notes</h3>
       <div class="addnote">${sel("n_kind",NOTE_KINDS,"Update")}<textarea id="n_text" rows="2" placeholder="Call notes, diligence findings, IC feedback"></textarea><button type="button" class="btn sm primary" data-act="add-note">Add note</button></div>
       <div class="notes" id="noteList"></div></div>
@@ -1249,9 +1368,10 @@ function bankerFormHTML(dr){
 }
 
 function refreshNotes(){
+  refreshQuestions();
   const dr=S.drawer; const el=document.getElementById("noteList"); if(!dr||!el) return;
   const key = dr.kind==="deal" ? "dealId" : "bankerId";
-  const ns = S.notes.filter(n=>n[key]===dr.id).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const ns = S.notes.filter(n=>n[key]===dr.id && !isQA(n)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   el.innerHTML = ns.length ? ns.map(n=>noteHTML(n, canEditNow())).join("") : `<p class="t2">No notes yet.</p>`;
 }
 function rerenderDrawer(){ if(S.drawer){ captureForm(); S.drawer.rendered=false; renderDrawer(); restoreForm(); refreshNotes(); } }
@@ -1601,6 +1721,36 @@ async function exportBoardPack(){
     if(rows.length===1) rows.push([{text:"No active deals.",options:{colspan:5}}]);
     tbl(sl,rows,{x:0.52,y:1.3,w:12.28,colW:[2.1,1.6,0.95,2.9,4.73]});
     source(sl, `${src} EV in $M as entered by deal teams; summaries written by the deal leads.`);
+  }
+
+  // 3b. One slide per deal at LOI or diligence: summary, key risks, key metrics, next step, documents
+  for(const d of order.filter(x=>LATE.includes(x.stage))){
+    sl=pptx.addSlide({masterName:"CONTENT"});
+    const first=String(d.ceoSummary||"").trim().split(/(?<=[.!?])\s+/)[0].replace(/[.!?]$/,"");
+    title(sl, first ? `${d.codename}: ${first}` : `${d.codename}: ${d.stage}${moneyM(d.ev)?`, ${moneyM(d.ev)} valuation`:""}`);
+    const a=stageAge(d);
+    sl.addText([d.target, d.type, d.sector, `${d.stage}${a?`, ${a.n}${a.exact?"":"+"} days in stage`:""}`, d.lead?`Lead: ${d.lead}`:""].filter(Boolean).join("  |  "),
+      {x:0.52,y:1.1,w:12.28,h:0.32,fontFace:F,fontSize:13,bold:true,color:C.navy,margin:0});
+    // left: summary and key risks
+    sec(sl,"Summary for the CEO",0.52,1.65,7.6);
+    sl.addText(clip(d.ceoSummary||"No summary yet.",700),{x:0.52,y:2.05,w:7.6,h:1.95,fontFace:F,fontSize:12,color:C.navy,valign:"top",margin:0,fit:"shrink"});
+    sec(sl,"Key risks and open diligence",0.52,4.1,7.6);
+    sl.addText(clip(d.keyRisks||"None recorded.",500),{x:0.52,y:4.5,w:7.6,h:1.35,fontFace:F,fontSize:12,color:C.navy,valign:"top",margin:0,fit:"shrink"});
+    // right: key metrics and next step
+    sec(sl,"Key metrics",8.42,1.65,4.38);
+    const pb=dealPB(d), pe=dealPE(d);
+    const km=[["Valuation ($M)",mnum(d.ev)],["GWP ($M)",mnum(d.gwp)],["Equity ($M)",mnum(d.equity)],["Net income ($M, LTM)",mnum(d.netIncome)],
+      ["P/BV (calculated)",pb==null?"n/d":pb.toFixed(2)+"x"],["P/E (calculated)",pe==null?"n/d":pe.toFixed(1)+"x"],["Stake",d.stake!==""&&d.stake!=null?d.stake+"%":"n/d"]];
+    tbl(sl, km.map(([l,v],j)=>[{text:l,options:{...cellOpts(j),bold:true}},{text:v,options:cellOpts(j,1)}]), {x:8.42,y:2.05,w:4.38,colW:[2.68,1.7]});
+    sec(sl,"Next step",8.42,4.6,4.38);
+    sl.addText([{text:clip(d.nextStep||"Not set",120),options:{breakLine:!!d.nextStepDate}},
+      ...(d.nextStepDate?[{text:(isOverdue(d)?"Overdue: due ":"Due ")+fmtDate(d.nextStepDate),options:{color:isOverdue(d)?C.mag:C.grey,bold:isOverdue(d)}}]:[])],
+      {x:8.42,y:5.0,w:4.38,h:0.85,fontFace:F,fontSize:12,color:C.navy,valign:"top",margin:0});
+    // documents, as links
+    const docs=(d.links||[]).map(l=>({...l,u:safeUrl(l.url)})).filter(l=>l.u).sort((x,y)=>isProfile(y)-isProfile(x)).slice(0,4);
+    if(docs.length) sl.addText([{text:"Documents: ",options:{bold:true}}, ...docs.flatMap((l,i)=>[{text:(isProfile(l)?"Profile: ":"")+clip(l.label||"Open file",40),options:{hyperlink:{url:l.u},color:C.blue}}, ...(i<docs.length-1?[{text:"  |  "}]:[])])],
+      {x:0.52,y:6.05,w:12.28,h:0.4,fontFace:F,fontSize:11,color:C.navy,margin:0});
+    source(sl, `${src} Valuation (100%), GWP, equity and net income in $M as entered by the deal team; P/BV and P/E calculated from the valuation.`);
   }
 
   // 4. Outcomes and changes
@@ -2360,6 +2510,19 @@ document.addEventListener("click", async e=>{
     case "cp-suggest": askCP(t.textContent); break;
     case "cp-paste": openCopilot(copilotBrief(), "Tracker summary"); break;
     case "tc-refresh": tcRefresh(); break;
+    case "q-ask": { const el=document.getElementById("q_new"), txt=(el&&el.value||"").trim(), dr=S.drawer; if(!dr||!dr.id) return;
+      if(!txt){ toast("Write the question first."); el&&el.focus(); return; }
+      t.disabled=true; if(await postQuestion(dr.id, txt)){ const e2=document.getElementById("q_new"); if(e2) e2.value=""; toast(canEditNow()?"Question added":"Question sent to Corp Dev"); } t.disabled=false; break; }
+    case "q-reply": { const qid=t.dataset.id, el=document.getElementById("qr_"+qid), txt=(el&&el.value||"").trim(), dr=S.drawer; if(!dr||!dr.id) return;
+      if(!txt){ toast(canEditNow()?"Write the reply first.":"Write the follow-up first."); el&&el.focus(); return; }
+      t.disabled=true; if(await postQuestion(dr.id, txt, qid)){ const e2=document.getElementById("qr_"+qid); if(e2) e2.value=""; toast(canEditNow()?"Reply sent":"Follow-up sent"); } t.disabled=false; break; }
+    case "q-close": if(!canEditNow()) return; await guard(()=>S.db.collection("notes").doc(t.dataset.id).update({closedAt:Date.now()}), "Marked answered"); break;
+    case "ics-next": icsNextStep(D().deals.find(x=>x.id===t.dataset.id)); break;
+    case "ics-next-form": { const dr=S.drawer, d=dr&&S.deals.find(x=>x.id===dr.id); if(!d) return;
+      icsNextStep({...d, nextStep:val("f_nextStep")||d.nextStep, nextStepDate:val("f_nextStepDate"), codename:val("f_codename")||d.codename, lead:val("f_lead")||d.lead}); break; }
+    case "ics-call": { const r=S.comps&&S.comps.data&&S.comps.data.companies.find(c=>c.ticker===t.dataset.t); if(!r||!r.nextCall) return;
+      icsSave({uid:"call-"+r.ticker+"-"+r.nextCall.date.slice(0,10), title:r.nextCall.name||`${r.name} earnings call`, start:r.nextCall.date, mins:60,
+        desc:`${r.name} (${r.ticker}) earnings call. Date from S&P Global via Kensho; check the company's investor relations page for dial-in details.`}, `${r.ticker} earnings call ${r.nextCall.date.slice(0,10)}`); break; }
     case "tc-more": S.tc.more=!S.tc.more; tcRender(); break;
     case "mail-firm": mailFirm(t.dataset.firm); break;
     case "open-mate": e.preventDefault(); history.replaceState(null,"","#banker/"+encodeURIComponent(id)); S.lastFocusId=id; openRoute({kind:"banker",id}); break;

@@ -18,6 +18,7 @@ For Copilot (and other coding assistants): how the code works and the rules for 
 | `supabase/migrations/0002_merge_stages.sql` | Supabase Postgres | Optional: rewrites stored IOI stages to LOI and Signed to Closed. The page already reads them that way. |
 | `supabase/migrations/0003_history.sql` | Supabase Postgres | Change history: a trigger records who changed which deal or banker field, from what, to what. Shown in each drawer and in "What changed" on the CEO view. Run once after 0001. |
 | `supabase/migrations/0004_settings.sql` | Supabase Postgres | Shared settings: the Comps peer list and the AGL financials link (link only). |
+| `supabase/migrations/0005_ceo_questions.sql` | Supabase Postgres | CEO questions on deals: lets any login add a question to a deal in their own name. Corp Dev answers with notes. Run once after 0001. |
 | `supabase/functions/digest` | Supabase Edge Function | Optional weekly email digest (overdue, stalled, due this week, cold bankers, what changed), sent through Resend on a Supabase Cron schedule (`supabase/digest_schedule.sql`). |
 | `supabase/functions/comps` | Supabase Edge Function | Optional public comps from S&P Global via Kensho (kfinance) for the Comps tab, CEO view and board pack. Credentials stay in its secrets; nothing is stored. |
 | `supabase/functions/claude` | Supabase Edge Function | Not used by the site at present (the Claude panel is switched off with `AI_PANEL` in `web/index.html` in favour of Ask Copilot). Kept so it can be turned back on. |
@@ -105,6 +106,12 @@ Usernames become `username@deal-desk.local` behind the scenes; no email is ever 
 ### 5. Change history (recommended)
 
 In the **SQL editor**, run `supabase/migrations/0003_history.sql` once. From then on every change to a deal or banker is recorded (who, which field, from what, to what, when). It shows in each deal and banker drawer and in "What changed" on the CEO view. Logins can read the history; nobody can edit or delete it. Before you run it, the site shows recent updates only.
+
+### 5a. CEO questions on deals (recommended)
+
+In the **SQL editor**, run `supabase/migrations/0005_ceo_questions.sql` once. The CEO can then ask a question on any deal from its drawer (and follow up). Corp Dev sees open questions flagged on the Deals tab (an **Open questions** filter and a tag on the deal), replies from the deal, or marks a question answered. The CEO view shows the same tag, and replies appear live. The rule lets any login add only a question, on a deal, in their own name; the CEO still can't edit or delete anything. Until it's run, the CEO sees a message asking Corp Dev to run it.
+
+Also on deals: **Add to calendar** next to each next step (in the deal, the editor and Next 30 days) and next to peers' upcoming earnings calls on Comps downloads a calendar file that Outlook opens. The board pack has one slide per deal at LOI or in diligence.
 
 ### 6. Weekly email digest (optional)
 
