@@ -211,13 +211,16 @@ tr.inrow td:first-child{padding-left:24px}
 .colleagues a{font-size:13px}
 .ceohead{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-start;justify-content:space-between}
 .ceohead>div:first-child{flex:1 1 420px;min-width:0}
-.ceohead.ceoacts-only{justify-content:flex-end}.ceohead.ceoacts-only>div:first-child{flex:0 1 auto}
+.ceotrack .sw{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px}.ceotrack .sw.trk-acq{background:var(--acq)}.ceotrack .sw.trk-add{background:var(--add)}
+.ceotrack .btn[aria-pressed="true"] .sw{outline:1px solid #fff}
+.printonly{display:none}
 .ceoacts{display:flex;gap:8px;flex-wrap:wrap}
 @media print{
   @page{size:A4 landscape;margin:12mm}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   body,body.ai-docked,body.cp-docked{padding-right:0!important;font-size:12px}
-  header.top .who,nav.tabs,.ceoacts,.toolbar,.fchips,.chgbar,#drawerRoot,#aiRoot,#cpRoot,.tchat,#toastRoot,.rowacts,.banner .btn{display:none!important}
+  .printonly{display:block;margin:0;font-weight:bold}
+  .ceotrack,header.top .who,nav.tabs,.ceoacts,.toolbar,.fchips,.chgbar,#drawerRoot,#aiRoot,#cpRoot,.tchat,#toastRoot,.rowacts,.banner .btn{display:none!important}
   .wrap{max-width:none;padding-left:0;padding-right:0}
   main .wrap{gap:16px;padding-block:10px}
   .tbl-wrap{overflow:visible;border:0}
@@ -275,6 +278,7 @@ input[type=text],input[type=search],input[type=number],input[type=date],input[ty
 textarea{resize:vertical;min-height:64px}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--ink);background:var(--surface);color:var(--ink);cursor:pointer;font-weight:bold;font-size:13px;white-space:nowrap}
 .btn:hover{background:var(--tile)}
+.btn[aria-pressed="true"]:hover{background:var(--ink);color:#fff;opacity:.9}
 .btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .btn.primary:hover{opacity:.9}
 .btn.accent{background:var(--magenta);border-color:var(--magenta);color:#fff}
@@ -707,8 +711,14 @@ function statusBanner(){
   return "";
 }
 
+/* CEO view filter: all deals, Acquire only or Add only. Remembered per browser. */
+const CEO_TRACK_KEY="dealdesk.ceoTrack";
+function ceoTrack(){ if(!S.ceoTrack){ let v=null; try{ v=localStorage.getItem(CEO_TRACK_KEY); }catch{} S.ceoTrack=["all","acquire","add"].includes(v)?v:"all"; } return S.ceoTrack; }
+function setCeoTrack(v){ if(!["all","acquire","add"].includes(v)) return; S.ceoTrack=v; try{ localStorage.setItem(CEO_TRACK_KEY,v); }catch{} }
 function renderCEO(){
-  const {deals,bankers,notes} = D(); const ex = demoMode()||S.dbMissing;
+  const {deals:allDeals,bankers,notes} = D(); const ex = demoMode()||S.dbMissing;
+  const tf=ceoTrack(), tfName = tf==="add"?"Add":tf==="acquire"?"Acquire":"";
+  const deals = tfName ? allDeals.filter(d=>trackOf(d)===tfName) : allDeals;
   const active = deals.filter(isActive), late = active.filter(d=>LATE.includes(d.stage));
   const ev = active.reduce((s,d)=>s+(+d.ev||0),0), lateEv = late.reduce((s,d)=>s+(+d.ev||0),0);
   const engaged = bankers.filter(b => b.lastContact && daysUntil(b.lastContact) >= -90).length;
@@ -730,7 +740,9 @@ function renderCEO(){
   const X = ex ? `<span class="ex">Example</span>` : "";
 
   return `
-  <section class="ceohead ceoacts-only">
+  <section class="ceohead">
+    <div><div class="seg ceotrack" role="group" aria-label="Show deals">${[["all","All deals"],["acquire","Acquire"],["add","Add"]].map(([v,l])=>`<button type="button" class="btn sm" data-act="ceo-track" data-v="${v}" aria-pressed="${tf===v}">${v==="all"?"":`<span class="sw ${v==="add"?"trk-add":"trk-acq"}" aria-hidden="true"></span>`}${l}</button>`).join("")}</div>
+      ${tfName?`<p class="printonly">Showing ${tfName} deals only.</p>`:""}</div>
     <div class="ceoacts"><button type="button" class="btn sm" data-act="board-pack">Board pack (.pptx)</button><button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></section>
   <section class="tiles" aria-label="Headline numbers">
     <div class="tile"><b class="c-navy">${active.length}</b><span>Active deals</span><small>${nAcq} Acquire · ${nAdd} Add</small></div>
@@ -2560,6 +2572,7 @@ document.addEventListener("click", async e=>{
     case "fold": { const k=t.dataset.k; const open=!firmOpen(k); setFold(k,open); render();
       document.querySelector(`.fold[data-k="${CSS.escape(k)}"]`)?.focus(); break; }
     case "fold-all": { const open=t.dataset.open==="1"; firmKeysShown().forEach(k=>loadFolds()[k]=open); saveFolds(); render(); document.querySelector('[data-act="fold-all"]')?.focus(); break; }
+    case "ceo-track": setCeoTrack(t.dataset.v); render(); break;
     case "comps-refresh": loadComps(true); render(); break;
     case "comps-period": setCompsPeriod(t.dataset.v); render(); break;
     case "cs-defaults": { const ta=document.getElementById("cs_peers"); if(ta) ta.value=DEFAULT_PEERS.join("\n"); break; }

@@ -71,6 +71,21 @@ const seed=[
   ok("Diligence bar: Acquire", loi[3][0].startsWith("trk-acq:27.27"), loi[3]);
   ok("deal summaries carry the tag and edge", (await p.$$('section:has(h3.sec:text-is("Deal summaries and documents")) tr.trk-add .trk-add')).length===2);
   await p.screenshot({path:OUTDIR+"/track-ceo.png",fullPage:true});
+  // CEO view filter
+  ok("CEO filter: All deals pressed by default", (await p.getAttribute('button[data-act="ceo-track"][data-v="all"]',"aria-pressed"))==="true");
+  await p.click('button[data-act="ceo-track"][data-v="acquire"]'); await p.waitForTimeout(150);
+  const sumRows=async()=>p.$$eval('section:has(h3.sec:text-is("Deal summaries and documents")) tbody tr[data-id]',r=>r.map(x=>x.dataset.id).sort().join(","));
+  ok("Acquire only: tiles, legend and table", (await txt(".tiles")).startsWith("2Active deals2 Acquire · 0 Add") && (await txt(".tlegend")).startsWith("Acquire $80M (2)") && (await sumRows())==="d3,d4", [await txt(".tiles"), await sumRows()]);
+  ok("print says it's filtered", (await txt(".printonly"))==="Showing Acquire deals only.");
+  await p.click('button[data-act="ceo-track"][data-v="add"]'); await p.waitForTimeout(150);
+  ok("Add only", (await sumRows())==="d1,d2" && (await txt(".tiles")).includes("Acquire $0M · Add $140M"), await sumRows());
+  ok("remembered in this browser", (await p.evaluate(()=>localStorage.getItem("dealdesk.ceoTrack")))==="add");
+  await p.screenshot({path:OUTDIR+"/track-ceo-add.png"});
+  await p.reload(); await p.waitForTimeout(500);
+  ok("after reload: still Add", (await p.getAttribute('button[data-act="ceo-track"][data-v="add"]',"aria-pressed"))==="true");
+  await p.evaluate(()=>{ S.session.role="ceo"; render(); });
+  await p.click('button[data-act="ceo-track"][data-v="all"]'); await p.waitForTimeout(150);
+  ok("back to all", !(await p.$(".printonly")) && (await txt(".tiles")).startsWith("4Active deals"));
   await p.goto(BASE+"#deal/d2"); await p.waitForTimeout(200);
   ok("deal drawer shows the tag", (await txt("#drawerRoot .stagerow")).startsWith("Add"));
   await p.keyboard.press("Escape"); await p.waitForTimeout(100);
