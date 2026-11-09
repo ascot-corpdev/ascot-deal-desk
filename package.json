@@ -5,7 +5,9 @@
   "scripts": {
     "logins": "node scripts/logins.mjs",
     "serve": "npx --yes http-server@14.1.1 web -p 8080 -c-1",
-    "test": "node tests/run.mjs"
+    "test": "node tests/run.mjs",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.2"

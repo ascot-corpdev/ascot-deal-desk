@@ -26,6 +26,8 @@ For Copilot (and other coding assistants): how the code works and the rules for 
 | `supabase/functions/comps-chat` | Supabase Edge Function | Optional Claude chat on the Comps tab. Answers from S&P Global data via Kensho only (the table on screen plus lookups it makes itself); never sees the deal tracker. Any login. |
 | `supabase/functions/claude` | Supabase Edge Function | Not used by the site at present (the Claude panel is switched off with `AI_PANEL` in `web/index.html` in favour of Ask Copilot). Kept so it can be turned back on. |
 | `scripts/logins.mjs` | Your machine | Creates, resets and removes logins with the Supabase service role key. |
+| `scripts/backup.mjs`, `scripts/restore.mjs` | Your machine | Encrypted backup of the tracker to `~/Documents/ascot-deal-desk-backups/`, and restore from it (`npm run backup`, `npm run restore`). See section 10. |
+| `supabase/migrations/0006_keepalive.sql`, `.github/workflows/keepalive.yml` | Supabase, GitHub Actions | A daily call that keeps the free-tier project from pausing. Reads no data. See section 10. |
 | `web/auth.html` | GitHub Pages (static) | Return page for "Sign in with Microsoft" in the Ask Copilot panel. Hands the sign-in back to the tracker tab and closes. |
 | `.github/workflows/pages.yml` | GitHub Actions | Writes `web/config.js` from repository variables and publishes `web/` to Pages. |
 | `tests/`, `.github/workflows/tests.yml` | GitHub Actions | About 500 automated checks of the site and the functions, run on every pull request (`npm test` locally). See `tests/README.md`. |
@@ -235,6 +237,26 @@ The card appears only in production: on the Deals tab, for a Corp Dev login that
 People then click **Sign in with Microsoft** on the card. It shows the 10 latest messages, with up to 30 behind **Show more**. Shared files appear as links, and images as "[image]". It refreshes every 30 seconds while the Deals tab is open in a visible tab. It's read only, so replies happen in Teams. People who aren't in the chat see a message saying they can't read it. Nothing from the chat is stored in Supabase or in the browser.
 
 If step 8's Copilot app is set up instead, the card uses that app and no `MS_` variables are needed.
+
+### 10. Keep Supabase awake, and back up to your computer (recommended)
+
+**Keep awake.** The Supabase free tier pauses a project after about a week with no activity. Run `supabase/migrations/0006_keepalive.sql` once in the **SQL editor**. The **Keep Supabase awake** workflow (`.github/workflows/keepalive.yml`) then calls it every day at 06:41 UTC with the publishable key the site already uses. It reads and stores no tracker data. A red run means Supabase didn't answer: open the Supabase dashboard and restore the project if it paused. You can also run it by hand from **Actions > Keep Supabase awake > Run workflow**. GitHub turns scheduled workflows off after 60 days without any commit to the repository; if that happens, it says so on the Actions tab with a button to turn it back on.
+
+**Back up.** The free tier keeps no backups, so make your own, weekly is a good habit. Backups stay on your computer; never put them in this folder or on GitHub (`.gitignore` blocks `backups/` and `*.enc` as a guard, and the script refuses to write inside the repository folder). With the same two variables as the logins script:
+
+```bash
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co SUPABASE_SECRET_KEY=sb_secret_YOUR_KEY npm run backup
+```
+
+It asks for a passphrase (12+ characters, typed twice, not shown) and writes one encrypted file (AES-256-GCM, key from your passphrase by scrypt) to `~/Documents/ascot-deal-desk-backups/`, with profiles, deals, bankers, notes, the change history and settings. Use `npm run backup -- --out <folder>` to choose another folder. **Keep the passphrase safe**: without it the file can't be opened. Logins' passwords aren't included (Supabase keeps them separately).
+
+To restore:
+
+```bash
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co SUPABASE_SECRET_KEY=sb_secret_YOUR_KEY npm run restore -- ~/Documents/ascot-deal-desk-backups/ascot-deal-desk-YYYY-MM-DD-HHMM.enc
+```
+
+It asks for the passphrase, shows how many rows of each table the file holds, and writes only after you type `restore`. Rows are upserted by id: records in the backup replace those with the same id, and anything added since is left alone (nothing is deleted). The change history stays in the file for reference but isn't written back, because it's the audit log. Restoring into a new project: create the logins first with `npm run logins`, then restore.
 
 ## Running locally
 

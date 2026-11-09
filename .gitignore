@@ -12,3 +12,7 @@ supabase/.temp/
 # Test output (screenshots, board packs)
 tests/out/
 deno.lock
+
+# Backups never go in the repository (npm run backup writes to ~/Documents/ascot-deal-desk-backups)
+backups/
+*.enc

@@ -1,0 +1,35 @@
+name: Keep Supabase awake
+
+# The Supabase free tier pauses a project after about a week without activity. This calls the keepalive()
+# function (supabase/migrations/0006_keepalive.sql) once a day. It reads and stores no tracker data, and
+# uses only the publishable key the site already uses. A red run means Supabase didn't answer.
+on:
+  schedule:
+    - cron: "41 6 * * *"   # 06:41 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call keepalive()
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || vars.SUPABASE_ANON_KEY }}
+        run: |
+          url="$(printf '%s' "$SUPABASE_URL" | sed -E 's#/+$##; s#/(rest|auth)/v1$##')"
+          if [ -z "$url" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::Add repository variables SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (Settings > Secrets and variables > Actions > Variables)."
+            exit 1
+          fi
+          code=$(curl -sS --max-time 30 -o resp.txt -w '%{http_code}' -X POST "$url/rest/v1/rpc/keepalive" \
+            -H "apikey: $SUPABASE_KEY" -H "Content-Type: application/json" -d '{}') || code=000
+          if [ "$code" != "200" ]; then
+            echo "::error::keepalive() answered $code: $(head -c 300 resp.txt 2>/dev/null). If it says the function doesn't exist, run supabase/migrations/0006_keepalive.sql. If the project is paused, restore it in the Supabase dashboard."
+            exit 1
+          fi
+          echo "Supabase is awake (server time $(cat resp.txt))."
