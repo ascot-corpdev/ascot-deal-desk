@@ -16,3 +16,7 @@ verify_jwt = false
 
 [functions.comps-chat]
 verify_jwt = false
+
+# The league table (Banker CRM) checks the caller's login itself, like comps, and uses the same Kensho secrets.
+[functions.league]
+verify_jwt = false

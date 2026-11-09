@@ -24,6 +24,7 @@ For Copilot (and other coding assistants): how the code works and the rules for 
 | `supabase/functions/digest` | Supabase Edge Function | Optional weekly email digest (overdue, stalled, due this week, cold bankers, what changed), sent through Resend on a Supabase Cron schedule (`supabase/digest_schedule.sql`). |
 | `supabase/functions/comps` | Supabase Edge Function | Optional public comps from S&P Global via Kensho (kfinance) for the Comps tab, CEO view and board pack. Credentials stay in its secrets; nothing is stored. |
 | `supabase/functions/comps-chat` | Supabase Edge Function | Optional Claude chat on the Comps tab. Answers from S&P Global data via Kensho only (the table on screen plus lookups it makes itself); never sees the deal tracker. Any login. |
+| `supabase/functions/league` | Supabase Edge Function | Optional league table on the Banker CRM: which banks advised on M&A involving the Comps peers and other companies you list, from S&P Global via Kensho. Any login; nothing is stored. See section 7b. |
 | `supabase/functions/claude` | Supabase Edge Function | Not used by the site at present (the Claude panel is switched off with `AI_PANEL` in `web/index.html` in favour of Ask Copilot). Kept so it can be turned back on. |
 | `scripts/logins.mjs` | Your machine | Creates, resets and removes logins with the Supabase service role key. |
 | `scripts/backup.mjs`, `scripts/restore.mjs` | Your machine | Encrypted backup of the tracker to `~/Documents/ascot-deal-desk-backups/`, and restore from it (`npm run backup`, `npm run restore`). See section 10. |
@@ -201,6 +202,20 @@ supabase functions deploy comps-chat --no-verify-jwt
 `--no-verify-jwt` is safe: the function checks the caller's login itself. It uses the same `ALLOWED_ORIGIN` secret as the other functions. The comps function shares its Kensho code, so after pulling this change also redeploy it: `supabase functions deploy comps --no-verify-jwt`.
 
 Cost: each question is billed to your Anthropic account (a few cents; more when Claude looks things up). Check that Ascot's Kensho / S&P Global licence allows its data to be sent to an AI provider before switching this on.
+
+### 7b. League table on the Banker CRM (optional)
+
+The **Banker CRM** tab gets a **Bankers / League table** switch. The league table ranks the firms that advised on M&A deals involving the companies we track: the Comps peers plus any others Corp Dev adds with **Edit companies** (up to 40 in all, by ticker). For each company, Kensho lists its deals as buyer, seller or target; the function then asks for each deal's participants and advisors. The page ranks firms by number of deals, with buy-side and sell-side counts, disclosed US dollar deal value, the latest deals and who we know there from the CRM. Click a firm to see its deals. Switches choose both sides, buy-side or sell-side; banks only (S&P's "financial advisor") or all advisors (lawyers and accountants too); and 1, 3 or 5 years. A banker's drawer and their firm's row show the firm's place in the table.
+
+What it is not: a market-wide league table. Kensho lists deals per company, so only these companies' deals count. S&P records no advisors on many smaller deals (most broker tuck-ins), and deals booked under a subsidiary may not appear under the listed parent. Firm names are grouped across legal entities ("Goldman Sachs & Co. LLC" and "Goldman Sachs International" count as Goldman Sachs).
+
+Needs section 7 done (the Kensho secrets apply to every function) and the settings table (`0004_settings.sql`, for the extra companies). Deploy:
+
+```bash
+supabase functions deploy league --no-verify-jwt
+```
+
+`--no-verify-jwt` is safe: the function checks the caller's login itself. Results are kept in the function's memory for 6 hours (the Refresh button asks the page again; a fresh Kensho fetch follows once the 6 hours pass or the company list changes) and never written to the database.
 
 ### 8. Copilot chat in the page (optional)
 

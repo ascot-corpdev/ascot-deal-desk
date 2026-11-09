@@ -224,6 +224,15 @@ tr.inrow td:first-child{padding-left:24px}
 #teamsBtn{text-decoration:none}#teamsBtn .tb-s{display:none}
 .btn[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
 .seg{display:inline-flex}.seg .btn+.btn{margin-left:-1px}
+.bmode{margin-bottom:4px}
+.lgtbl td.lgrank{font-weight:bold;color:var(--ink);width:36px}
+.lgtbl .lgrecent{font-size:13px}
+tr.lgdeals>td{background:var(--tile)!important;padding:6px 10px 12px}
+table.lgsub{width:100%;border-collapse:collapse;font-size:13px}table.lgsub th,table.lgsub td{padding:4px 8px;border-bottom:1px solid var(--grid);text-align:left;vertical-align:top}table.lgsub .num{text-align:right}
+.lgedit{max-width:760px}.lgedit textarea{width:100%}
+.lgcos .btn{margin-left:6px}
+.lgbadge{color:var(--blue);font-weight:bold}
+.lgnote p{margin:0}
 .imtbl{font-size:12px}
 .imtbl td,.imtbl th{padding:5px 7px}
 .imtbl tr.skip td{color:var(--muted);text-decoration:line-through}
@@ -448,6 +457,12 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
   table.cards tr.firmrow{display:block;border:0;border-top:2px solid var(--ink);padding:10px 0 6px;margin:14px 0 8px;background:transparent}
   table.cards tr.firmrow td{display:block;background:transparent!important;border:0;padding:0}
   table.cards tr.inrow td:first-child{padding-left:0}
+  table.cards tr.lgdeals{display:block;margin:-10px 0 10px;padding:4px 12px 8px;background:var(--tile)}
+  table.cards table.lgsub,table.cards table.lgsub tbody{display:block}
+  table.cards table.lgsub thead{display:none}
+  table.cards table.lgsub tr{display:block;padding:8px 0;margin:0;border:0;border-bottom:1px solid var(--grid);background:transparent}
+  table.cards table.lgsub td{display:inline;padding:0;border:0;text-align:left}
+  table.cards table.lgsub td+td::before{content:" · ";color:var(--muted)}
   .firm{gap:8px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
@@ -1178,6 +1193,182 @@ async function saveCompsSettings(){
   toast("Saved"); S.comps=null; closeDrawer(); await loadSettings();
 }
 
+/* ---------- League table (Banker CRM) ----------
+   Advisors on M&A deals involving the Comps peers plus a list Corp Dev keeps (settings "league"), from S&P Global
+   via Kensho (supabase/functions/league). Not a market-wide ranking: Kensho lists deals per company, so the table
+   covers those companies' deals only. The function returns deals and their advisors; ranking happens here. */
+const LEAGUE_YEARS=[1,3,5];
+const BMODE_KEY="dealdesk.bankerMode";
+function bankerMode(){
+  if(!S.bmode){ let v=null; try{ v=localStorage.getItem(BMODE_KEY); }catch{} S.bmode = v==="league" ? "league" : "list"; }
+  return S.bmode;
+}
+function setBankerMode(v){ S.bmode = v==="league" ? "league" : "list"; try{ localStorage.setItem(BMODE_KEY,S.bmode); }catch{} }
+function leagueCfg(){
+  const l=(S.settings||{}).league||{};
+  const extra=Array.isArray(l.companies)?l.companies.filter(t=>TICKER_RE.test(t)):[];
+  const peers=benchCfg().peers;
+  const companies=[...new Set([...peers,...extra])].slice(0,40);
+  const years=LEAGUE_YEARS.includes(S.lgYears)?S.lgYears:(LEAGUE_YEARS.includes(l.years)?l.years:3);
+  return {peers, extra, companies, years};
+}
+/* Advisor names as S&P records them ("Goldman Sachs & Co. LLC", "JPMorgan Chase Bank, N.A., Investment Arm")
+   roll up to one firm. Banker firms in the CRM go through the same function, so the two match. */
+const ADVISOR_BRANDS=[
+  [/\bgoldman sachs\b/,"Goldman Sachs"],[/\bmorgan stanley\b/,"Morgan Stanley"],[/^(j ?p ?morgan|jpmorgan)\b/,"J.P. Morgan"],
+  [/^(bofa|bank of america|merrill lynch)\b/,"BofA Securities"],[/^barclays\b/,"Barclays"],[/^jefferies\b/,"Jefferies"],[/^evercore\b/,"Evercore"],
+  [/^lazard\b/,"Lazard"],[/^(n m )?rothschild\b/,"Rothschild & Co"],[/^perella weinberg\b/,"Perella Weinberg"],[/^pjt\b/,"PJT Partners"],
+  [/^(keefe bruyette|kbw)\b/,"KBW"],[/^piper sandler\b/,"Piper Sandler"],[/^raymond james\b/,"Raymond James"],[/^houlihan lokey\b/,"Houlihan Lokey"],
+  [/^ubs\b/,"UBS"],[/^citi(group|bank| global markets)?\b/,"Citi"],[/^deutsche (bank|numis)\b/,"Deutsche Bank"],[/^wells fargo\b/,"Wells Fargo"],
+  [/^(rbc|royal bank of canada)\b/,"RBC Capital Markets"],[/^credit suisse\b/,"Credit Suisse"],[/^hsbc\b/,"HSBC"],[/^guy carpenter\b/,"Guy Carpenter"],
+  [/^gallagher (re|securities)\b/,"Gallagher Securities"],[/^aon\b/,"Aon"],[/^marsh\b/,"Marsh"],[/^(willis|wtw)\b/,"WTW"],[/^howden\b/,"Howden"],
+  [/^moelis\b/,"Moelis"],[/^centerview\b/,"Centerview"],[/^ardea\b/,"Ardea Partners"],[/^dowling\b/,"Dowling & Partners"],[/^macquarie\b/,"Macquarie"],
+  [/^nomura\b/,"Nomura"],[/^mizuho\b/,"Mizuho"],[/^(bmo|bank of montreal)\b/,"BMO Capital Markets"],[/^td (securities|cowen)\b/,"TD Cowen"],
+  [/^stephens\b/,"Stephens"],[/^william blair\b/,"William Blair"],[/^truist\b/,"Truist Securities"],[/^stifel\b/,"Stifel"],[/^kpmg\b/,"KPMG"],
+  [/^(pwc|pricewaterhouse)/,"PwC"],[/^deloitte\b/,"Deloitte"],[/^(ey|ernst (and )?young)\b/,"EY"],[/^grant thornton\b/,"Grant Thornton"],
+  [/^(mufg|mitsubishi ufj)\b/,"MUFG"],[/^(smbc|sumitomo mitsui)\b/,"SMBC"],[/^bnp paribas\b/,"BNP Paribas"],[/^societe generale\b/,"Societe Generale"],
+  [/^ing\b/,"ING"],[/^investec\b/,"Investec"],[/^peel hunt\b/,"Peel Hunt"],[/^panmure\b/,"Panmure Liberum"],[/^(numis)\b/,"Deutsche Bank"],
+  [/^berenberg\b/,"Berenberg"],[/^fenchurch\b/,"Fenchurch Advisory"],[/^cavendish\b/,"Cavendish"],[/^reagan consulting\b/,"Reagan Consulting"],
+  [/^marshberry\b/,"MarshBerry"],[/^waller helms\b/,"Waller Helms"],[/^milliman\b/,"Milliman"]
+];
+const LEGAL_TAIL=/\s+(llc|l l c|inc|incorporated|ltd|limited|llp|lp|plc|corp|corporation|co|company|sa|ag|gmbh|n a|na|securities|capital markets|investment arm|group|holdings|us|usa|uk|international|london|new york|europe|advisors|advisory)$/;
+function advisorBrand(name){
+  const raw=String(name||"").trim(); if(!raw) return "";
+  const k=raw.toLowerCase().replace(/\(.*?\)/g," ").replace(/&/g," and ").replace(/[.,'’]/g," ").replace(/\s+/g," ").trim().replace(/ and /g," ");
+  for(const [re,brand] of ADVISOR_BRANDS){ if(re.test(k)) return brand; }
+  // Unknown firm: drop legal suffixes and places from the end, keep the words as written
+  const words=raw.replace(/\(.*?\)/g," ").replace(/,/g," ").split(/\s+/).filter(Boolean);
+  let n=words.length;
+  while(n>1 && LEGAL_TAIL.test(" "+words.slice(n-1,n).join(" ").toLowerCase().replace(/[.]/g," ").replace(/\s+/g," ").trim())) n--;
+  while(n>1 && /^(&|and|the)$/i.test(words[n-1])) n--;
+  return words.slice(0,n).join(" ");
+}
+const brandKey = s => advisorBrand(s).toLowerCase();
+async function loadLeague(force){
+  if(!S.sb || !S.session) return;
+  const cfg=leagueCfg(), key=cfg.years+"|"+cfg.companies.join(",");
+  if(!force && S.league && S.league.key===key && (S.league.data||S.league.loading||S.league.err)) return;
+  S.league={key, loading:true};
+  let out;
+  try{
+    const {data:{session}}=await S.sb.auth.getSession(); if(!session) throw new Error("Your session ended. Sign in again.");
+    const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/league", {method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":CFG.supabaseAnonKey}, body:JSON.stringify({companies:cfg.companies, years:cfg.years})});
+    let body=null; try{ body=await res.json(); }catch{}
+    if(res.status===404) out={key, err:"not_deployed"};
+    else if(!res.ok) out={key, err:(body&&body.error)||("http_"+res.status), msg:(body&&(body.message||body.error))||`The league function answered ${res.status}.`};
+    else out={key, data:body, at:Date.now()};
+  }catch(e){ out={key, err:"network", msg:(e&&e.message)||"Network error"}; }
+  if(S.league && S.league.key===key) S.league=out;
+  if(S.view==="bankers") render();
+  if(S.drawer && S.drawer.kind==="banker") renderDrawer();
+}
+/* Rank firms: one count per deal per firm, a deal is buy-side for a firm if it advised a buyer, sell-side if it
+   advised the target or a seller (it can be both). Value adds up disclosed US dollar deal values only. */
+function leagueRank(data, side, kind){
+  const firms=new Map();
+  for(const d of (data&&data.deals)||[]){
+    const seen=new Map();
+    for(const a of d.advisors||[]){
+      if(kind!=="all" && !/financial/i.test(a.type||"")) continue;
+      if(side!=="all" && a.side!==side) continue;
+      const name=advisorBrand(a.name); if(!name) continue;
+      const k=name.toLowerCase(); if(!seen.has(k)) seen.set(k,{name, sides:new Set(), clients:new Set(), types:new Set()});
+      const s=seen.get(k); s.sides.add(a.side); if(a.client) s.clients.add(a.client); s.types.add(a.type||"Advisor");
+    }
+    for(const [k,s] of seen){
+      if(!firms.has(k)) firms.set(k,{key:k, name:s.name, deals:[], buy:0, sell:0, usd:0, types:new Set()});
+      const f=firms.get(k); f.deals.push({deal:d, sides:[...s.sides], clients:[...s.clients]});
+      if(s.sides.has("buy")) f.buy++; if(s.sides.has("sell")) f.sell++;
+      if(d.valueM!=null && /us dollar|^usd$/i.test(d.currency||"")) f.usd+=d.valueM;
+      s.types.forEach(t=>f.types.add(t));
+    }
+  }
+  const rows=[...firms.values()];
+  rows.forEach(f=>f.deals.sort((a,b)=>String(b.deal.announced||"").localeCompare(String(a.deal.announced||""))));
+  rows.sort((a,b)=>b.deals.length-a.deals.length || b.usd-a.usd || a.name.localeCompare(b.name));
+  let rank=0, prev=null; rows.forEach((f,i)=>{ const sig=f.deals.length+"|"+f.usd; if(sig!==prev){ rank=i+1; prev=sig; } f.rank=rank; });
+  return rows;
+}
+const monthYear = s => { if(!s) return "n/d"; const d=new Date(s+"T00:00:00"); return isNaN(d) ? esc(s) : d.toLocaleDateString("en-GB",{month:"short",year:"numeric"}); };
+const dealParties = d => `${esc(d.target||"Undisclosed target")}${d.buyers&&d.buyers.length?` <span class="t2">(${esc(d.buyers.join(", "))})</span>`:""}`;
+const usdM = v => v>=1000 ? `$${(v/1000).toFixed(1)}B` : `$${Math.round(v).toLocaleString("en-US")}M`;
+function bankersAtBrand(brandLower){ return S.bankers.filter(b=>b.firm && brandKey(b.firm)===brandLower); }
+/* The firm's place in the default ranking (banks, both sides), for the banker drawer and firm rows */
+function leagueSpot(firm){
+  const d=S.league&&S.league.data; if(!d || !firm) return null;
+  const rows=S.leagueDefault&&S.leagueDefault.data===d ? S.leagueDefault.rows : (S.leagueDefault={data:d, rows:leagueRank(d,"all","banks")}).rows;
+  const k=brandKey(firm); const f=rows.find(r=>r.key===k);
+  return f ? {f, of:rows.length, since:d.since} : null;
+}
+function leagueStatusHTML(){
+  const c=S.league, edit=canEditNow();
+  if(!c || c.loading) return `<p class="t2">Loading deals and advisors from Kensho… (the first load can take half a minute)</p>`;
+  if(c.err==="not_configured") return `<div class="banner"><span><b>Kensho isn't connected to the league function yet.</b> ${edit?"Set the Kensho secrets (README, section 7); they serve the comps and league functions alike.":"Ask the tracker owner to connect it."}</span></div>`;
+  if(c.err==="not_deployed") return `<div class="banner"><span><b>The league function isn't deployed yet.</b> ${edit?"See README, section 7b: <code>supabase functions deploy league --no-verify-jwt</code>.":"Ask the tracker owner to set it up."}</span></div>`;
+  if(c.err==="network") return `<div class="banner"><span><b>Couldn't reach the league function.</b> ${edit?`Check it's deployed with <code>--no-verify-jwt</code> and that <code>ALLOWED_ORIGIN</code> is <code>${esc(location.origin)}</code> (README, section 7b).`:"Ask the tracker owner to check the league function."}</span><button class="btn sm" data-act="lg-refresh">Try again</button></div>`;
+  if(c.err) return `<div class="banner"><span><b>Couldn't load the league table.</b> ${esc(c.msg||c.err)}</span><button class="btn sm" data-act="lg-refresh">Try again</button></div>`;
+  return "";
+}
+function leagueCompaniesHTML(cfg, edit){
+  if(S.lgEdit && edit) return `<section class="lgedit"><label class="f full">Companies besides the Comps peers <em>(tickers, one per line or comma separated; up to ${40-cfg.peers.length}; London listings like LSE:BEZ)</em><textarea id="lg_extra" rows="4">${esc(cfg.extra.join("\n"))}</textarea></label>
+    <p class="t2">The ${cfg.peers.length} Comps peers are always included: ${esc(cfg.peers.join(", "))}. Change those on the Comps tab.</p>
+    ${S.settingsMissing?`<p class="over">Saving needs the settings table: run supabase/migrations/0004_settings.sql in Supabase first.</p>`:""}
+    <div class="rowacts"><button type="button" class="btn primary sm" data-act="lg-save">Save companies</button><button type="button" class="btn sm" data-act="lg-edit-cancel">Cancel</button></div></section>`;
+  return `<p class="t2 lgcos">Deals involving the ${cfg.peers.length} Comps peers${cfg.extra.length?` and ${cfg.extra.length} more (${esc(cfg.extra.join(", "))})`:""}. ${edit?`<button type="button" class="btn sm ghost" data-act="lg-edit">Edit companies</button>`:""}</p>`;
+}
+function renderLeague(){
+  loadLeague(false);
+  const edit=canEditNow(), cfg=leagueCfg(), c=S.league, d=c&&c.data;
+  const side=S.lgSide||"all", kind=S.lgKind||"banks";
+  const rows=d?leagueRank(d,side,kind):[];
+  const withAdv=d?d.deals.filter(x=>(x.advisors||[]).some(a=>kind==="all"||/financial/i.test(a.type||""))).length:0;
+  const shown=S.lgAll?rows:rows.slice(0,25);
+  const top=rows[0];
+  const errs=d?Object.entries(d.errors||{}):[];
+  const seg=(act,cur,opts,label)=>`<div class="seg" role="group" aria-label="${label}">${opts.map(([v,l])=>`<button type="button" class="btn sm" data-act="${act}" data-v="${v}" aria-pressed="${cur===v}">${l}</button>`).join("")}</div>`;
+  const firmRow=f=>{
+    const open=S.lgOpen===f.key; const crm=bankersAtBrand(f.key);
+    const recent=f.deals.slice(0,2).map(x=>`${dealParties(x.deal)} <span class="t2">${monthYear(x.deal.announced)}</span>`).join("<br>");
+    return `<tr class="click lgrow" data-act="lg-open" data-k="${esc(f.key)}" tabindex="0" aria-expanded="${open}">
+      <td class="num lgrank c-hide">${f.rank}</td>
+      <td><div class="firm">${firmLogo({firm:f.name},28)}<div><div class="t1">${esc(f.name)}</div><div class="t2 mob">#${f.rank} · ${f.deals.length} deal${f.deals.length===1?"":"s"} · ${f.buy} buy-side · ${f.sell} sell-side${f.usd?` · ${usdM(f.usd)}`:""}</div></div></div></td>
+      <td class="num c-hide">${f.deals.length}</td><td class="num c-hide">${f.buy}</td><td class="num c-hide">${f.sell}</td>
+      <td class="num c-hide">${f.usd?usdM(f.usd):'<span class="t2">n/d</span>'}</td>
+      <td class="c-full lgrecent" data-label="Latest">${recent}</td>
+      <td class="c-full" data-label="In our CRM">${crm.length?crm.slice(0,3).map(b=>edit&&!demoMode()?`<a href="#banker/${encodeURIComponent(b.id)}" data-act="lg-banker" data-id="${esc(b.id)}">${esc(b.name)}</a>`:esc(b.name)).join(", ")+(crm.length>3?` <span class="t2">+${crm.length-3}</span>`:""):'<span class="t2">No one</span>'}</td></tr>
+      ${open?`<tr class="lgdeals"><td class="c-hide"></td><td colspan="7" class="c-full"><table class="lgsub"><thead><tr><th>Announced</th><th>Target (buyer)</th><th>Side</th><th>Advised</th><th class="num">Value</th><th>Status</th></tr></thead><tbody>${f.deals.map(x=>`<tr><td>${monthYear(x.deal.announced)}</td><td>${dealParties(x.deal)}</td><td>${x.sides.map(s=>s==="buy"?"Buy-side":"Sell-side").join(", ")}</td><td>${esc(x.clients.join(", "))}</td><td class="num">${x.deal.valueM!=null?`${esc(x.deal.valueM.toLocaleString("en-US"))}M <span class="t2">${esc(/us dollar/i.test(x.deal.currency||"")?"USD":(x.deal.currency||""))}</span>`:'<span class="t2">n/d</span>'}</td><td>${esc(x.deal.status||"")}</td></tr>`).join("")}</tbody></table></td></tr>`:""}`;
+  };
+  return `
+  <section><h2 class="action-title">${d?(top?`${esc(top.name)} leads, on ${top.deals.length} of ${withAdv} deal${withAdv===1?"":"s"} with ${kind==="all"?"advisors":"banks"} recorded since ${monthYear(d.since)}`:`No ${kind==="all"?"advisors":"banks"} recorded on these companies' deals since ${monthYear(d.since)}`):"League table"}</h2>
+    <p class="sub">Who advised on M&amp;A involving the companies we track, from S&amp;P Global via Kensho. It covers these companies' deals only, not the whole market, and S&amp;P records no advisors on many smaller deals.</p></section>
+  <section class="toolbar">
+    ${seg("lg-side",side,[["all","Both sides"],["buy","Buy-side"],["sell","Sell-side"]],"Side")}
+    ${seg("lg-kind",kind,[["banks","Banks"],["all","All advisors"]],"Advisors")}
+    ${seg("lg-years",cfg.years,LEAGUE_YEARS.map(y=>[y,`${y} yr${y===1?"":"s"}`]),"Period")}
+    <span class="grow"></span><button type="button" class="btn sm" data-act="lg-refresh">Refresh</button>
+  </section>
+  ${leagueCompaniesHTML(cfg, edit)}
+  ${leagueStatusHTML()}
+  ${d?(rows.length?`<section><div class="tbl-wrap cardwrap"><table class="cards lgtbl"><thead><tr><th class="num">#</th><th>Firm</th><th class="num">Deals</th><th class="num">Buy-side</th><th class="num">Sell-side</th><th class="num" title="Disclosed values of US dollar deals only">Value (US$ deals)</th><th>Latest</th><th>In our CRM</th></tr></thead><tbody>
+    ${shown.map(firmRow).join("")}</tbody></table></div>
+    ${rows.length>25?`<p><button type="button" class="btn sm ghost" data-act="lg-all">${S.lgAll?"Show top 25":`Show all ${rows.length} firms`}</button></p>`:""}</section>`:`<div class="empty"><p>Nothing to rank for this choice.</p></div>`):""}
+  ${errs.length?`<p class="t2">Not included: ${errs.map(([t,m])=>`<b>${esc(t)}</b> (${esc(m)})`).join("; ")}.</p>`:""}
+  ${d&&d.dropped?`<p class="t2">Only the ${d.deals.length} most recent deals are included; ${d.dropped} older one${d.dropped===1?" was":"s were"} left out. Choose a shorter period or fewer companies to see them all.</p>`:""}
+  <p class="source">Source: S&amp;P Global Capital IQ via Kensho${c&&c.at?`, fetched ${esc(fmtWhen(c.at))}`:""}. Deals started since ${d?esc(fmtDate(d.since)):"the start of the period"} in which a listed company was buyer, seller or target (deals between two listed companies count once); cancelled and withdrawn deals left out. A firm counts once per deal: buy-side when it advised a buyer, sell-side when it advised the target or a seller. Banks = advisors S&amp;P records as financial advisors. Firm names are grouped across their legal entities. Value adds up disclosed values of US dollar deals.</p>`;
+}
+async function saveLeagueCompanies(){
+  const cfg=leagueCfg();
+  const extra=[...new Set((document.getElementById("lg_extra")?.value||"").split(/[\s,;]+/).map(t=>t.trim().toUpperCase()).filter(Boolean))].filter(t=>!cfg.peers.includes(t));
+  const bad=extra.find(t=>!TICKER_RE.test(t));
+  if(bad){ toast(`"${bad}" doesn't look like a ticker. Use letters, numbers and a colon, like LSE:BEZ.`); return; }
+  if(cfg.peers.length+extra.length>40){ toast(`Up to ${40-cfg.peers.length} companies besides the Comps peers.`); return; }
+  const doc={...(((S.settings||{}).league)||{}), companies:extra, updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""};
+  const {error}=await S.sb.from("settings").upsert({id:"league", doc});
+  if(error){ toast(/settings|PGRST205|42P01/i.test(String(error.code||"")+String(error.message||"")) ? "Run supabase/migrations/0004_settings.sql in Supabase first, then save again." : "Couldn't save: "+(error.message||"try again")); return; }
+  toast("Saved"); S.lgEdit=false; S.league=null; await loadSettings(); render();
+}
+
 /* ---------- team: who is working on which deal ----------
    A person is on a deal as Lead (the deal's lead names them) or Team (ticked under Deal team). */
 function teamMembers(){
@@ -1228,7 +1419,13 @@ function renderTeam(){
   <p class="source">Source: Corp Dev deal tracker. Lead from each deal's lead field; team from its Deal team list.</p>`;
 }
 
+function bankerModeHTML(){
+  const m=bankerMode();
+  return `<section class="bmode"><div class="seg" role="group" aria-label="Banker CRM view">${[["list","Bankers"],["league","League table"]].map(([v,l])=>`<button type="button" class="btn sm" data-act="bmode" data-v="${v}" aria-pressed="${m===v}">${l}</button>`).join("")}</div></section>`;
+}
 function renderBankers(){
+  if(bankerMode()==="league") return bankerModeHTML()+renderLeague();
+  loadLeague(false);
   const {bankers,deals}=D(); const ex=demoMode()||S.dbMissing; const edit=canEditNow();
   const X = ex ? `<span class="ex">Example</span>` : "";
   const base = searchedBankers();
@@ -1238,7 +1435,7 @@ function renderBankers(){
   const cold = bankers.filter(isColdB).length;
   const reconnect = bankers.filter(b=>["Strong","Active"].includes(b.relationship) && (!b.lastContact || daysUntil(b.lastContact) < -60))
     .sort((a,b)=>String(a.lastContact||"").localeCompare(String(b.lastContact||""))).slice(0,5);
-  return `
+  return bankerModeHTML()+`
   <section><h2 class="action-title">${bankers.length} banker${bankers.length===1?"":"s"} across ${firms} firm${firms===1?"":"s"}; ${cold} not contacted in 90 days</h2>
     <p class="sub">Coverage, relationship strength and the mandates each banker brought us.</p></section>
   ${reconnect.length?`<section><h3 class="sec">Reconnect</h3><p class="t2" style="margin:-4px 0 8px">Strong or active relationships with no contact in 60 days.</p><ul class="mlist">${reconnect.map(b=>{ const n=daysUntil(b.lastContact); const m=deals.filter(d=>isActive(d)&&(d.bankerIds||[]).includes(b.id)).length;
@@ -1278,7 +1475,7 @@ function bankerRows(rows, deals, ex, edit, X){
     const last=lastP?lastP.lastContact:""; const n=daysUntil(last); const old=!last || (n!=null && n<-90);
     const open=firmOpen(k); const names=all.slice(0,3).map(p=>p.name).join(", ")+(all.length>3?` and ${all.length-3} more`:"");
     const dealList = fds.length ? fds.slice(0,6).map(d=>`${esc(d.codename)} <span class="t2">(${esc(d.stage)})</span>`).join("<br>")+(fds.length>6?`<div class="t2">and ${fds.length-6} more</div>`:"") : '<span class="t2">None yet</span>';
-    return `<tr class="firmrow" data-act="fold" data-k="${esc(k)}"><td><div class="firm"><button type="button" class="fold" data-act="fold" data-k="${esc(k)}" aria-expanded="${open}" aria-label="${open?"Collapse":"Expand"} ${esc(firm)}"><span aria-hidden="true">▶</span></button>${k==="~"?"":firmLogo({firm, website:(all.find(p=>p.website)||{}).website},34)}<div><div class="t1">${esc(firm)}</div><div class="t2">${all.length} ${all.length===1?"person":"people"} · ${live} live mandate${live===1?"":"s"}</div><div class="t2 mob${old?" over":""}">Last contact ${last?fmtDate(last):"not recorded"}${lastP?` (${esc(lastP.name)})`:""}</div>${open?"":`<div class="t2 who-list">${esc(names)}</div>`}</div></div></td>
+    return `<tr class="firmrow" data-act="fold" data-k="${esc(k)}"><td><div class="firm"><button type="button" class="fold" data-act="fold" data-k="${esc(k)}" aria-expanded="${open}" aria-label="${open?"Collapse":"Expand"} ${esc(firm)}"><span aria-hidden="true">▶</span></button>${k==="~"?"":firmLogo({firm, website:(all.find(p=>p.website)||{}).website},34)}<div><div class="t1">${esc(firm)}</div><div class="t2">${all.length} ${all.length===1?"person":"people"} · ${live} live mandate${live===1?"":"s"}${(()=>{ const sp=k==="~"?null:leagueSpot(firm); return sp?` · <span class="lgbadge" title="League table: banks on deals involving the companies we track">#${sp.f.rank} in league table</span>`:""; })()}</div><div class="t2 mob${old?" over":""}">Last contact ${last?fmtDate(last):"not recorded"}${lastP?` (${esc(lastP.name)})`:""}</div>${open?"":`<div class="t2 who-list">${esc(names)}</div>`}</div></div></td>
       <td class="c-hide opt"></td><td class="c-hide"></td>
       <td class="c-full firmdeals" data-label="Deals shown to us">${dealList}</td>
       <td class="num c-hide${old?" over":""}">${last?fmtDate(last):"n/d"}${lastP?`<div class="t2" style="font-weight:normal">${esc(lastP.name)}</div>`:""}</td>
@@ -1555,6 +1752,8 @@ function bankerFormHTML(dr){
     </div></div>
     ${isNew?"":mailBoxHTML(b)}
     ${isNew?"":`<div><h3 class="sec">Deals shown to us</h3>${ds.length?ds.map(d=>`<div>${esc(d.codename)} ${stagePill(d.stage)}</div>`).join(""):'<p class="t2">None linked yet. Link bankers from a deal.</p>'}</div>
+    ${(()=>{ const sp=b.firm?leagueSpot(b.firm):null; if(!sp) return ""; const f=sp.f, x=f.deals[0];
+      return `<div class="lgnote"><h3 class="sec">League table</h3><p><b>${esc(f.name)}: #${f.rank} of ${sp.of} banks</b> on ${f.deals.length} deal${f.deals.length===1?"":"s"} (${f.buy} buy-side, ${f.sell} sell-side) involving the companies we track since ${monthYear(sp.since)}.${x?` Latest: ${dealParties(x.deal)}, ${monthYear(x.deal.announced)}.`:""} <a href="#bankers" data-act="lg-show" data-k="${esc(f.key)}">See in the league table</a></p></div>`; })()}
     ${(()=>{ const mates=b.firm?S.bankers.filter(x=>x.id!==b.id && firmKey(x.firm)===firmKey(b.firm)):[]; return mates.length?`<div><h3 class="sec">Others at ${esc(b.firm)}</h3><div class="colleagues">${mates.map(m=>`<a href="#banker/${encodeURIComponent(m.id)}" data-act="open-mate" data-id="${esc(m.id)}">${esc(m.name)}</a>${m.title?` <span class="t2">${esc(m.title)}</span>`:""}`).join("<span class=\"t2\">·</span>")}</div></div>`:""; })()}
     <div><h3 class="sec">Interactions</h3>
       <div class="addnote">${sel("n_kind",NOTE_KINDS,"Call")}<textarea id="n_text" rows="2" placeholder="What was discussed; logging updates last contact"></textarea><button type="button" class="btn sm primary" data-act="add-note">Log interaction</button></div>
@@ -2744,6 +2943,18 @@ document.addEventListener("click", async e=>{
     case "comps-save": t.disabled=true; await saveCompsSettings(); if(t.isConnected) t.disabled=false; break;
     case "csort": setSort("c",t.dataset.k); break;
     case "team-closed": S.teamClosed=!S.teamClosed; render(); document.querySelector('[data-act="team-closed"]')?.focus(); break;
+    case "bmode": setBankerMode(t.dataset.v); render(); document.querySelector(`[data-act="bmode"][data-v="${bankerMode()}"]`)?.focus(); break;
+    case "lg-side": S.lgSide=t.dataset.v; S.lgOpen=null; render(); document.querySelector(`[data-act="lg-side"][data-v="${t.dataset.v}"]`)?.focus(); break;
+    case "lg-kind": S.lgKind=t.dataset.v; S.lgOpen=null; render(); document.querySelector(`[data-act="lg-kind"][data-v="${t.dataset.v}"]`)?.focus(); break;
+    case "lg-years": S.lgYears=+t.dataset.v; S.lgOpen=null; render(); document.querySelector(`[data-act="lg-years"][data-v="${t.dataset.v}"]`)?.focus(); break;
+    case "lg-refresh": loadLeague(true); render(); break;
+    case "lg-all": S.lgAll=!S.lgAll; render(); break;
+    case "lg-open": S.lgOpen = S.lgOpen===t.dataset.k ? null : t.dataset.k; render(); document.querySelector(`tr[data-act="lg-open"][data-k="${CSS.escape(t.dataset.k)}"]`)?.focus(); break;
+    case "lg-banker": e.preventDefault(); goRecord("banker", t.dataset.id); break;
+    case "lg-show": e.preventDefault(); setBankerMode("league"); S.lgSide="all"; S.lgKind="banks"; S.lgOpen=t.dataset.k; S.lgAll=true; closeDrawer(); if(S.view!=="bankers") location.hash="#bankers"; else render(); setTimeout(()=>document.querySelector(`tr[data-act="lg-open"][data-k="${CSS.escape(t.dataset.k)}"]`)?.scrollIntoView({block:"center"}),50); break;
+    case "lg-edit": if(!canEditNow()) return; S.lgEdit=true; render(); document.getElementById("lg_extra")?.focus(); break;
+    case "lg-edit-cancel": S.lgEdit=false; render(); break;
+    case "lg-save": if(!canEditNow()) return; t.disabled=true; await saveLeagueCompanies(); if(t.isConnected) t.disabled=false; break;
     case "bgroup": S.bgroup = S.bgroup===false; render(); document.querySelector('[data-act="bgroup"]')?.focus(); break;
     case "import-open": if(!canEditNow()) return; S.lastFocusEl=t; S.drawer={kind:"import"}; renderDrawer(); break;
     case "im-preview": importPreview(); break;
@@ -2913,7 +3124,7 @@ async function doLogin(){
 async function signOut(){
   try{ await S.sb.auth.signOut(); }catch{}
   stopData(); S.session=null; S.drawer=null; S.ai.open=false; S.ai.msgs=[]; S.ai.api=[]; S.sample=null;
-  if(S.cp.ctrl) S.cp.ctrl.abort(); if(S.cp.cancelSignIn) S.cp.cancelSignIn(); S.cp=cpFresh(); S.tc=tcFresh(); if(S.cc&&S.cc.ctrl) S.cc.ctrl.abort(); S.cc=null;
+  if(S.cp.ctrl) S.cp.ctrl.abort(); if(S.cp.cancelSignIn) S.cp.cancelSignIn(); S.cp=cpFresh(); S.tc=tcFresh(); if(S.cc&&S.cc.ctrl) S.cc.ctrl.abort(); S.cc=null; S.league=null; S.leagueDefault=null; S.lgEdit=false; S.lgOpen=null;
   document.getElementById("whoDot").hidden=true; history.replaceState(null,"",location.pathname); render();
 }
 function loginHTML(){
