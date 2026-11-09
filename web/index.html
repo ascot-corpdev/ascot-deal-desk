@@ -68,6 +68,26 @@ footer.foot .wrap{display:flex;justify-content:space-between;gap:12px;padding-bl
 .tile{background:var(--tile);padding:16px 18px;min-width:0}
 .tile b{display:block;font-size:28px;line-height:1.1;font-variant-numeric:tabular-nums}
 .tiles.dealtiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+button.tile{border:0;font:inherit;color:inherit;text-align:left;cursor:pointer;width:100%;display:block}
+button.tile:hover,button.tile[aria-pressed="true"]{box-shadow:inset 0 -3px 0 var(--ink)}
+.pr.click{cursor:pointer}.pr.click:hover,.pr.on{background:var(--tile)}
+.drillbar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin:0 0 10px;padding:8px 12px;background:var(--tile);font-size:13px}
+.odue{display:inline-block;font-size:10px;font-weight:bold;letter-spacing:.05em;text-transform:uppercase;color:var(--magenta);border:1px solid var(--magenta);padding:0 5px;margin-left:6px;vertical-align:1px}
+.vis .v-quick{color:var(--teal);font-weight:bold}.vis .v-careful{color:var(--orange);font-weight:bold}
+.tl{display:flex;align-items:flex-end;gap:2px;border-bottom:2px solid var(--ink);padding-top:4px}
+.tlc{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;position:relative}
+.tlstack{display:flex;flex-direction:column-reverse;align-items:center;gap:2px;min-height:106px;width:100%;padding-bottom:2px;border-left:1px solid var(--grid)}
+.tlc:first-child .tlstack{border-left:0}
+.tld{width:16px;height:16px;max-width:100%;padding:0;border:0;cursor:pointer;display:block}
+.tld.trk-acq,.tlkey i.trk-acq{background:var(--acq)}.tld.trk-add,.tlkey i.trk-add{background:var(--add)}.tld.tl-late,.tlkey i.tl-late{background:var(--magenta)}
+.tld:hover,.tld:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.tlmore{font-size:10px;font-weight:bold;color:var(--muted)}
+.tll{position:absolute;top:100%;left:0;margin-top:4px;font-size:10px;color:var(--muted);white-space:nowrap}
+.tlkey{display:flex;flex-wrap:wrap;gap:4px 14px;margin:22px 0 4px;font-size:12px;color:var(--muted)}.tlkey span{display:inline-flex;align-items:center;gap:5px}.tlkey i{display:inline-block;width:10px;height:10px}
+.foldh button{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;padding:10px 0;border:0;border-bottom:2px solid var(--ink);background:none;font:inherit;font-weight:bold;color:inherit;cursor:pointer;text-align:left}
+.sec.foldh{display:block;margin:0 0 10px}.sec.foldh::before,.sec.foldh::after{display:none}
+.cfold.shut .sec.foldh{margin-bottom:0}
+@media screen{.cfold.shut .foldbody{display:none}}
 .tile span em{font-style:normal;color:var(--muted);font-size:12px}
 .stagerow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 /* Claude on the Comps tab */
@@ -566,7 +586,7 @@ const S = {
   drawer:null, sample:null, toolsOk:false, downloads:true,
   ai:{open:false, msgs:[], api:[], busy:false, ctrl:null}, proposals:{}, cp:cpFresh(), tc:tcFresh(),
   session:null, authChecked:false, started:false, channel:null, loginErr:"", loginBusy:false,
-  presence:null, presenceReady:false, others:[], editing:null, hist:{}, changes:null, chgDays:7
+  presence:null, presenceReady:false, others:[], editing:null, hist:{}, changes:null, chgDays:7, ceoDrill:null, ceoFold:{}, nextAll:false
 };
 const ROLES = {ceo:"CEO", corpdev:"Corp Dev"};
 
@@ -829,15 +849,56 @@ async function exportPipelineSlide(){
 const CEO_TRACK_KEY="dealdesk.ceoTrack";
 function ceoTrack(){ if(!S.ceoTrack){ let v=null; try{ v=localStorage.getItem(CEO_TRACK_KEY); }catch{} S.ceoTrack=["all","acquire","add"].includes(v)?v:"all"; } return S.ceoTrack; }
 function setCeoTrack(v){ if(!["all","acquire","add"].includes(v)) return; S.ceoTrack=v; try{ localStorage.setItem(CEO_TRACK_KEY,v); }catch{} }
+/* Dashboard drill-down: clicking a headline tile or a stage row lists those deals in the summaries table. Not remembered. */
+const needsAttention = d => isActive(d) && (isOverdue(d) || isStalled(d) || openQs(d)>0);
+const CEO_DRILLS = {late:["At LOI or diligence", d=>LATE.includes(d.stage)], attention:["Needs attention", needsAttention]};
+function ceoDrill(){ const k=S.ceoDrill; if(!k) return null;
+  if(CEO_DRILLS[k]) return {k, label:CEO_DRILLS[k][0], f:CEO_DRILLS[k][1]};
+  const st=k.startsWith("stage:")?k.slice(6):""; return ACTIVE.includes(st) ? {k, label:st, f:d=>d.stage===st} : null; }
+/* Phones: dashboard sections fold away under their headings (tiles and the next 90 days stay open), so the
+   headline numbers come first. Wider screens and print show everything. */
+const PHONE_MQ = window.matchMedia("(max-width:700px)");
+PHONE_MQ.addEventListener("change", ()=>{ if(S.session && S.view==="ceo") render(); });
+const CEO_FOLD_OPEN = {next:true};
+function ceoSec(key, title, body){
+  if(!PHONE_MQ.matches) return `<h3 class="sec">${esc(title)}</h3>${body}`;
+  const open = S.ceoFold[key]!=null ? S.ceoFold[key] : !!CEO_FOLD_OPEN[key];
+  return `<div class="cfold${open?"":" shut"}"><h3 class="sec foldh"><button type="button" data-act="ceo-fold" data-k="${key}" aria-expanded="${open}">${esc(title)}<span aria-hidden="true">${open?"−":"+"}</span></button></h3><div class="foldbody">${body}</div></div>`;
+}
+/* Next 90 days: one column a week (13 weeks from today) with a square per deal next step, so busy weeks stand out;
+   overdue steps sit in their own column on the left. The list underneath carries the detail. */
+const NEXT_DAYS=90, NEXT_WEEKS=13, NEXT_SHOW=7, NEXT_STACK=5;
+function ceoTimelineHTML(active, ex){
+  const due = active.filter(d=>d.nextStepDate && daysUntil(d.nextStepDate)!=null && daysUntil(d.nextStepDate)<=NEXT_DAYS).sort((a,b)=>a.nextStepDate.localeCompare(b.nextStepDate));
+  if(!due.length) return `<p class="t2">No milestones in the next ${NEXT_DAYS} days.</p>`;
+  const X = ex ? `<span class="ex">Example</span>` : "";
+  const late = due.filter(d=>daysUntil(d.nextStepDate)<0);
+  const weeks = Array.from({length:NEXT_WEEKS},()=>[]); due.forEach(d=>{ const n=daysUntil(d.nextStepDate); if(n>=0) weeks[Math.min(NEXT_WEEKS-1, Math.floor(n/7))].push(d); });
+  const t0 = new Date(TODAY()+"T00:00:00"), wkStart = i => { const x=new Date(t0); x.setDate(x.getDate()+i*7); return x; };
+  const sq = (d,cls) => `<button type="button" class="tld ${cls}" data-act="view-deal" data-id="${esc(d.id)}" title="${esc(d.codename)}: ${esc(d.nextStep||"Next step not set")} (${fmtDate(d.nextStepDate)})" aria-label="${esc(d.codename)}, ${esc(d.nextStep||"next step not set")}, ${fmtDate(d.nextStepDate)}"></button>`;
+  const col = (list, cls, label, tip) => `<div class="tlc${list.length?"":" none"}" title="${esc(tip)}"><div class="tlstack">${list.slice(0,NEXT_STACK).map(d=>sq(d, cls||TRACK_CLASS[trackOf(d)])).join("")}${list.length>NEXT_STACK?`<span class="tlmore">+${list.length-NEXT_STACK}</span>`:""}</div><span class="tll">${esc(label)}</span></div>`;
+  const cols = weeks.map((list,i)=>{ const a=wkStart(i), b=wkStart(i+1); b.setDate(b.getDate()-1);
+    const label = i===0 ? "Now" : (a.getDate()<=7 ? a.toLocaleDateString("en-GB",{month:"short"}) : "");
+    return col(list, "", label, `Week of ${fmtDate(iso(a))}: ${list.length} next step${list.length===1?"":"s"}`); }).join("");
+  const busiest = Math.max(...weeks.map(w=>w.length));
+  const shown = S.nextAll ? due : due.slice(0,NEXT_SHOW);
+  return `<div class="tl" role="group" aria-label="Next steps by week, ${NEXT_DAYS} days">${late.length?col(late,"tl-late","Late",`${late.length} overdue`):""}${cols}</div>
+    <p class="t2 tlkey"><span><i class="trk-acq"></i>Acquire</span><span><i class="trk-add"></i>Add</span>${late.length?`<span><i class="tl-late"></i>Overdue</span>`:""}<span>One square per next step, by week${busiest>1?`; busiest week has ${busiest}`:""}.</span></p>
+    <ul class="mlist">${shown.map(d=>{ const n=daysUntil(d.nextStepDate); return `<li><span class="d ${n<0?"over":""}">${n<0?"Overdue":fmtDate(d.nextStepDate)}</span><div><p><b>${esc(d.codename)}</b>${X}: ${esc(d.nextStep||"Next step not set")}</p><p class="meta">${esc(d.stage)} · ${esc(d.lead||"No lead")}${n<0?` · due ${fmtDate(d.nextStepDate)}`:""}${ex?"":` · ${calBtn("ics-next",`data-id="${esc(d.id)}"`)}`}</p></div></li>`; }).join("")}</ul>
+    ${due.length>NEXT_SHOW?`<p class="source"><button type="button" class="btn sm ghost" data-act="ceo-next-all">${S.nextAll?"Show fewer":`Show all ${due.length}`}</button></p>`:""}`;
+}
 function renderCEO(){
   const {deals:allDeals,bankers,notes} = D(); const ex = demoMode()||S.dbMissing;
   const tf=ceoTrack(), tfName = tf==="add"?"Add":tf==="acquire"?"Acquire":"";
   const deals = tfName ? allDeals.filter(d=>trackOf(d)===tfName) : allDeals;
   const active = deals.filter(isActive), late = active.filter(d=>LATE.includes(d.stage));
   const ev = active.reduce((s,d)=>s+(+d.ev||0),0), lateEv = late.reduce((s,d)=>s+(+d.ev||0),0);
-  const engaged = bankers.filter(b => b.lastContact && daysUntil(b.lastContact) >= -90).length;
-  const overdue = active.filter(d => d.nextStepDate && daysUntil(d.nextStepDate) < 0);
-  const stalled = active.filter(isStalled);
+  const overdue = active.filter(isOverdue), stalled = active.filter(isStalled), asked = active.filter(d=>openQs(d)>0);
+  const nQs = asked.reduce((n,d)=>n+openQs(d),0), attention = active.filter(needsAttention);
+  const attnParts = [overdue.length&&`${overdue.length} overdue`, stalled.length&&`${stalled.length} stalled`, nQs&&`${nQs} open question${nQs===1?"":"s"}`].filter(Boolean);
+  const withGwp = active.filter(d=>d.gwp!==""&&d.gwp!=null&&!isNaN(+d.gwp)), gwp = withGwp.reduce((s,d)=>s+(+d.gwp),0);
+  const drill = ceoDrill(), shownDeals = drill ? active.filter(drill.f) : active;
+  const tileBtn = (k,inner) => `<button type="button" class="tile" data-act="ceo-drill" data-v="${k}" aria-pressed="${!!drill&&drill.k===k}" title="Show these deals below">${inner}</button>`;
   const yr = new Date().getFullYear();
   const outYear = d => d.outcomeDate ? +String(d.outcomeDate).slice(0,4) : new Date(d.stageSince||d.updatedAt||0).getFullYear();
   const closedY = deals.filter(d=>d.stage==="Closed" && outYear(d)===yr), deadY = deals.filter(d=>d.stage==="Dead" && outYear(d)===yr);
@@ -847,8 +908,7 @@ function renderCEO(){
   const nAcq=active.filter(d=>trackOf(d)==="Acquire").length, nAdd=active.length-nAcq;
   const evAcq=active.filter(d=>trackOf(d)==="Acquire").reduce((s,d)=>s+(+d.ev||0),0), evAdd=ev-evAcq;
   const maxEv = Math.max(1,...byStage.map(b=>b.ev));
-  const upcoming = active.filter(d=>d.nextStepDate && daysUntil(d.nextStepDate) <= 30).sort((a,b)=>a.nextStepDate.localeCompare(b.nextStepDate)).slice(0,7);
-  const sorted = [...active].sort((a,b)=>ACTIVE.indexOf(b.stage)-ACTIVE.indexOf(a.stage) || (+b.ev||0)-(+a.ev||0));
+  const sorted = [...shownDeals].sort((a,b)=>ACTIVE.indexOf(b.stage)-ACTIVE.indexOf(a.stage) || (+b.ev||0)-(+a.ev||0));
   const lastUpd = deals.reduce((m,d)=>Math.max(m,d.updatedAt||0),0);
   const lastBy = deals.find(d=>d.updatedAt===lastUpd)?.updatedBy;
   const X = ex ? `<span class="ex">Example</span>` : "";
@@ -861,44 +921,44 @@ function renderCEO(){
       ${tfName?`<p class="printonly">Showing ${tfName} deals only.</p>`:""}</div>
     <div class="ceoacts">${mode==="slide"?`<button type="button" class="btn sm" data-act="pipeline-pptx">Download slide (.pptx)</button>`:`<button type="button" class="btn sm" data-act="board-pack">Board pack (.pptx)</button>`}<button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></section>`;
   if(mode==="slide") return head+pipelineSlideHTML(deals, ex);
+  const metricCell = v => v==="n/d" ? `<span class="t2">n/d</span>` : esc(v);
+  const dealsBody = `${drill?`<p class="drillbar" role="status"><span>Showing <b>${esc(drill.label)}</b>: ${sorted.length} of ${active.length} active deal${active.length===1?"":"s"}</span><button type="button" class="btn sm" data-act="ceo-drill-clear">Show all deals</button></p>`:""}
+    ${sorted.length ? `<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr><th>Deal</th><th>Stage</th><th class="num">Valuation ($M)</th><th class="num">GWP ($M)</th><th class="num" title="Valuation / equity">P/BV</th><th>Summary</th><th>Profile</th><th>Other docs</th></tr></thead><tbody>
+    ${sorted.map(d=>{ const vis = d.vision2030 && d.vision2030!=="NA" ? `<div class="t2 vis">Vision 2030: <span class="${visionClass(d.vision2030)}">${esc(d.vision2030)}</span></div>` : "";
+      const pb=multS(dealPB(d),2);
+      return `<tr class="click ${TRACK_CLASS[trackOf(d)]}" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${trackPill(d)}${X}${isOverdue(d)?`<span class="odue" title="Next step was due ${fmtDate(d.nextStepDate)}">Overdue</span>`:""}${stallTag(d)}${qTag(d)}</div><div class="t2">${esc(d.target||"")}</div>${vis}</td><td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="num c-hide">${metricCell(mnum(d.ev))}</td><td class="num c-hide">${metricCell(mnum(d.gwp))}</td><td class="num c-hide">${metricCell(pb)}</td><td class="summary c-full"><div class="mob t2">Valuation ${esc(money(d.ev))} · GWP ${esc(money(d.gwp))} · P/BV ${esc(pb)}</div>${d.ceoSummary?`<div class="clamp">${esc(d.ceoSummary)}</div>${d.ceoSummary.length>150?`<span class="more">More</span>`:""}`:'<span class="t2">No summary yet</span>'}</td><td class="c-full" data-label="Profile">${links(profileLinks(d.links),"No profile yet")}</td><td class="c-full" data-label="Other docs">${links(otherLinks(d.links),"None")}</td></tr>`; }).join("")}
+    </tbody></table></div>` : `<div class="empty"><p>${drill?"No deals in this group.":"No active deals."}</p></div>`}`;
   return head+`
   <section class="tiles" aria-label="Headline numbers">
-    <div class="tile"><b class="c-navy">${active.length}</b><span>Active deals</span><small>${nAcq} Acquire · ${nAdd} Add</small></div>
-    <div class="tile"><b class="c-mag">${late.length}</b><span>At LOI or diligence</span><small>${money(lateEv)} EV</small></div>
-    <div class="tile"><b class="c-blue">${money(ev)}</b><span>Active pipeline EV</span><small>Acquire ${money(evAcq)} · Add ${money(evAdd)} (derived)</small></div>
-    <div class="tile"><b class="c-teal">${engaged}</b><span>Bankers engaged</span><small>Contact in the last 90 days</small></div>
+    ${tileBtn("active",`<b class="c-navy">${active.length}</b><span>Active deals</span><small>${nAcq} Acquire · ${nAdd} Add</small>`)}
+    ${tileBtn("late",`<b class="c-mag">${late.length}</b><span>At LOI or diligence</span><small>${money(lateEv)} EV</small>`)}
+    ${tileBtn("active",`<b class="c-blue">${money(ev)}</b><span>Active pipeline EV</span><small>Total GWP ${withGwp.length?money(gwp):"n/d"}</small><small>Acquire ${money(evAcq)} · Add ${money(evAdd)} (derived)</small>`)}
+    ${tileBtn("attention",`<b class="${attention.length?"c-mag":"c-teal"}">${attention.length}</b><span>Need${attention.length===1?"s":""} attention</span><small>${attnParts.length?attnParts.join(" · "):"Nothing overdue, stalled or awaiting an answer"}</small>`)}
   </section>
   <section class="cols">
-    <div><h3 class="sec">Pipeline by stage</h3>
+    <div>${ceoSec("stage","Pipeline by stage",`
       <div class="pipe" role="table" aria-label="Active pipeline by stage">
         <div class="tlegend" aria-label="Colour key"><span><i class="trk-acq"></i>Acquire ${esc(money(evAcq))} (${nAcq})</span><span><i class="trk-add"></i>Add ${esc(money(evAdd))} (${nAdd})</span></div>
         <div class="pr ph" role="row"><span role="columnheader">Stage</span><span role="columnheader" class="num">Deals</span><span role="columnheader" class="num">EV ($M)</span><span role="columnheader">Share of pipeline EV</span></div>
-        ${byStage.map(b=>{ const pct = ev ? Math.round(b.ev/ev*100) : 0; return `<div class="pr" role="row"><span role="cell">${stagePill(b.st)}</span><span role="cell" class="num pn">${b.n}</span><span role="cell" class="num pn">${b.n?esc(mnum(b.ev)):"0"}</span><span role="cell" class="pshare"><span class="ptrack split" title="Acquire ${esc(money(b.acq))} (${b.nAcq}) · Add ${esc(money(b.add))} (${b.nAdd})"><i class="trk-acq" style="width:${ev?b.acq/ev*100:0}%"></i><i class="trk-add" style="width:${ev?b.add/ev*100:0}%"></i></span><span class="ppct">${pct}%</span></span></div>`; }).join("")}
+        ${byStage.map(b=>{ const pct = ev ? Math.round(b.ev/ev*100) : 0; const on=!!drill&&drill.k==="stage:"+b.st; return `<div class="pr${b.n?" click":""}${on?" on":""}" role="row"${b.n?` data-act="ceo-drill" data-v="stage:${esc(b.st)}" tabindex="0" title="Show these deals below"`:""}><span role="cell">${stagePill(b.st)}</span><span role="cell" class="num pn">${b.n}</span><span role="cell" class="num pn">${b.n?esc(mnum(b.ev)):"0"}</span><span role="cell" class="pshare"><span class="ptrack split" title="Acquire ${esc(money(b.acq))} (${b.nAcq}) · Add ${esc(money(b.add))} (${b.nAdd})"><i class="trk-acq" style="width:${ev?b.acq/ev*100:0}%"></i><i class="trk-add" style="width:${ev?b.add/ev*100:0}%"></i></span><span class="ppct">${pct}%</span></span></div>`; }).join("")}
         <div class="pr pt" role="row"><span role="cell">Active pipeline</span><span role="cell" class="num pn">${active.length}</span><span role="cell" class="num pn">${esc(mnum(ev))}</span><span role="cell"></span></div>
-      </div>
+      </div>`)}
     </div>
-    <div><h3 class="sec">Next 30 days</h3>
-      ${upcoming.length ? `<ul class="mlist">${upcoming.map(d=>{ const n=daysUntil(d.nextStepDate); return `<li><span class="d ${n<0?"over":""}">${n<0?"Overdue":fmtDate(d.nextStepDate)}</span><div><p><b>${esc(d.codename)}</b>${X}: ${esc(d.nextStep||"Next step not set")}</p><p class="meta">${esc(d.stage)} · ${esc(d.lead||"No lead")}${n<0?` · due ${fmtDate(d.nextStepDate)}`:""}${ex?"":` · ${calBtn("ics-next",`data-id="${esc(d.id)}"`)}`}</p></div></li>`; }).join("")}</ul>` : `<p class="t2">No milestones in the next 30 days.</p>`}
-    </div>
+    <div>${ceoSec("next",`Next ${NEXT_DAYS} days`,ceoTimelineHTML(active, ex))}</div>
   </section>
-  <section><h3 class="sec">Deal summaries and documents</h3>
-    ${sorted.length ? `<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr><th>Deal</th><th>Stage</th><th>Summary</th><th>Profile</th><th>Other docs</th></tr></thead><tbody>
-    ${sorted.map(d=>{
-      return `<tr class="click ${TRACK_CLASS[trackOf(d)]}" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${trackPill(d)}${X}${stallTag(d)}${qTag(d)}</div><div class="t2">${esc(d.target||"")}</div></td><td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="summary c-full">${d.ceoSummary?`<div class="clamp">${esc(d.ceoSummary)}</div>${d.ceoSummary.length>150?`<span class="more">More</span>`:""}`:'<span class="t2">No summary yet</span>'}</td><td class="c-full" data-label="Profile">${links(profileLinks(d.links),"No profile yet")}</td><td class="c-full" data-label="Other docs">${links(otherLinks(d.links),"None")}</td></tr>`; }).join("")}
-    </tbody></table></div>` : `<div class="empty"><p>No active deals.</p></div>`}
-  </section>
+  <section id="ceoDeals">${ceoSec("deals","Deal summaries and documents",dealsBody)}</section>
   ${benchStripHTML()}
   <section class="cols">
-    <div><h3 class="sec">What changed</h3>${changesHTML()}</div>
-    <div><h3 class="sec">Outcomes in ${yr}</h3>
+    <div>${ceoSec("changes","What changed",changesHTML())}</div>
+    <div>${ceoSec("outcomes",`Outcomes in ${yr}`,`
     <div class="outc">
       <div class="tile"><b class="c-teal">${closedY.length}</b><span>Closed</span><small>${money(closedY.reduce((s,d)=>s+(+d.ev||0),0))} EV</small></div>
       <div class="tile"><b class="c-navy">${deadY.length}</b><span>Dropped (dead)</span><small>${deadY.length?`Most common reason: ${esc(reasons[0][0])}`:"None this year"}</small></div>
     </div>
-    ${reasons.length?`<div class="reasons" aria-label="Why deals were dropped">${reasons.map(([r,n])=>`<div class="rr"><span>${esc(r)}</span><span class="num"><b>${n}</b></span><span class="ptrack"><i style="width:${Math.round(n/deadY.length*100)}%"></i></span></div>`).join("")}</div>`:""}
+    ${reasons.length?`<div class="reasons" aria-label="Why deals were dropped">${reasons.map(([r,n])=>`<div class="rr"><span>${esc(r)}</span><span class="num"><b>${n}</b></span><span class="ptrack"><i style="width:${Math.round(n/deadY.length*100)}%"></i></span></div>`).join("")}</div>`:""}`)}
     </div>
   </section>
-  <p class="source">Source: Corp Dev deal tracker${lastUpd?`, last updated ${esc(fmtWhen(lastUpd))} by ${esc(nameOf(lastBy, deals.find(d=>d.updatedAt===lastUpd)?.updatedByName))}`:""}. EV and GWP in $M as entered by deal teams; pipeline totals (derived).</p>`;
+  <p class="source">Source: Corp Dev deal tracker${lastUpd?`, last updated ${esc(fmtWhen(lastUpd))} by ${esc(nameOf(lastBy, deals.find(d=>d.updatedAt===lastUpd)?.updatedByName))}`:""}. Valuation (EV) and GWP in $M as entered by deal teams; pipeline totals and P/BV (valuation / equity) are derived.</p>`;
 }
 
 const PRIORITY_ORDER=["High","Medium","Low"];
@@ -2958,6 +3018,11 @@ document.addEventListener("click", async e=>{
     case "fold-all": { const open=t.dataset.open==="1"; firmKeysShown().forEach(k=>loadFolds()[k]=open); saveFolds(); render(); document.querySelector('[data-act="fold-all"]')?.focus(); break; }
     case "ceo-track": setCeoTrack(t.dataset.v); render(); break;
     case "ceo-mode": setCeoMode(t.dataset.v); render(); break;
+    case "ceo-drill": { const v=t.dataset.v; S.ceoDrill = (v==="active"||S.ceoDrill===v) ? null : v; S.ceoFold.deals=true; render();
+      document.getElementById("ceoDeals")?.scrollIntoView({block:"start", behavior: window.matchMedia("(prefers-reduced-motion:reduce)").matches?"auto":"smooth"}); break; }
+    case "ceo-drill-clear": S.ceoDrill=null; render(); break;
+    case "ceo-fold": { const k=t.dataset.k; S.ceoFold[k] = t.getAttribute("aria-expanded")!=="true"; render(); document.querySelector(`button[data-act="ceo-fold"][data-k="${CSS.escape(k)}"]`)?.focus(); break; }
+    case "ceo-next-all": S.nextAll=!S.nextAll; render(); break;
     case "pipeline-pptx": t.disabled=true; try{ await exportPipelineSlide(); }catch(e){ toast("Couldn't build the slide: "+((e&&e.message)||"try again")); } t.disabled=false; break;
     case "cc-send": { const i=document.getElementById("cc_input"); const v=i?i.value:""; if(!v.trim()){ toast("Type a question first."); i&&i.focus(); return; } if(i) i.value=""; ccAsk(v); break; }
     case "cc-suggest": ccAsk(t.textContent); break;
@@ -3027,7 +3092,7 @@ document.addEventListener("keydown", e=>{
   }
   if(e.key==="Escape" && S.menuOpen){ setMenu(false); document.getElementById("whoDot").focus(); return; }
   if(e.key==="Escape"){ if(S.drawer) closeDrawer(); else if(S.ai.open){ S.ai.open=false; renderAI(); } else if(S.cp.open){ S.cp.open=false; renderCP(); document.getElementById("copilotBtn")?.focus(); } }
-  if(e.key==="Enter" && e.target.matches("tr.click, li.click")) e.target.click();
+  if(e.key==="Enter" && e.target.matches("tr.click, li.click, .pr.click")) e.target.click();
   if(e.key==="Enter" && e.target.id==="aiInput" && !e.shiftKey){ e.preventDefault(); const v=e.target.value; e.target.value=""; askAI(v); }
   if(e.key==="Enter" && e.target.id==="cpInput" && !e.shiftKey){ e.preventDefault(); cpSubmit(); }
 });

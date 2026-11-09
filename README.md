@@ -2,7 +2,7 @@
 
 M&A deal tracker and banker CRM for Corporate Development, styled on the Ascot PPT template.
 
-- **CEO view (read only):** pipeline headline, stat tiles, pipeline by stage, next 30 days, deal summaries with each deal's profile and other docs (SharePoint links), what changed, outcomes and peer benchmarks.
+- **CEO view (read only):** four headline tiles (active deals, at LOI or diligence, pipeline EV with total GWP, and deals needing attention: overdue, stalled or with an open CEO question), pipeline by stage, the next 90 days as a week-by-week strip with a list underneath, deal summaries with valuation, GWP, P/BV, Vision 2030 type and each deal's profile and other docs (SharePoint links), what changed, outcomes and peer benchmarks. Click a tile or a stage row to list just those deals. On a phone the tiles and the next 90 days come first, and the other sections open when you tap their heading.
 - **Pipeline slide (CEO view):** switch the CEO view from Dashboard to Pipeline slide for the one-page table (company, ownership, HQ, 2025 key stats, project name, Vision 2030 type, description, current status, sell-side advisor), grouped Acquire, Add and Passed deals. **Download slide (.pptx)** builds it as 16:9 slides in the browser (`Ascot-pipeline-YYYY-MM-DD.pptx`, about 11 rows a slide). It follows Ascot styling (Arial, magenta title, navy header, spectrum stripe, footer) but isn't built from the official Ascot template file, so paste it into the template if you need the exact master.
 - **Add and Acquire:** each deal is either Acquire (buying all or part of a company; blue) or Add (business or capacity without buying a company: MGA / program, reinsurance / capacity, partnership; teal). It follows the deal type unless changed on the deal; the CEO view (with an All / Acquire / Add filter), Deals filters and board pack show the split.
 - **Deals and Banker CRM (Corp Dev):** add, edit and delete deals, bankers and notes; SharePoint links per deal; CSV export.
@@ -32,7 +32,7 @@ For Copilot (and other coding assistants): how the code works and the rules for 
 | `supabase/migrations/0006_keepalive.sql`, `.github/workflows/keepalive.yml` | Supabase, GitHub Actions | A daily call that keeps the free-tier project from pausing. Reads no data. See section 10. |
 | `web/auth.html` | GitHub Pages (static) | Return page for "Sign in with Microsoft" in the Ask Copilot panel. Hands the sign-in back to the tracker tab and closes. |
 | `.github/workflows/pages.yml` | GitHub Actions | Writes `web/config.js` from repository variables and publishes `web/` to Pages. |
-| `tests/`, `.github/workflows/tests.yml` | GitHub Actions | About 500 automated checks of the site and the functions, run on every pull request (`npm test` locally). See `tests/README.md`. |
+| `tests/`, `.github/workflows/tests.yml` | GitHub Actions | About 760 automated checks of the site and the functions, run on every pull request (`npm test` locally). See `tests/README.md`. |
 
 Passwords are checked by Supabase Auth on the server, and the database refuses reads and writes that a login's role does not allow, so the public URL shows nothing without a valid login.
 
