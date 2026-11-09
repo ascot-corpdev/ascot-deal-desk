@@ -28,6 +28,7 @@ const seed=[["bankers","b1",{name:"Avery Example",firm:"Goldman Sachs",title:"MD
   await p.route("**/*",async r=>{const u=r.request().url();
     if(u==="https://a.supabase.co/functions/v1/league"){ calls.push({body:JSON.parse(r.request().postData()||"{}"), auth:r.request().headers()["authorization"]});
       if(mode==="404") return r.fulfill({status:404,contentType:"application/json",body:'{"code":"NOT_FOUND"}'});
+      if(mode==="slow"){ await new Promise(res=>setTimeout(res,1500)); return r.fulfill({status:200,contentType:"application/json",body:JSON.stringify(LEAGUE)}).catch(()=>{}); }
       if(mode==="503") return r.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"not_configured",message:"Kensho isn't connected yet."})});
       return r.fulfill({status:200,contentType:"application/json",body:JSON.stringify(LEAGUE)}); }
     if(u==="https://a.supabase.co/functions/v1/comps") return r.fulfill({status:503,contentType:"application/json",body:'{"error":"not_configured"}'});
@@ -108,6 +109,10 @@ const seed=[["bankers","b1",{name:"Avery Example",firm:"Goldman Sachs",title:"MD
   ok("Kensho not connected: banner", (await txt(".banner")).includes("Kensho isn't connected to the league function yet"));
   mode="404"; await p.click('button[data-act="lg-refresh"]'); await p.waitForTimeout(300);
   ok("not deployed: banner with the deploy command", (await txt(".banner")).includes("supabase functions deploy league --no-verify-jwt"));
+  mode="slow"; await p.evaluate(()=>{ S.league=null; }); await p.addInitScript(()=>{ window.__kenshoWait=400; }); await p.reload(); await p.waitForSelector('button[data-act="bmode"]'); await p.click('button[data-act="bmode"][data-v="league"]'); await p.waitForTimeout(100);
+  ok("while loading: says the first load can take a minute", (await txt("body")).includes("The first load can take up to a minute"));
+  await p.waitForTimeout(900);
+  ok("too slow: says so, with Try again and where to look", (await txt(".banner")).includes("Kensho took more than 0.4 seconds to answer") && (await txt(".banner")).includes("Edge Functions → league → Logs") && !!(await p.$('.banner button[data-act="lg-refresh"]')));
   mode="ok"; await p.click('button[data-act="lg-refresh"]'); await p.waitForTimeout(300);
   ok("back after refresh", (await p.$$("table.lgtbl tr.lgrow")).length===4);
 

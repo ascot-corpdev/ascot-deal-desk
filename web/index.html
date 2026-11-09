@@ -1028,6 +1028,9 @@ function setCompsPeriod(v){
   S.compsPeriod=v; try{ localStorage.setItem(PERIOD_KEY,v); }catch{}
   loadComps(false);
 }
+/* How long the page waits for Kensho (through the comps and league functions) before saying so */
+const KENSHO_WAIT_MS=window.__kenshoWait||90_000;   // tests shorten it
+const kenshoSlowHTML = (fn, edit, act) => `<div class="banner"><span><b>Kensho took more than ${KENSHO_WAIT_MS/1000} seconds to answer.</b> Try again: it is usually quicker the second time. ${edit?`If it keeps happening, open Supabase → Edge Functions → <code>${fn}</code> → Logs to see where it stops.`:"If it keeps happening, tell the tracker owner."}</span><button class="btn sm" data-act="${act}">Try again</button></div>`;
 async function loadComps(force){
   if(!S.sb || !S.session) return;
   const peers=benchCfg().peers, period=compsPeriod(), key=period+"|"+peers.join(",");
@@ -1040,13 +1043,13 @@ async function loadComps(force){
   let out;
   try{
     const {data:{session}}=await S.sb.auth.getSession(); if(!session) throw new Error("Your session ended. Sign in again.");
-    const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/comps", {method:"POST",
+    const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/comps", {method:"POST", signal:AbortSignal.timeout(KENSHO_WAIT_MS),
       headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":CFG.supabaseAnonKey}, body:JSON.stringify({tickers:peers, period})});
     let body=null; try{ body=await res.json(); }catch{}
     if(res.status===404) out={key, err:"not_deployed"};
     else if(!res.ok) out={key, err:(body&&body.error)||("http_"+res.status), msg:(body&&(body.message||body.error))||`The comps function answered ${res.status}.`};
     else { out={key, data:body, at:Date.now()}; S.compsCache[key]=out; }
-  }catch(e){ out={key, err:"network", msg:(e&&e.message)||"Network error"}; }
+  }catch(e){ out = e&&e.name==="TimeoutError" ? {key, err:"timeout"} : {key, err:"network", msg:(e&&e.message)||"Network error"}; }
   if(S.comps && S.comps.key===key) S.comps=out;
   if(["comps","ceo"].includes(S.view)) render();
 }
@@ -1069,7 +1072,8 @@ const COMPS_SORTS = {
 };
 function compsStatusHTML(){
   const c=S.comps, edit=canEditNow();
-  if(!c || c.loading) return `<p class="t2">Loading the ${COMPS_PERIODS[compsPeriod()].title} from Kensho…</p>`;
+  if(!c || c.loading) return `<p class="t2">Loading the ${COMPS_PERIODS[compsPeriod()].title} from Kensho… The first load can take up to a minute; after that it's kept for 10 minutes.</p>`;
+  if(c.err==="timeout") return kenshoSlowHTML("comps", edit, "comps-refresh");
   if(c.err==="not_configured") return `<div class="banner"><span><b>Kensho isn't connected yet.</b> ${edit?"Set the Kensho credentials on the comps function (README, section 7).":"Ask the tracker owner to connect it."}</span></div>`;
   if(c.err==="not_deployed") return `<div class="banner"><span><b>The comps function isn't deployed yet.</b> ${edit?"See README, section 7, to deploy it and connect Kensho.":"Ask the tracker owner to set it up."}</span></div>`;
   if(c.err==="network") return `<div class="banner"><span><b>Couldn't reach the comps function.</b> ${edit?`The browser got no answer it could read. Check, in order: (1) the function is deployed: <code>supabase functions deploy comps --no-verify-jwt</code>; (2) it was deployed with <code>--no-verify-jwt</code> (redeploy with it if not); (3) the <code>ALLOWED_ORIGIN</code> secret is this site's address, <code>${esc(location.origin)}</code>. See README, section 7.`:"Ask the tracker owner to check the comps function."}</span><button class="btn sm" data-act="comps-refresh">Try again</button></div>`;
@@ -1252,13 +1256,13 @@ async function loadLeague(force){
   let out;
   try{
     const {data:{session}}=await S.sb.auth.getSession(); if(!session) throw new Error("Your session ended. Sign in again.");
-    const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/league", {method:"POST",
+    const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/league", {method:"POST", signal:AbortSignal.timeout(KENSHO_WAIT_MS),
       headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":CFG.supabaseAnonKey}, body:JSON.stringify({companies:cfg.companies, years:cfg.years})});
     let body=null; try{ body=await res.json(); }catch{}
     if(res.status===404) out={key, err:"not_deployed"};
     else if(!res.ok) out={key, err:(body&&body.error)||("http_"+res.status), msg:(body&&(body.message||body.error))||`The league function answered ${res.status}.`};
     else out={key, data:body, at:Date.now()};
-  }catch(e){ out={key, err:"network", msg:(e&&e.message)||"Network error"}; }
+  }catch(e){ out = e&&e.name==="TimeoutError" ? {key, err:"timeout"} : {key, err:"network", msg:(e&&e.message)||"Network error"}; }
   if(S.league && S.league.key===key) S.league=out;
   if(S.view==="bankers") render();
   if(S.drawer && S.drawer.kind==="banker") renderDrawer();
@@ -1303,7 +1307,8 @@ function leagueSpot(firm){
 }
 function leagueStatusHTML(){
   const c=S.league, edit=canEditNow();
-  if(!c || c.loading) return `<p class="t2">Loading deals and advisors from Kensho… (the first load can take half a minute)</p>`;
+  if(!c || c.loading) return `<p class="t2">Loading deals and advisors from Kensho… The first load can take up to a minute; after that it's kept for 6 hours.</p>`;
+  if(c.err==="timeout") return kenshoSlowHTML("league", edit, "lg-refresh");
   if(c.err==="not_configured") return `<div class="banner"><span><b>Kensho isn't connected to the league function yet.</b> ${edit?"Set the Kensho secrets (README, section 7); they serve the comps and league functions alike.":"Ask the tracker owner to connect it."}</span></div>`;
   if(c.err==="not_deployed") return `<div class="banner"><span><b>The league function isn't deployed yet.</b> ${edit?"See README, section 7b: <code>supabase functions deploy league --no-verify-jwt</code>.":"Ask the tracker owner to set it up."}</span></div>`;
   if(c.err==="network") return `<div class="banner"><span><b>Couldn't reach the league function.</b> ${edit?`Check it's deployed with <code>--no-verify-jwt</code> and that <code>ALLOWED_ORIGIN</code> is <code>${esc(location.origin)}</code> (README, section 7b).`:"Ask the tracker owner to check the league function."}</span><button class="btn sm" data-act="lg-refresh">Try again</button></div>`;
