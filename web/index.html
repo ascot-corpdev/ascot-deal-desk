@@ -1029,9 +1029,6 @@ function setCompsPeriod(v){
   S.compsPeriod=v; try{ localStorage.setItem(PERIOD_KEY,v); }catch{}
   loadComps(false);
 }
-/* How long the page waits for Kensho (through the comps and league functions) before saying so */
-const KENSHO_WAIT_MS=window.__kenshoWait||90_000;   // tests shorten it
-const kenshoSlowHTML = (fn, edit, act) => `<div class="banner"><span><b>Kensho took more than ${KENSHO_WAIT_MS/1000} seconds to answer.</b> Try again: it is usually quicker the second time. ${edit?`If it keeps happening, open Supabase → Edge Functions → <code>${fn}</code> → Logs to see where it stops.`:"If it keeps happening, tell the tracker owner."}</span><button class="btn sm" data-act="${act}">Try again</button></div>`;
 /* Saved Kensho results (table kensho_store, migration 0007): the Comps tab, CEO view and league table open from the
    last fetch, which every login can read. Kensho is asked only when someone clicks Refresh, when nothing is saved yet,
    or when the table isn't set up (then every visit asks, as before). The functions save each fetch themselves. */
@@ -1046,13 +1043,13 @@ async function readKenshoStore(id){
 async function callKensho(fn, payload){
   try{
     const {data:{session}}=await S.sb.auth.getSession(); if(!session) throw new Error("Your session ended. Sign in again.");
-    const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/"+fn, {method:"POST", signal:AbortSignal.timeout(KENSHO_WAIT_MS),
+    const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/"+fn, {method:"POST",
       headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":CFG.supabaseAnonKey}, body:JSON.stringify({...payload, refresh:true})});
     let body=null; try{ body=await res.json(); }catch{}
     if(res.status===404) return {err:"not_deployed"};
     if(!res.ok) return {err:(body&&body.error)||("http_"+res.status), msg:(body&&(body.message||body.error))||`The ${fn} function answered ${res.status}.`};
     return {data:body, at:Date.now()};
-  }catch(e){ return e&&e.name==="TimeoutError" ? {err:"timeout"} : {err:"network", msg:(e&&e.message)||"Network error"}; }
+  }catch(e){ return {err:"network", msg:(e&&e.message)||"Network error"}; }
 }
 const sameList = (a,b) => JSON.stringify([...(a||[])].sort())===JSON.stringify([...(b||[])].sort());
 /* One loader for comps and the league table. slot: "comps" | "league"; id: the saved row; list: the tickers the
@@ -1111,7 +1108,6 @@ function compsStatusHTML(){
   const c=S.comps, edit=canEditNow();
   if(!c || c.loading) return `<p class="t2">Loading the ${COMPS_PERIODS[compsPeriod()].title} from Kensho… This can take up to a minute; after that the figures are saved for everyone until someone clicks Refresh.</p>`;
   if(c.refreshing) return `<p class="t2 savednote">Refreshing from Kensho (up to a minute). The figures below are from ${esc(fmtWhen(c.at))} until the new ones arrive.</p>`;
-  if(c.err==="timeout") return kenshoSlowHTML("comps", edit, "comps-refresh");
   if(c.err==="not_configured") return `<div class="banner"><span><b>Kensho isn't connected yet.</b> ${edit?"Set the Kensho credentials on the comps function (README, section 7).":"Ask the tracker owner to connect it."}</span></div>`;
   if(c.err==="not_deployed") return `<div class="banner"><span><b>The comps function isn't deployed yet.</b> ${edit?"See README, section 7, to deploy it and connect Kensho.":"Ask the tracker owner to set it up."}</span></div>`;
   if(c.err==="network") return `<div class="banner"><span><b>Couldn't reach the comps function.</b> ${edit?`The browser got no answer it could read. Check, in order: (1) the function is deployed: <code>supabase functions deploy comps --no-verify-jwt</code>; (2) it was deployed with <code>--no-verify-jwt</code> (redeploy with it if not); (3) the <code>ALLOWED_ORIGIN</code> secret is this site's address, <code>${esc(location.origin)}</code>. See README, section 7.`:"Ask the tracker owner to check the comps function."}</span><button class="btn sm" data-act="comps-refresh">Try again</button></div>`;
@@ -1335,7 +1331,6 @@ function leagueStatusHTML(){
   const c=S.league, edit=canEditNow();
   if(!c || c.loading) return `<p class="t2">Loading deals and advisors from Kensho… This can take up to a minute; after that the table is saved for everyone until someone clicks Refresh.</p>`;
   if(c.refreshing) return `<p class="t2 savednote">Refreshing from Kensho (up to a minute). The table below is from ${esc(fmtWhen(c.at))} until the new one arrives.</p>`;
-  if(c.err==="timeout") return kenshoSlowHTML("league", edit, "lg-refresh");
   if(c.err==="not_configured") return `<div class="banner"><span><b>Kensho isn't connected to the league function yet.</b> ${edit?"Set the Kensho secrets (README, section 7); they serve the comps and league functions alike.":"Ask the tracker owner to connect it."}</span></div>`;
   if(c.err==="not_deployed") return `<div class="banner"><span><b>The league function isn't deployed yet.</b> ${edit?"See README, section 7b: <code>supabase functions deploy league --no-verify-jwt</code>.":"Ask the tracker owner to set it up."}</span></div>`;
   if(c.err==="network") return `<div class="banner"><span><b>Couldn't reach the league function.</b> ${edit?`Check it's deployed with <code>--no-verify-jwt</code> and that <code>ALLOWED_ORIGIN</code> is <code>${esc(location.origin)}</code> (README, section 7b).`:"Ask the tracker owner to check the league function."}</span><button class="btn sm" data-act="lg-refresh">Try again</button></div>`;
