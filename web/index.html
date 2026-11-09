@@ -10,7 +10,7 @@
 :root{
   --bg:#FFFFFF; --surface:#FFFFFF; --tile:#EEEEF5; --alt:#F5F5FA; --grid:#D9DCE6;
   --ink:#262166; --muted:#666666; --magenta:#EB008C; --blue:#00539E; --lblue:#0081C3;
-  --teal:#00857C; --purple:#944599; --head:#262166; --headInk:#FFFFFF; --bar:#262166;
+  --teal:#00857C; --purple:#944599; --orange:#C46A1B; --head:#262166; --headInk:#FFFFFF; --bar:#262166;
   --overlay:rgba(38,33,102,.28); --shadow:0 12px 40px rgba(38,33,102,.18);
   --font:Arial,"Helvetica Neue",Helvetica,sans-serif;
 }
@@ -81,6 +81,16 @@ footer.foot .wrap{display:flex;justify-content:space-between;gap:12px;padding-bl
 .ccform{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}.ccform textarea{width:100%;min-height:44px}
 .ccchips{display:flex;gap:6px;flex-wrap:wrap}
 @media (max-width:560px){.ccform{grid-template-columns:1fr}}
+/* Pipeline slide */
+.ceoleft{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.pstitle{margin-bottom:12px}
+table.pslide{width:100%;border-collapse:collapse;font-size:13px}
+table.pslide th{background:var(--head);color:var(--headInk);text-align:left;padding:8px;font-size:12px;vertical-align:bottom}
+table.pslide td{padding:7px 8px;border-bottom:1px solid var(--grid);vertical-align:top}
+table.pslide td.pdesc{min-width:220px}
+table.pslide tr.pband td{color:#fff;font-weight:bold;padding:6px 8px}table.pslide tr.pband span{font-weight:normal;opacity:.85}
+table.pslide tr.pband.trk-acq td{background:var(--acq)}table.pslide tr.pband.trk-add td{background:var(--add)}table.pslide tr.pband.pass td{background:#8A8A8A}
+table.pslide .v-quick{color:var(--teal);font-weight:bold}table.pslide .v-careful{color:var(--orange);font-weight:bold}
 /* Add / Acquire */
 :root{--acq:var(--blue);--add:var(--teal)}
 .trk{display:inline-block;padding:1px 7px;font-size:11px;font-weight:bold;color:#fff;vertical-align:middle;white-space:nowrap;letter-spacing:.02em}
@@ -492,6 +502,7 @@ const TYPES = ["Acquisition","Minority investment","MGA / program","Reinsurance 
 /* Two tracks: Acquire (buying all or part of a company) and Add (bringing in business or capacity without buying a
    company). A deal's track follows its type unless someone sets it on the deal (d.track). */
 const TRACKS = ["Acquire","Add"];
+const VISION_TYPES = ["Quick hit","Careful consideration","TBC","NA"];
 const ADD_TYPES = ["MGA / program","Reinsurance / capacity","Partnership"];
 const defaultTrack = type => ADD_TYPES.includes(type) ? "Add" : "Acquire";
 const trackOf = d => TRACKS.includes(d.track) ? d.track : defaultTrack(d.type);
@@ -501,7 +512,7 @@ const PRIORITIES = ["High","Medium","Low"];
 const ORIGINS = ["Banker-led","Proprietary","Inbound","Auction"];
 const RELS = ["Strong","Active","Developing","Dormant"];
 const NOTE_KINDS = ["Update","Call","Email","Meeting","Diligence","Board / IC","Decision"];
-const DEAL_FIELDS = ["codename","target","type","sector","stage","priority","origin","track","ev","gwp","equity","netIncome","stake","lead","nextStep","nextStepDate","ceoSummary","keyRisks","bankerIds","links"];
+const DEAL_FIELDS = ["codename","target","type","sector","stage","priority","origin","track","ownership","hq","keyStats","vision2030","sellsideAdvisor","ev","gwp","equity","netIncome","stake","lead","nextStep","nextStepDate","ceoSummary","keyRisks","bankerIds","links"];
 const BANKER_FIELDS = ["name","firm","title","email","phone","coverage","relationship","lastContact","context"];
 
 /* ---------- example data (in memory only, never written) ---------- */
@@ -724,6 +735,80 @@ function statusBanner(){
   return "";
 }
 
+/* CEO view mode: the dashboard, or the pipeline slide (the CEO's one-page table). Remembered per browser. */
+const CEO_MODE_KEY="dealdesk.ceoMode";
+function ceoMode(){ if(!S.ceoMode){ let v=null; try{ v=localStorage.getItem(CEO_MODE_KEY); }catch{} S.ceoMode=v==="slide"?"slide":"dash"; } return S.ceoMode; }
+function setCeoMode(v){ S.ceoMode=v==="slide"?"slide":"dash"; try{ localStorage.setItem(CEO_MODE_KEY,S.ceoMode); }catch{} }
+
+/* Pipeline slide: Acquire and Add sections (active and on-hold deals), then Passed deals (stage Dead).
+   Closed deals are left off. Company = target, else codename; Project name = codename only when it starts "Project". */
+const PIPE_COLS=["Company","Ownership","HQ","2025 key stats","Project name","Vision 2030 type","Description","Current status","Sell-side advisor"];
+const PIPE_SECTIONS=[{key:"Acquire",label:"Acquire",cls:"trk-acq"},{key:"Add",label:"Add",cls:"trk-add"},{key:"Passed",label:"Passed deals",cls:"pass"}];
+function pipelineGroups(deals){
+  const order=(a,b)=>(ACTIVE.indexOf(b.stage)-ACTIVE.indexOf(a.stage)) || ((+b.ev||0)-(+a.ev||0)) || String(a.codename||"").localeCompare(String(b.codename||""));
+  const live=deals.filter(d=>d.stage!=="Dead" && d.stage!=="Closed");
+  return PIPE_SECTIONS.map(sec=>({...sec, deals: sec.key==="Passed" ? deals.filter(d=>d.stage==="Dead").sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)) : live.filter(d=>trackOf(d)===sec.key).sort(order)}));
+}
+function pipelineCells(d){
+  const proj=/^project\b/i.test(String(d.codename||"").trim()) ? d.codename : "";
+  return [d.target||d.codename||"", d.ownership||"", d.hq||"", d.keyStats||"", proj, d.vision2030||"", d.ceoSummary||"", d.nextStep||"", d.sellsideAdvisor||""];
+}
+const visionClass = v => v==="Quick hit" ? "v-quick" : v==="Careful consideration" ? "v-careful" : "";
+function pipelineTitle(deals){ const live=deals.filter(isActive), late=live.filter(d=>LATE.includes(d.stage)); return `${live.length} active situation${live.length===1?"":"s"}; ${late.length} at LOI or later`; }
+function pipelineSlideHTML(deals, ex){
+  const groups=pipelineGroups(deals), shown=groups.reduce((n,g)=>n+g.deals.length,0);
+  const X = ex ? `<span class="ex">Example</span>` : "";
+  const body = groups.filter(g=>g.deals.length).map(g=>`<tr class="pband ${g.cls}"><td colspan="${PIPE_COLS.length}">${esc(g.label)} <span>(${g.deals.length})</span></td></tr>`
+    + g.deals.map(d=>{ const c=pipelineCells(d); return `<tr class="click" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0">${c.map((v,i)=>
+      i===0 ? `<td><b>${esc(v)}</b>${X}${d.stage!=="Dead"?`<div class="t2">${esc(d.stage)}</div>`:""}</td>`
+      : i===5 ? `<td class="${visionClass(v)}">${esc(v)}</td>`
+      : `<td${i===6?' class="pdesc"':""}>${esc(v)}</td>`).join("")}</tr>`; }).join("")).join("");
+  return `<section><h2 class="action-title pstitle">${esc(pipelineTitle(deals))}</h2>
+    ${shown?`<div class="tbl-wrap"><table class="pslide"><thead><tr>${PIPE_COLS.map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`
+      :`<div class="empty"><p>No deals to show.</p></div>`}
+    <p class="source" style="margin-top:8px">Source: Corp Dev deal tracker${ex?" (example rows)":""}. Acquire and Add list active and on-hold deals by stage; Passed deals are those marked dead; closed deals are left off. Company is the target (or codename); description is the CEO summary; current status is the next step.</p></section>`;
+}
+async function exportPipelineSlide(){
+  if(demoMode()||S.dbMissing){ toast("Add your first deal before exporting. Example rows aren't exported."); return; }
+  toast("Building the slide…");
+  if(!window.PptxGenJS) await loadScript(PPTX_SRC);
+  const {deals:all}=D(); const tf=ceoTrack(), tfName=tf==="add"?"Add":tf==="acquire"?"Acquire":"";
+  const deals=tfName?all.filter(d=>trackOf(d)===tfName):all;
+  const C={navy:"262166",mag:"EB008C",blue:"00539E",lblue:"0081C3",teal:"00857C",purple:"944599",orange:"C46A1B",grey:"666666",lgrey:"8A8A8A",alt:"F5F5FA",grid:"D9DCE6",white:"FFFFFF"}, F="Arial";
+  const yr=new Date().getFullYear(), asOf=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+  const pptx=new window.PptxGenJS(); pptx.layout="LAYOUT_WIDE"; pptx.author=S.session?.name||"Corp Dev"; pptx.title="M&A pipeline";
+  const stripe=[C.navy,C.purple,C.mag,C.lblue,C.blue,C.teal].map((c,i)=>({rect:{x:i*13.333/6,y:0,w:13.333/6+0.01,h:0.09,fill:{color:c},line:{color:c}}}));
+  pptx.defineSlideMaster({title:"PIPE",background:{color:C.white},objects:[...stripe,{text:{text:yr+" Ascot Group",options:{x:0.52,y:7.02,w:4,h:0.3,fontFace:F,fontSize:10,color:C.grey}}}],
+    slideNumber:{x:12.3,y:7.02,w:0.5,h:0.3,fontFace:F,fontSize:10,color:C.grey,align:"right"}});
+  const band={Acquire:C.blue, Add:C.teal, Passed:C.lgrey};
+  // pages of about 11 deal rows; a section moves to the next page rather than split, unless it is longer than a page
+  const PER=11, pages=[]; let cur=[], used=0;
+  for(const g of pipelineGroups(deals)){ if(!g.deals.length) continue;
+    if(used && used+g.deals.length>PER){ pages.push(cur); cur=[]; used=0; }
+    for(let i=0;i<g.deals.length;i+=PER){
+      if(i){ pages.push(cur); cur=[]; used=0; }
+      const part=g.deals.slice(i,i+PER); cur.push({g, deals:part, cont:i>0}); used+=part.length; } }
+  if(cur.length) pages.push(cur);
+  if(!pages.length) pages.push([]);
+  const title=pipelineTitle(deals);
+  const W=[1.6,1.1,0.9,1.5,1.1,1.3,2.3,1.5,0.98];
+  pages.forEach((pg,pi)=>{
+    const sl=pptx.addSlide({masterName:"PIPE"});
+    sl.addText(pi?`${title} (continued)`:title,{x:0.52,y:0.32,w:12.28,h:0.8,fontFace:F,fontSize:28,color:C.mag,valign:"middle",margin:0});
+    const rows=[PIPE_COLS.map(h=>({text:h,options:{bold:true,color:C.white,fill:{color:C.navy},valign:"middle"}}))];
+    let n=0;
+    for(const part of pg){
+      rows.push([{text:`${part.g.label}${part.cont?" (continued)":""}`,options:{colspan:PIPE_COLS.length,bold:true,color:C.white,fill:{color:band[part.g.key]}}}]);
+      for(const d of part.deals){ const c=pipelineCells(d), o={fill:{color:n++%2?C.alt:C.white},valign:"top"};
+        rows.push(c.map((v,i)=>({text:clip(v, i===6?230:i===7?130:90), options: i===0?{...o,bold:true} : i===5&&visionClass(v)?{...o,bold:true,color:v==="Quick hit"?C.teal:C.orange} : o}))); } }
+    if(rows.length===1) rows.push([{text:"No deals to show.",options:{colspan:PIPE_COLS.length}}]);
+    sl.addTable(rows,{x:0.52,y:1.25,w:12.28,colW:W,fontFace:F,fontSize:10,color:C.navy,border:{type:"solid",pt:0.5,color:C.grid},margin:[3,4,3,4],autoPage:false});
+    sl.addText(`Source: Corp Dev deal tracker as of ${asOf}${tfName?`; ${tfName} deals only`:""}. Passed deals are those marked dead; closed deals are not shown.`,{x:0.52,y:6.66,w:12.28,h:0.3,fontFace:F,fontSize:10,italic:true,color:C.grey,margin:0});
+  });
+  await pptx.writeFile({fileName:`Ascot-pipeline-${TODAY()}.pptx`});
+  toast("Slide downloaded");
+}
+
 /* CEO view filter: all deals, Acquire only or Add only. Remembered per browser. */
 const CEO_TRACK_KEY="dealdesk.ceoTrack";
 function ceoTrack(){ if(!S.ceoTrack){ let v=null; try{ v=localStorage.getItem(CEO_TRACK_KEY); }catch{} S.ceoTrack=["all","acquire","add"].includes(v)?v:"all"; } return S.ceoTrack; }
@@ -752,11 +837,15 @@ function renderCEO(){
   const lastBy = deals.find(d=>d.updatedAt===lastUpd)?.updatedBy;
   const X = ex ? `<span class="ex">Example</span>` : "";
 
-  return `
+  const mode=ceoMode();
+  const head=`
   <section class="ceohead">
-    <div><div class="seg ceotrack" role="group" aria-label="Show deals">${[["all","All deals"],["acquire","Acquire"],["add","Add"]].map(([v,l])=>`<button type="button" class="btn sm" data-act="ceo-track" data-v="${v}" aria-pressed="${tf===v}">${v==="all"?"":`<span class="sw ${v==="add"?"trk-add":"trk-acq"}" aria-hidden="true"></span>`}${l}</button>`).join("")}</div>
+    <div class="ceoleft"><div class="seg ceomode" role="group" aria-label="View">${[["dash","Dashboard"],["slide","Pipeline slide"]].map(([v,l])=>`<button type="button" class="btn sm" data-act="ceo-mode" data-v="${v}" aria-pressed="${mode===v}">${l}</button>`).join("")}</div>
+      <div class="seg ceotrack" role="group" aria-label="Show deals">${[["all","All deals"],["acquire","Acquire"],["add","Add"]].map(([v,l])=>`<button type="button" class="btn sm" data-act="ceo-track" data-v="${v}" aria-pressed="${tf===v}">${v==="all"?"":`<span class="sw ${v==="add"?"trk-add":"trk-acq"}" aria-hidden="true"></span>`}${l}</button>`).join("")}</div>
       ${tfName?`<p class="printonly">Showing ${tfName} deals only.</p>`:""}</div>
-    <div class="ceoacts"><button type="button" class="btn sm" data-act="board-pack">Board pack (.pptx)</button><button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></section>
+    <div class="ceoacts">${mode==="slide"?`<button type="button" class="btn sm" data-act="pipeline-pptx">Download slide (.pptx)</button>`:`<button type="button" class="btn sm" data-act="board-pack">Board pack (.pptx)</button>`}<button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></section>`;
+  if(mode==="slide") return head+pipelineSlideHTML(deals, ex);
+  return head+`
   <section class="tiles" aria-label="Headline numbers">
     <div class="tile"><b class="c-navy">${active.length}</b><span>Active deals</span><small>${nAcq} Acquire · ${nAdd} Add</small></div>
     <div class="tile"><b class="c-mag">${late.length}</b><span>At LOI or diligence</span><small>${money(lateEv)} EV</small></div>
@@ -1390,6 +1479,11 @@ function dealFormHTML(dr){
       <label class="f">Deal type${sel("f_type",TYPES,d.type||TYPES[0])}</label>
       <label class="f">Add or Acquire <em>(follows the deal type unless you change it)</em><select id="f_track" data-auto="${TRACKS.includes(d.track)?"0":"1"}">${TRACKS.map(t=>`<option${t===trackOf({...d,type:d.type||TYPES[0]})?" selected":""}>${t}</option>`).join("")}</select></label>
       <label class="f">Sector / line<input type="text" id="f_sector" value="${esc(d.sector||"")}" placeholder="E&amp;S casualty"></label>
+      <label class="f">Ownership<input type="text" id="f_ownership" value="${esc(d.ownership||"")}" placeholder="PE-backed, family owned, public"></label>
+      <label class="f">HQ<input type="text" id="f_hq" value="${esc(d.hq||"")}" placeholder="City, state or country"></label>
+      <label class="f full">Key stats <em>(for the pipeline slide, e.g. 2025 GWP, revenue, EBITDA)</em><input type="text" id="f_keyStats" value="${esc(d.keyStats||"")}" placeholder="$120M GWP; $18M EBITDA"></label>
+      <label class="f">Vision 2030 type<select id="f_vision2030"><option value=""${d.vision2030?"":" selected"}>Not set</option>${VISION_TYPES.map(v=>`<option${d.vision2030===v?" selected":""}>${v}</option>`).join("")}</select></label>
+      <label class="f">Sell-side advisor<input type="text" id="f_sellsideAdvisor" value="${esc(d.sellsideAdvisor||"")}" placeholder="Firm running the process"></label>
       <label class="f">Stage${sel("f_stage",STAGES,d.stage||"Screening")}</label>
       <label class="f">Priority${sel("f_priority",PRIORITIES,d.priority||"Medium")}</label>
       <label class="f">Origin${sel("f_origin",ORIGINS,d.origin||ORIGINS[0])}</label>
@@ -1501,7 +1595,7 @@ const numOrBlank = s => s==="" ? "" : (isNaN(+s) ? "" : +s);
 
 function dealFormValues(){
   readLinks();
-  return {codename:val("f_codename"), target:val("f_target"), type:val("f_type"), track:trackField(), sector:val("f_sector"), stage:val("f_stage"), priority:val("f_priority"),
+  return {codename:val("f_codename"), target:val("f_target"), type:val("f_type"), track:trackField(), sector:val("f_sector"), ownership:val("f_ownership"), hq:val("f_hq"), keyStats:val("f_keyStats"), vision2030:val("f_vision2030"), sellsideAdvisor:val("f_sellsideAdvisor"), stage:val("f_stage"), priority:val("f_priority"),
     ev:numOrBlank(val("f_ev")), gwp:numOrBlank(val("f_gwp")), equity:numOrBlank(val("f_equity")), netIncome:numOrBlank(val("f_netIncome")), stake:numOrBlank(val("f_stake")), origin:val("f_origin"), lead:val("f_lead"),
     nextStep:val("f_nextStep"), nextStepDate:val("f_nextStepDate"), ceoSummary:val("f_ceoSummary"), keyRisks:val("f_keyRisks"),
     outcomeDate:val("f_outcomeDate"), deadReason:val("f_deadReason"), outcomeNote:val("f_outcomeNote"),
@@ -1548,7 +1642,7 @@ async function casWrite(table,id,build){
   throw {message:"someone else keeps saving this record. Wait a moment and try again"};
 }
 function whoChanged(row){ const d=row.doc||{}; return (row.updated_by && d.updatedBy && d.updatedBy!==row.updated_by) ? nameOf(row.updated_by) : nameOf(row.updated_by, d.updatedByName); }
-const FIELD_LABELS={codename:"Codename",target:"Target",type:"Deal type",sector:"Sector",stage:"Stage",priority:"Priority",track:"Add / Acquire",ev:"Valuation",gwp:"Target GWP",equity:"Equity",netIncome:"Net income",stake:"Stake",
+const FIELD_LABELS={codename:"Codename",target:"Target",type:"Deal type",sector:"Sector",stage:"Stage",priority:"Priority",track:"Add / Acquire",ownership:"Ownership",hq:"HQ",keyStats:"Key stats",vision2030:"Vision 2030 type",sellsideAdvisor:"Sell-side advisor",ev:"Valuation",gwp:"Target GWP",equity:"Equity",netIncome:"Net income",stake:"Stake",
   origin:"Origin",lead:"Deal lead",nextStep:"Next step",nextStepDate:"Next step date",ceoSummary:"CEO summary",keyRisks:"Key risks",bankerIds:"Bankers",teamIds:"Deal team",links:"Profile and other docs",
   name:"Name",firm:"Firm",website:"Firm website",title:"Title",coverage:"Coverage",email:"Email",phone:"Phone",relationship:"Relationship",lastContact:"Last contact",context:"Relationship context",outcomeDate:"Outcome date",deadReason:"Reason dropped",outcomeNote:"Outcome note"};
 /* ---------- change history (supabase/migrations/0003_history.sql) ---------- */
@@ -2107,9 +2201,9 @@ async function importSave(){
 /* ---------- CSV export ---------- */
 async function exportCSV(){
   const {bankers}=D(); const rows=filteredDeals();
-  const cols=["Codename","Target","Type","Add / Acquire","Sector","Stage","Priority","Valuation ($M)","GWP ($M)","Equity ($M)","Net income ($M)","P/BV (calculated)","P/E (calculated)","Stake (%)","Origin","Lead","Deal team","Next step","Next step date","Bankers","CEO summary","Key risks","Links"];
+  const cols=["Codename","Target","Type","Add / Acquire","Ownership","HQ","Key stats","Vision 2030 type","Sell-side advisor","Sector","Stage","Priority","Valuation ($M)","GWP ($M)","Equity ($M)","Net income ($M)","P/BV (calculated)","P/E (calculated)","Stake (%)","Origin","Lead","Deal team","Next step","Next step date","Bankers","CEO summary","Key risks","Links"];
   const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
-  const lines=[cols.map(q).join(",")].concat(rows.map(d=>[d.codename,d.target,d.type,trackOf(d),d.sector,d.stage,d.priority,d.ev,d.gwp,d.equity,d.netIncome,dealPB(d)==null?"":dealPB(d).toFixed(2),dealPE(d)==null?"":dealPE(d).toFixed(1),d.stake,d.origin,d.lead,(d.teamIds||[]).map(i=>nameOf(i)).join("; "),d.nextStep,d.nextStepDate,(d.bankerIds||[]).map(i=>bankers.find(b=>b.id===i)).filter(Boolean).map(b=>`${b.name} (${b.firm})`).join("; "),d.ceoSummary,d.keyRisks,(d.links||[]).map(l=>l.url).join(" ")].map(q).join(",")));
+  const lines=[cols.map(q).join(",")].concat(rows.map(d=>[d.codename,d.target,d.type,trackOf(d),d.ownership,d.hq,d.keyStats,d.vision2030,d.sellsideAdvisor,d.sector,d.stage,d.priority,d.ev,d.gwp,d.equity,d.netIncome,dealPB(d)==null?"":dealPB(d).toFixed(2),dealPE(d)==null?"":dealPE(d).toFixed(1),d.stake,d.origin,d.lead,(d.teamIds||[]).map(i=>nameOf(i)).join("; "),d.nextStep,d.nextStepDate,(d.bankerIds||[]).map(i=>bankers.find(b=>b.id===i)).filter(Boolean).map(b=>`${b.name} (${b.firm})`).join("; "),d.ceoSummary,d.keyRisks,(d.links||[]).map(l=>l.url).join(" ")].map(q).join(",")));
   const url=URL.createObjectURL(new Blob(["\ufeff"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"}));
   const a=document.createElement("a"); a.href=url; a.download=`deal-tracker-${TODAY()}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
@@ -2413,7 +2507,7 @@ function tcSectionHTML(){ return tcEnabled() ? `<section class="tchat" id="tcBox
 function tcRender(){ const el=document.getElementById("tcBox"); if(el) el.innerHTML=tcInner(); }
 
 /* ---------- Claude helper ---------- */
-const ALLOWED_DEAL_CHANGES = ["target","type","track","sector","stage","priority","ev","gwp","equity","netIncome","stake","origin","lead","nextStep","nextStepDate","ceoSummary","keyRisks","outcomeDate","deadReason","outcomeNote"];
+const ALLOWED_DEAL_CHANGES = ["target","type","track","ownership","hq","keyStats","vision2030","sellsideAdvisor","sector","stage","priority","ev","gwp","equity","netIncome","stake","origin","lead","nextStep","nextStepDate","ceoSummary","keyRisks","outcomeDate","deadReason","outcomeNote"];
 const ALLOWED_BANKER_CHANGES = ["firm","website","title","coverage","relationship","lastContact","context","email","phone"];
 
 function aiData(){
@@ -2637,6 +2731,8 @@ document.addEventListener("click", async e=>{
       document.querySelector(`.fold[data-k="${CSS.escape(k)}"]`)?.focus(); break; }
     case "fold-all": { const open=t.dataset.open==="1"; firmKeysShown().forEach(k=>loadFolds()[k]=open); saveFolds(); render(); document.querySelector('[data-act="fold-all"]')?.focus(); break; }
     case "ceo-track": setCeoTrack(t.dataset.v); render(); break;
+    case "ceo-mode": setCeoMode(t.dataset.v); render(); break;
+    case "pipeline-pptx": t.disabled=true; try{ await exportPipelineSlide(); }catch(e){ toast("Couldn't build the slide: "+((e&&e.message)||"try again")); } t.disabled=false; break;
     case "cc-send": { const i=document.getElementById("cc_input"); const v=i?i.value:""; if(!v.trim()){ toast("Type a question first."); i&&i.focus(); return; } if(i) i.value=""; ccAsk(v); break; }
     case "cc-suggest": ccAsk(t.textContent); break;
     case "cc-stop": if(ccState().ctrl) ccState().ctrl.abort(); break;
