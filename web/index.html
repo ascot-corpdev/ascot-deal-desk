@@ -1103,13 +1103,13 @@ function compsChatHTML(){
       ${st.msgs.length?`<button type="button" class="btn sm ghost" data-act="cc-clear">New chat</button>`:""}</div>
     ${st.msgs.length||st.busy?`<div class="cclog" id="ccLog" aria-live="polite">${log}</div>`:""}
     ${!st.msgs.length&&ready?`<div class="ccchips">${CC_SUGGEST.map(x=>`<button type="button" class="chip" data-act="cc-suggest">${esc(x)}</button>`).join("")}</div>`:""}
-    <div class="ccform"><textarea id="cc_input" rows="2" placeholder="${ready?"e.g. How has W. R. Berkley's combined ratio moved over the last eight quarters?":"Load the comps first"}" aria-label="Question for Claude" ${ready?"":"disabled"}></textarea>
+    <div class="ccform"><textarea id="cc_input" rows="2" placeholder="${ready?"e.g. How has W. R. Berkley's combined ratio moved over the last eight quarters?":(!S.comps||S.comps.loading)?"Waiting for the comps table to load…":"Claude needs the comps table, which didn't load: see the message at the top of this page"}" aria-label="Question for Claude" ${ready?"":"disabled"}></textarea>
       ${st.busy?`<button type="button" class="btn" data-act="cc-stop">Stop</button>`:`<button type="button" class="btn primary" data-act="cc-send" ${ready?"":"disabled"}>Ask</button>`}</div>
   </section>`;
 }
 async function ccAsk(text){
   const st=ccState(); text=String(text||"").trim(); if(!text||st.busy) return;
-  const screen=ccScreen(); if(!screen){ toast("Load the comps first."); return; }
+  const screen=ccScreen(); if(!screen){ toast("Claude needs the comps table, which hasn't loaded yet."); return; }
   st.msgs.push({role:"user", text}); st.busy=true; st.ctrl=new AbortController(); render();
   let reply;
   try{
