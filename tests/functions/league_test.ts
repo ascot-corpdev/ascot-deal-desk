@@ -73,6 +73,11 @@ ok("CORS for the site", r.headers.get("Access-Control-Allow-Origin") === "*");
 const n0 = log.length;
 r = await handle(post({ companies: ["BBB", "AAA", "NOPE"] }), deps());
 ok("same request within 6 hours: from memory", r.status === 200 && log.length === n0);
+const rows: { id: string; doc: any }[] = [];
+r = await handle(post({ companies: ["BBB", "AAA", "NOPE"], refresh: true }), deps({ store: async (id: string, doc: any) => { rows.push({ id, doc }); return true; } }));
+b = await r.json();
+ok("refresh: asks Kensho again and saves league:3", log.length > n0 && b.saved === true && rows.length === 1 && rows[0].id === "league:3" && rows[0].doc.deals.length === 2 && JSON.stringify(rows[0].doc.tickers) === '["BBB","AAA","NOPE"]', rows.map((x) => x.id));
+ok("no store configured: still answers, saved false", (await (await handle(post({ companies: ["AAA"], refresh: true }), deps())).json()).saved === false);
 
 mergersFail = "22";
 r = await handle(post({ companies: ["AAA", "BBB"], years: 2 }), deps());

@@ -110,7 +110,7 @@ const seed=[["bankers","b1",{name:"Avery Example",firm:"Goldman Sachs",title:"MD
   mode="404"; await p.click('button[data-act="lg-refresh"]'); await p.waitForTimeout(300);
   ok("not deployed: banner with the deploy command", (await txt(".banner")).includes("supabase functions deploy league --no-verify-jwt"));
   mode="slow"; await p.evaluate(()=>{ S.league=null; }); await p.addInitScript(()=>{ window.__kenshoWait=400; }); await p.reload(); await p.waitForSelector('button[data-act="bmode"]'); await p.click('button[data-act="bmode"][data-v="league"]'); await p.waitForTimeout(100);
-  ok("while loading: says the first load can take a minute", (await txt("body")).includes("The first load can take up to a minute"));
+  ok("while loading: says the first load can take a minute", (await txt("body")).includes("This can take up to a minute"));
   await p.waitForTimeout(900);
   ok("too slow: says so, with Try again and where to look", (await txt(".banner")).includes("Kensho took more than 0.4 seconds to answer") && (await txt(".banner")).includes("Edge Functions → league → Logs") && !!(await p.$('.banner button[data-act="lg-refresh"]')));
   mode="ok"; await p.click('button[data-act="lg-refresh"]'); await p.waitForTimeout(300);

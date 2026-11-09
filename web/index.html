@@ -233,6 +233,7 @@ table.lgsub{width:100%;border-collapse:collapse;font-size:13px}table.lgsub th,ta
 .lgcos .btn{margin-left:6px}
 .lgbadge{color:var(--blue);font-weight:bold}
 .lgnote p{margin:0}
+.savednote .btn{margin-left:6px}
 .imtbl{font-size:12px}
 .imtbl td,.imtbl th{padding:5px 7px}
 .imtbl tr.skip td{color:var(--muted);text-decoration:line-through}
@@ -1031,27 +1032,63 @@ function setCompsPeriod(v){
 /* How long the page waits for Kensho (through the comps and league functions) before saying so */
 const KENSHO_WAIT_MS=window.__kenshoWait||90_000;   // tests shorten it
 const kenshoSlowHTML = (fn, edit, act) => `<div class="banner"><span><b>Kensho took more than ${KENSHO_WAIT_MS/1000} seconds to answer.</b> Try again: it is usually quicker the second time. ${edit?`If it keeps happening, open Supabase → Edge Functions → <code>${fn}</code> → Logs to see where it stops.`:"If it keeps happening, tell the tracker owner."}</span><button class="btn sm" data-act="${act}">Try again</button></div>`;
-async function loadComps(force){
-  if(!S.sb || !S.session) return;
-  const peers=benchCfg().peers, period=compsPeriod(), key=period+"|"+peers.join(",");
-  if(!force && S.comps && S.comps.key===key && (S.comps.data||S.comps.loading||S.comps.err)) return;
-  // Switching back to a period already fetched shows it at once (the Refresh button refetches)
-  S.compsCache=S.compsCache||{};
-  const hit=S.compsCache[key];
-  if(!force && hit && Date.now()-hit.at<10*60_000){ S.comps=hit; return; }
-  S.comps={key, loading:true};
-  let out;
+/* Saved Kensho results (table kensho_store, migration 0007): the Comps tab, CEO view and league table open from the
+   last fetch, which every login can read. Kensho is asked only when someone clicks Refresh, when nothing is saved yet,
+   or when the table isn't set up (then every visit asks, as before). The functions save each fetch themselves. */
+async function readKenshoStore(id){
+  if(S.storeMissing) return null;
+  try{
+    const {data,error}=await S.sb.from("kensho_store").select("doc,fetched_at").eq("id",id).maybeSingle();
+    if(error){ if(/PGRST205|42P01|kensho_store/i.test(String(error.code||"")+" "+String(error.message||""))) S.storeMissing=true; return null; }
+    return data&&data.doc ? {body:data.doc, at:Date.parse(data.fetched_at)||Date.now()} : null;
+  }catch{ return null; }
+}
+async function callKensho(fn, payload){
   try{
     const {data:{session}}=await S.sb.auth.getSession(); if(!session) throw new Error("Your session ended. Sign in again.");
-    const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/comps", {method:"POST", signal:AbortSignal.timeout(KENSHO_WAIT_MS),
-      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":CFG.supabaseAnonKey}, body:JSON.stringify({tickers:peers, period})});
+    const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/"+fn, {method:"POST", signal:AbortSignal.timeout(KENSHO_WAIT_MS),
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":CFG.supabaseAnonKey}, body:JSON.stringify({...payload, refresh:true})});
     let body=null; try{ body=await res.json(); }catch{}
-    if(res.status===404) out={key, err:"not_deployed"};
-    else if(!res.ok) out={key, err:(body&&body.error)||("http_"+res.status), msg:(body&&(body.message||body.error))||`The comps function answered ${res.status}.`};
-    else { out={key, data:body, at:Date.now()}; S.compsCache[key]=out; }
-  }catch(e){ out = e&&e.name==="TimeoutError" ? {key, err:"timeout"} : {key, err:"network", msg:(e&&e.message)||"Network error"}; }
-  if(S.comps && S.comps.key===key) S.comps=out;
+    if(res.status===404) return {err:"not_deployed"};
+    if(!res.ok) return {err:(body&&body.error)||("http_"+res.status), msg:(body&&(body.message||body.error))||`The ${fn} function answered ${res.status}.`};
+    return {data:body, at:Date.now()};
+  }catch(e){ return e&&e.name==="TimeoutError" ? {err:"timeout"} : {err:"network", msg:(e&&e.message)||"Network error"}; }
+}
+const sameList = (a,b) => JSON.stringify([...(a||[])].sort())===JSON.stringify([...(b||[])].sort());
+/* One loader for comps and the league table. slot: "comps" | "league"; id: the saved row; list: the tickers the
+   view should cover (a saved copy for another list is shown, marked out of date). While refreshing, the old figures
+   stay on screen; if the refresh fails they stay, with the reason above them. */
+async function loadSaved(slot, id, list, payload, force){
+  if(!S.sb || !S.session) return false;
+  const cacheK=slot+"Cache"; S[cacheK]=S[cacheK]||{};
+  const cur=S[slot]&&S[slot].id===id?S[slot]:null;
+  if(!force){
+    if(cur && (cur.data||cur.loading||cur.err)) return false;
+    const hit=S[cacheK][id]; if(hit){ S[slot]={...hit, stale:!sameList(hit.data.tickers,list)}; return false; }
+  } else if(cur && (cur.loading||cur.refreshing)) return false;
+  const prev=cur&&cur.data?{data:cur.data, at:cur.at, stale:cur.stale}:{};
+  const mine=S[slot]={id, loading:!prev.data, refreshing:!!prev.data, ...prev};
+  let out=null;
+  if(!force){ const st=await readKenshoStore(id); if(st) out={id, data:st.body, at:st.at, stale:!sameList(st.body.tickers,list)}; }
+  if(!out){ const r=await callKensho(slot, payload);
+    out = r.err ? {id, err:r.err, msg:r.msg, ...prev} : {id, data:r.data, at:r.at, stale:false, unsaved:r.data.saved===false}; }
+  if(out.data && !out.err) S[cacheK][id]=out;
+  if(S[slot]===mine) S[slot]=out;
+  return true;
+}
+async function loadComps(force){
+  const peers=benchCfg().peers, period=compsPeriod();
+  if(S.compsForce){ force=true; S.compsForce=false; }
+  if(!await loadSaved("comps", "comps:"+period, peers, {tickers:peers, period}, force)) return;
   if(["comps","ceo"].includes(S.view)) render();
+}
+/* Notes under the status line: out of date for the current list, not saved, or no table to save to */
+function savedNotesHTML(c, edit, act, what, fn){
+  const n=[];
+  if(c && c.data && c.stale) n.push(`The ${what} list has changed since these figures were fetched. <button type="button" class="btn sm" data-act="${act}">Refresh from Kensho</button>`);
+  if(edit && S.storeMissing) n.push(`Kensho is asked on every visit. To keep the last fetch and only ask again when someone clicks Refresh, run <code>supabase/migrations/0007_kensho_store.sql</code> in Supabase.`);
+  else if(edit && c && c.unsaved) n.push(`This fetch couldn't be saved, so the next visit will ask Kensho again. Redeploy the ${fn} function (README, section 7c).`);
+  return n.map(x=>`<p class="t2 savednote">${x}</p>`).join("");
 }
 const pctS = (v,sign) => v==null ? "n/d" : (v<0 ? `(${Math.abs(v).toFixed(1)}%)` : `${sign&&v>0?"+":""}${v.toFixed(1)}%`);
 const mS = v => v==null ? "n/d" : (v<0 ? `(${mnum(-v)})` : mnum(v));
@@ -1072,13 +1109,14 @@ const COMPS_SORTS = {
 };
 function compsStatusHTML(){
   const c=S.comps, edit=canEditNow();
-  if(!c || c.loading) return `<p class="t2">Loading the ${COMPS_PERIODS[compsPeriod()].title} from Kensho… The first load can take up to a minute; after that it's kept for 10 minutes.</p>`;
+  if(!c || c.loading) return `<p class="t2">Loading the ${COMPS_PERIODS[compsPeriod()].title} from Kensho… This can take up to a minute; after that the figures are saved for everyone until someone clicks Refresh.</p>`;
+  if(c.refreshing) return `<p class="t2 savednote">Refreshing from Kensho (up to a minute). The figures below are from ${esc(fmtWhen(c.at))} until the new ones arrive.</p>`;
   if(c.err==="timeout") return kenshoSlowHTML("comps", edit, "comps-refresh");
   if(c.err==="not_configured") return `<div class="banner"><span><b>Kensho isn't connected yet.</b> ${edit?"Set the Kensho credentials on the comps function (README, section 7).":"Ask the tracker owner to connect it."}</span></div>`;
   if(c.err==="not_deployed") return `<div class="banner"><span><b>The comps function isn't deployed yet.</b> ${edit?"See README, section 7, to deploy it and connect Kensho.":"Ask the tracker owner to set it up."}</span></div>`;
   if(c.err==="network") return `<div class="banner"><span><b>Couldn't reach the comps function.</b> ${edit?`The browser got no answer it could read. Check, in order: (1) the function is deployed: <code>supabase functions deploy comps --no-verify-jwt</code>; (2) it was deployed with <code>--no-verify-jwt</code> (redeploy with it if not); (3) the <code>ALLOWED_ORIGIN</code> secret is this site's address, <code>${esc(location.origin)}</code>. See README, section 7.`:"Ask the tracker owner to check the comps function."}</span><button class="btn sm" data-act="comps-refresh">Try again</button></div>`;
   if(c.err) return `<div class="banner"><span><b>Couldn't load the comps.</b> ${esc(c.msg||c.err)}</span><button class="btn sm" data-act="comps-refresh">Try again</button></div>`;
-  return "";
+  return savedNotesHTML(c, edit, "comps-refresh", "peer", "comps");
 }
 function aglButton(){
   const {aglUrl}=benchCfg();
@@ -1148,8 +1186,8 @@ function renderComps(){
   const periodNote = per==="quarter" ? "Each company's latest fiscal quarter, so period ends can differ." : per==="ytd" ? "Each company's fiscal year to date at its latest quarter, so period ends can differ." : "Each company's last twelve months to its latest quarter, so period ends can differ.";
   return `
   <section class="ceohead"><div><h2 class="action-title">Public comps: ${P.title}${quarters.length===1?` (${esc(quarters[0])})`:""}</h2>
-    <p class="sub">${cfg.peers.length} listed specialty insurance peers from S&P Global via Kensho. Fetched live when you open this page; nothing is stored.</p></div>
-    <div class="ceoacts">${aglButton()}${!cfg.aglUrl&&edit?`<button type="button" class="btn sm" data-act="comps-settings">Add AGL financials link</button>`:""}<button type="button" class="btn sm" data-act="comps-refresh">Refresh</button>${edit?`<button type="button" class="btn sm" data-act="comps-settings">Edit peers</button>`:""}</div></section>
+    <p class="sub">${cfg.peers.length} listed specialty insurance peers from S&P Global via Kensho. ${S.comps&&S.comps.data&&S.comps.at?`Last fetched ${esc(fmtWhen(S.comps.at))}; Refresh asks Kensho again.`:"Refresh asks Kensho again."}</p></div>
+    <div class="ceoacts">${aglButton()}${!cfg.aglUrl&&edit?`<button type="button" class="btn sm" data-act="comps-settings">Add AGL financials link</button>`:""}<button type="button" class="btn sm" data-act="comps-refresh"${S.comps&&(S.comps.loading||S.comps.refreshing)?" disabled":""}>Refresh from Kensho</button>${edit?`<button type="button" class="btn sm" data-act="comps-settings">Edit peers</button>`:""}</div></section>
   ${S.settingsMissing&&edit?`<div class="banner"><span>Using the default peer list. To choose your own peers and save the AGL financials link, run <b>supabase/migrations/0004_settings.sql</b> in Supabase.</span></div>`:""}
   <section class="toolbar"><div class="seg" role="group" aria-label="Period">${Object.entries(COMPS_PERIODS).map(([k,v])=>`<button type="button" class="btn sm" data-act="comps-period" data-v="${k}" aria-pressed="${k===per}">${v.btn}</button>`).join("")}</div></section>
   ${compsStatusHTML()}
@@ -1194,7 +1232,7 @@ async function saveCompsSettings(){
   const doc={...(((S.settings||{}).benchmark)||{}), peers, aglUrl:agl||"", updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""};
   const {error}=await S.sb.from("settings").upsert({id:"benchmark", doc});
   if(error){ toast(/settings|PGRST205|42P01/i.test(String(error.code||"")+String(error.message||"")) ? "Run supabase/migrations/0004_settings.sql in Supabase first, then save again." : "Couldn't save: "+(error.message||"try again")); return; }
-  toast("Saved"); S.comps=null; closeDrawer(); await loadSettings();
+  toast("Saved"); S.comps=null; S.compsCache={}; S.compsForce=true; closeDrawer(); await loadSettings();
 }
 
 /* ---------- League table (Banker CRM) ----------
@@ -1249,21 +1287,9 @@ function advisorBrand(name){
 }
 const brandKey = s => advisorBrand(s).toLowerCase();
 async function loadLeague(force){
-  if(!S.sb || !S.session) return;
-  const cfg=leagueCfg(), key=cfg.years+"|"+cfg.companies.join(",");
-  if(!force && S.league && S.league.key===key && (S.league.data||S.league.loading||S.league.err)) return;
-  S.league={key, loading:true};
-  let out;
-  try{
-    const {data:{session}}=await S.sb.auth.getSession(); if(!session) throw new Error("Your session ended. Sign in again.");
-    const res=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/league", {method:"POST", signal:AbortSignal.timeout(KENSHO_WAIT_MS),
-      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":CFG.supabaseAnonKey}, body:JSON.stringify({companies:cfg.companies, years:cfg.years})});
-    let body=null; try{ body=await res.json(); }catch{}
-    if(res.status===404) out={key, err:"not_deployed"};
-    else if(!res.ok) out={key, err:(body&&body.error)||("http_"+res.status), msg:(body&&(body.message||body.error))||`The league function answered ${res.status}.`};
-    else out={key, data:body, at:Date.now()};
-  }catch(e){ out = e&&e.name==="TimeoutError" ? {key, err:"timeout"} : {key, err:"network", msg:(e&&e.message)||"Network error"}; }
-  if(S.league && S.league.key===key) S.league=out;
+  const cfg=leagueCfg();
+  if(S.leagueForce){ force=true; S.leagueForce=false; }
+  if(!await loadSaved("league", "league:"+cfg.years, cfg.companies, {companies:cfg.companies, years:cfg.years}, force)) return;
   if(S.view==="bankers") render();
   if(S.drawer && S.drawer.kind==="banker") renderDrawer();
 }
@@ -1307,13 +1333,14 @@ function leagueSpot(firm){
 }
 function leagueStatusHTML(){
   const c=S.league, edit=canEditNow();
-  if(!c || c.loading) return `<p class="t2">Loading deals and advisors from Kensho… The first load can take up to a minute; after that it's kept for 6 hours.</p>`;
+  if(!c || c.loading) return `<p class="t2">Loading deals and advisors from Kensho… This can take up to a minute; after that the table is saved for everyone until someone clicks Refresh.</p>`;
+  if(c.refreshing) return `<p class="t2 savednote">Refreshing from Kensho (up to a minute). The table below is from ${esc(fmtWhen(c.at))} until the new one arrives.</p>`;
   if(c.err==="timeout") return kenshoSlowHTML("league", edit, "lg-refresh");
   if(c.err==="not_configured") return `<div class="banner"><span><b>Kensho isn't connected to the league function yet.</b> ${edit?"Set the Kensho secrets (README, section 7); they serve the comps and league functions alike.":"Ask the tracker owner to connect it."}</span></div>`;
   if(c.err==="not_deployed") return `<div class="banner"><span><b>The league function isn't deployed yet.</b> ${edit?"See README, section 7b: <code>supabase functions deploy league --no-verify-jwt</code>.":"Ask the tracker owner to set it up."}</span></div>`;
   if(c.err==="network") return `<div class="banner"><span><b>Couldn't reach the league function.</b> ${edit?`Check it's deployed with <code>--no-verify-jwt</code> and that <code>ALLOWED_ORIGIN</code> is <code>${esc(location.origin)}</code> (README, section 7b).`:"Ask the tracker owner to check the league function."}</span><button class="btn sm" data-act="lg-refresh">Try again</button></div>`;
   if(c.err) return `<div class="banner"><span><b>Couldn't load the league table.</b> ${esc(c.msg||c.err)}</span><button class="btn sm" data-act="lg-refresh">Try again</button></div>`;
-  return "";
+  return savedNotesHTML(c, edit, "lg-refresh", "company", "league");
 }
 function leagueCompaniesHTML(cfg, edit){
   if(S.lgEdit && edit) return `<section class="lgedit"><label class="f full">Companies besides the Comps peers <em>(tickers, one per line or comma separated; up to ${40-cfg.peers.length}; London listings like LSE:BEZ)</em><textarea id="lg_extra" rows="4">${esc(cfg.extra.join("\n"))}</textarea></label>
@@ -1351,7 +1378,7 @@ function renderLeague(){
     ${seg("lg-side",side,[["all","Both sides"],["buy","Buy-side"],["sell","Sell-side"]],"Side")}
     ${seg("lg-kind",kind,[["banks","Banks"],["all","All advisors"]],"Advisors")}
     ${seg("lg-years",cfg.years,LEAGUE_YEARS.map(y=>[y,`${y} yr${y===1?"":"s"}`]),"Period")}
-    <span class="grow"></span><button type="button" class="btn sm" data-act="lg-refresh">Refresh</button>
+    <span class="grow"></span><span class="t2">${c&&c.data&&c.at?`Last fetched ${esc(fmtWhen(c.at))}`:""}</span><button type="button" class="btn sm" data-act="lg-refresh"${c&&(c.loading||c.refreshing)?" disabled":""}>Refresh from Kensho</button>
   </section>
   ${leagueCompaniesHTML(cfg, edit)}
   ${leagueStatusHTML()}
@@ -1371,7 +1398,7 @@ async function saveLeagueCompanies(){
   const doc={...(((S.settings||{}).league)||{}), companies:extra, updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""};
   const {error}=await S.sb.from("settings").upsert({id:"league", doc});
   if(error){ toast(/settings|PGRST205|42P01/i.test(String(error.code||"")+String(error.message||"")) ? "Run supabase/migrations/0004_settings.sql in Supabase first, then save again." : "Couldn't save: "+(error.message||"try again")); return; }
-  toast("Saved"); S.lgEdit=false; S.league=null; await loadSettings(); render();
+  toast("Saved"); S.lgEdit=false; S.league=null; S.leagueCache={}; S.leagueForce=true; await loadSettings(); render();
 }
 
 /* ---------- team: who is working on which deal ----------
@@ -3129,7 +3156,7 @@ async function doLogin(){
 async function signOut(){
   try{ await S.sb.auth.signOut(); }catch{}
   stopData(); S.session=null; S.drawer=null; S.ai.open=false; S.ai.msgs=[]; S.ai.api=[]; S.sample=null;
-  if(S.cp.ctrl) S.cp.ctrl.abort(); if(S.cp.cancelSignIn) S.cp.cancelSignIn(); S.cp=cpFresh(); S.tc=tcFresh(); if(S.cc&&S.cc.ctrl) S.cc.ctrl.abort(); S.cc=null; S.league=null; S.leagueDefault=null; S.lgEdit=false; S.lgOpen=null;
+  if(S.cp.ctrl) S.cp.ctrl.abort(); if(S.cp.cancelSignIn) S.cp.cancelSignIn(); S.cp=cpFresh(); S.tc=tcFresh(); if(S.cc&&S.cc.ctrl) S.cc.ctrl.abort(); S.cc=null; S.league=null; S.leagueCache=null; S.leagueDefault=null; S.lgEdit=false; S.lgOpen=null; S.comps=null; S.compsCache=null; S.storeMissing=false;
   document.getElementById("whoDot").hidden=true; history.replaceState(null,"",location.pathname); render();
 }
 function loginHTML(){

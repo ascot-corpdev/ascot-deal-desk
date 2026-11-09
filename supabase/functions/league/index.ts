@@ -2,18 +2,20 @@
 // Kensho has no market-wide league table, so this one covers the deals of companies we choose: for each company,
 // its M&A transactions (as buyer, seller or target) started in the last N years, then each deal's participants and
 // their advisors. The page ranks the advisors. Uses the same Kensho secrets as the comps function (Supabase secrets
-// apply to every function); results are kept in memory for 6 hours and never written to the database.
+// apply to every function). Each fetch is saved to public.kensho_store (migration 0007, row "league:<years>") so the
+// page opens from the last fetch and only asks Kensho again on Refresh; results are also kept in memory for 6 hours.
 //
-// POST /functions/v1/league  {"companies": ["WRB", "LSE:HSX", ...], "years": 3}
-//   -> {asOf, since, years, companies: [{ticker, name, deals}], deals: [...], errors, dropped, source}
+// POST /functions/v1/league  {"companies": ["WRB", "LSE:HSX", ...], "years": 3, "refresh": true}
+//   -> {asOf, since, years, tickers, companies: [{ticker, name, deals}], deals: [...], errors, dropped, source, saved}
 
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 import { resolveIds } from "../comps/fetch.ts";
 import { Kensho, KenshoError } from "../comps/kensho.ts";
+import { makeStore, type Store } from "../comps/store.ts";
 import { cleanCompanies, cleanYears, MAX_COMPANIES, pickDeals, sinceDate, toDeal, type Deal, type MergerInfo, type MergersResp } from "./core.ts";
 
 type Env = (k: string) => string | undefined;
-type Deps = { env: Env; fetch: typeof fetch; now?: () => number; whoIs?: (req: Request) => Promise<string | null> };
+type Deps = { env: Env; fetch: typeof fetch; now?: () => number; whoIs?: (req: Request) => Promise<string | null>; store?: Store };
 
 const CACHE_MS = 6 * 3600_000;
 const INFO_BATCH = 25, PARALLEL = 4;
@@ -50,15 +52,15 @@ async function serve(req: Request, deps: Deps, json: (status: number, body: unkn
   const creds = { refreshToken: deps.env("KENSHO_REFRESH_TOKEN"), clientId: deps.env("KENSHO_CLIENT_ID"), privateKey: deps.env("KENSHO_PRIVATE_KEY")?.replace(/\\n/g, "\n"), keyId: deps.env("KENSHO_KEY_ID") };
   if (!Kensho.configured(creds)) return json(503, { error: "not_configured", message: "Kensho isn't connected yet. Set the Kensho secrets (README, section 7)." });
 
-  let companies: string[] | null = null, years: number | null = 3;
-  try { const body = await req.json(); companies = cleanCompanies(body.companies); years = cleanYears(body.years); } catch { /* fall through */ }
+  let companies: string[] | null = null, years: number | null = 3, refresh = false;
+  try { const body = await req.json(); companies = cleanCompanies(body.companies); years = cleanYears(body.years); refresh = body.refresh === true; } catch { /* fall through */ }
   if (!companies) return json(400, { error: `Send 1 to ${MAX_COMPANIES} tickers, like WRB or LSE:HSX.` });
   if (!years) return json(400, { error: "years must be a whole number from 1 to 5." });
 
   const now = (deps.now ?? Date.now)();
   const key = years + "|" + [...companies].sort().join(",");
   const hit = cache.get(key);
-  if (hit && now - hit.at < CACHE_MS) return json(200, hit.body);
+  if (!refresh && hit && now - hit.at < CACHE_MS) return json(200, hit.body);
 
   const ckey = JSON.stringify(creds);
   if (!client || client.key !== ckey || client.f !== deps.fetch) client = { key: ckey, f: deps.fetch, k: new Kensho(creds, deps.fetch, deps.now ?? Date.now) };
@@ -86,11 +88,12 @@ async function serve(req: Request, deps: Deps, json: (status: number, body: unkn
       deals.push(toDeal(id, i, s, via));
     }
     if (missing) errors["(deal details)"] = `Kensho didn't return details for ${missing} deal${missing === 1 ? "" : "s"}; they're left out.`;
-    const body = { asOf: new Date(now).toISOString(), since, years,
+    const body = { asOf: new Date(now).toISOString(), since, years, tickers: companies,
       companies: found.map((f) => ({ ticker: f.ticker, name: f.name, deals: deals.filter((d) => d.via.includes(f.ticker)).length })),
       deals, errors, dropped, source: "S&P Global Capital IQ via Kensho" };
     cache.set(key, { at: now, body });
-    return json(200, body);
+    const saved = found.length ? await (deps.store ?? makeStore(deps.env))(`league:${years}`, body) : false;
+    return json(200, { ...body, saved });
   } catch (e) {
     const err = e as KenshoError;
     if (err.auth) return json(502, { error: "kensho_auth", message: `${err.message}. Check the Kensho secrets (README, section 7).` });

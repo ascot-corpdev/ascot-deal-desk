@@ -5,7 +5,7 @@
   let tick = 0;
   const stamp = () => { tick++; return new Date(Date.UTC(2026,10,4,12,0,0) + tick*1000).toISOString().replace("Z", "." + String(tick).padStart(6,"0").slice(-3) + "+00:00"); };
   const ME = "u1", OTHER = "u2";
-  const store = { deals:{}, bankers:{}, notes:{}, history:{}, settings:{}, profiles:{
+  const store = { deals:{}, bankers:{}, notes:{}, history:{}, settings:{}, kensho_store:{}, profiles:{
     [ME]:{id:ME, username:"corpdev2", display_name:"Corp Dev 2", role:"corpdev"},
     [OTHER]:{id:OTHER, username:"corpdev1", display_name:"Corp Dev 1", role:"corpdev"} } };
   const log = [];
@@ -64,6 +64,8 @@
         return st.single ? {data:rows[0]||null, error:null} : {data:rows, error:null};
       }
       if(table === "settings" && window.__noSettings) return {data:null, error:{code:"PGRST205", message:"Could not find the table 'public.settings' in the schema cache"}};
+      if(table === "kensho_store" && window.__noStore) return {data:null, error:{code:"PGRST205", message:"Could not find the table 'public.kensho_store' in the schema cache"}};
+      if(table === "kensho_store" && st.op !== "select") return {data:null, error:{code:"42501", message:'permission denied for table kensho_store'}};
       if(table === "history" && window.__noHistory) return {data:null, error:{code:"PGRST205", message:"Could not find the table 'public.history' in the schema cache"}};
       if(st.op === "select"){
         const rows = shape(Object.values(T).filter(match).map(clone));

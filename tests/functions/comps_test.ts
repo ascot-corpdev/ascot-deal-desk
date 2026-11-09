@@ -106,6 +106,15 @@ ok("statement request body", JSON.stringify(k.log.find((l) => l.url.endsWith("st
 const before = k.log.length;
 await handle(req({ tickers: ["NOPE", "LSE:HSX", "WRB"] }), { env: env({ KENSHO_REFRESH_TOKEN: "rt-good" }), fetch: k.f, whoIs: signedIn, now: () => now + 60_000 });
 ok("cached for 10 minutes (same tickers, any order)", k.log.length === before);
+// saved for the page: only "refresh" skips the memory, and every fetch is written to kensho_store
+const savedRows: { id: string; doc: any }[] = [];
+const store = async (id: string, doc: any) => { savedRows.push({ id, doc }); return true; };
+r = await handle(req({ tickers: ["WRB", "LSE:HSX", "NOPE"], refresh: true }), { env: env({ KENSHO_REFRESH_TOKEN: "rt-good" }), fetch: k.f, whoIs: signedIn, now: () => now + 120_000, store });
+b = await r.json();
+ok("refresh: asks Kensho again despite the memory", k.log.length > before);
+ok("refresh: saved as comps:quarter with the tickers, and says so", b.saved === true && savedRows.length === 1 && savedRows[0].id === "comps:quarter" && JSON.stringify(savedRows[0].doc.tickers) === '["WRB","LSE:HSX","NOPE"]' && savedRows[0].doc.companies.length === 2 && !("saved" in savedRows[0].doc), savedRows);
+const { serviceKey } = await import(new URL("../../supabase/functions/comps/store.ts", import.meta.url).href);
+ok("service key: legacy name, else the first new secret key, else none", serviceKey((k: string) => ({ SUPABASE_SERVICE_ROLE_KEY: "legacy" } as any)[k]) === "legacy" && serviceKey((k: string) => ({ SUPABASE_SECRET_KEYS: '{"default":"sb_secret_x"}' } as any)[k]) === "sb_secret_x" && serviceKey(() => undefined) === undefined);
 
 // expired token: one retry with a fresh sign-in
 k = fakeKensho({ expireFirst: true });

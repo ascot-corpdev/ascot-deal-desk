@@ -1,6 +1,7 @@
 // Public comps for the deal desk's Benchmarking page, from Kensho (S&P Global data).
 // Any signed-in login (CEO or Corp Dev) may call it. Kensho credentials stay here as Supabase secrets;
-// results are computed on request and kept in memory for 10 minutes, never written to the database.
+// each fetch is saved to public.kensho_store (migration 0007, row "comps:<period>") so the page opens from the last
+// fetch and only asks Kensho again when someone clicks Refresh. Results are also kept in memory for 10 minutes.
 //
 // Secrets (supabase secrets set ...), either:
 //   KENSHO_REFRESH_TOKEN                         a kfinance refresh token
@@ -8,15 +9,17 @@
 //   KENSHO_CLIENT_ID, KENSHO_PRIVATE_KEY (PKCS#8 PEM), optional KENSHO_KEY_ID
 // Optional: ALLOWED_ORIGIN (the site's address, as for the claude function).
 //
-// POST /functions/v1/comps  {"tickers": ["WRB", "LSE:HSX", ...], "period": "quarter" | "ytd" | "ltm"}  ->  {asOf, period, companies, medians, errors}
+// POST /functions/v1/comps  {"tickers": ["WRB", "LSE:HSX", ...], "period": "quarter" | "ytd" | "ltm", "refresh": true}
+//   -> {asOf, period, tickers, companies, medians, errors, saved}     ("refresh" skips the 10-minute memory)
 
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 import { cleanTickers, PERIOD_TYPE, type PeriodKind } from "./core.ts";
 import { buildComps } from "./fetch.ts";
 import { Kensho, KenshoError } from "./kensho.ts";
+import { makeStore, type Store } from "./store.ts";
 
 type Env = (k: string) => string | undefined;
-type Deps = { env: Env; fetch: typeof fetch; now?: () => number; whoIs?: (req: Request) => Promise<string | null> };
+type Deps = { env: Env; fetch: typeof fetch; now?: () => number; whoIs?: (req: Request) => Promise<string | null>; store?: Store };
 
 const CACHE_MS = 10 * 60_000;
 const cache = new Map<string, { at: number; body: unknown }>();
@@ -53,24 +56,25 @@ async function serve(req: Request, deps: Deps, json: (status: number, body: unkn
   const creds = { refreshToken: deps.env("KENSHO_REFRESH_TOKEN"), clientId: deps.env("KENSHO_CLIENT_ID"), privateKey: deps.env("KENSHO_PRIVATE_KEY")?.replace(/\\n/g, "\n"), keyId: deps.env("KENSHO_KEY_ID") };
   if (!Kensho.configured(creds)) return json(503, { error: "not_configured", message: "Kensho isn't connected yet. Set KENSHO_REFRESH_TOKEN (or KENSHO_CLIENT_ID and KENSHO_PRIVATE_KEY) on the comps function." });
 
-  let tickers: string[] | null = null, period: PeriodKind = "quarter";
-  try { const body = await req.json(); tickers = cleanTickers(body.tickers); if (body.period !== undefined) period = body.period; } catch { /* fall through */ }
+  let tickers: string[] | null = null, period: PeriodKind = "quarter", refresh = false;
+  try { const body = await req.json(); tickers = cleanTickers(body.tickers); if (body.period !== undefined) period = body.period; refresh = body.refresh === true; } catch { /* fall through */ }
   if (!tickers) return json(400, { error: "Send 1 to 25 tickers, like WRB or LSE:HSX." });
   if (!(period in PERIOD_TYPE)) return json(400, { error: 'period must be "quarter", "ytd" or "ltm".' });
 
   const now = (deps.now ?? Date.now)();
   const key = period + "|" + [...tickers].sort().join(",");
   const hit = cache.get(key);
-  if (hit && now - hit.at < CACHE_MS) return json(200, hit.body);
+  if (!refresh && hit && now - hit.at < CACHE_MS) return json(200, hit.body);
 
   const ckey = JSON.stringify(creds);
   if (!client || client.key !== ckey || client.f !== deps.fetch) client = { key: ckey, f: deps.fetch, k: new Kensho(creds, deps.fetch, deps.now ?? Date.now) };
   const k = client.k;
   try {
     const { companies, medians: md, errors } = await buildComps(k, tickers, period, now);
-    const body = { asOf: new Date(now).toISOString(), period, companies, medians: md, errors, source: "S&P Global Capital IQ via Kensho" };
+    const body = { asOf: new Date(now).toISOString(), period, tickers, companies, medians: md, errors, source: "S&P Global Capital IQ via Kensho" };
     cache.set(key, { at: now, body });
-    return json(200, body);
+    const saved = companies.length ? await (deps.store ?? makeStore(deps.env))(`comps:${period}`, body) : false;
+    return json(200, { ...body, saved });
   } catch (e) {
     const err = e as KenshoError;
     if (err.auth) return json(502, { error: "kensho_auth", message: `${err.message}. Check the Kensho credentials on the comps function.` });

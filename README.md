@@ -22,12 +22,13 @@ For Copilot (and other coding assistants): how the code works and the rules for 
 | `supabase/migrations/0004_settings.sql` | Supabase Postgres | Shared settings: the Comps peer list and the AGL financials link (link only). |
 | `supabase/migrations/0005_ceo_questions.sql` | Supabase Postgres | CEO questions on deals: lets any login add a question to a deal in their own name. Corp Dev answers with notes. Run once after 0001. |
 | `supabase/functions/digest` | Supabase Edge Function | Optional weekly email digest (overdue, stalled, due this week, cold bankers, what changed), sent through Resend on a Supabase Cron schedule (`supabase/digest_schedule.sql`). |
-| `supabase/functions/comps` | Supabase Edge Function | Optional public comps from S&P Global via Kensho (kfinance) for the Comps tab, CEO view and board pack. Credentials stay in its secrets; nothing is stored. |
+| `supabase/functions/comps` | Supabase Edge Function | Optional public comps from S&P Global via Kensho (kfinance) for the Comps tab, CEO view and board pack. Credentials stay in its secrets; each result is saved to `kensho_store` (section 7c). |
 | `supabase/functions/comps-chat` | Supabase Edge Function | Optional Claude chat on the Comps tab. Answers from S&P Global data via Kensho only (the table on screen plus lookups it makes itself); never sees the deal tracker. Any login. |
-| `supabase/functions/league` | Supabase Edge Function | Optional league table on the Banker CRM: which banks advised on M&A involving the Comps peers and other companies you list, from S&P Global via Kensho. Any login; nothing is stored. See section 7b. |
+| `supabase/functions/league` | Supabase Edge Function | Optional league table on the Banker CRM: which banks advised on M&A involving the Comps peers and other companies you list, from S&P Global via Kensho. Any login; each result is saved to `kensho_store`. See sections 7b and 7c. |
 | `supabase/functions/claude` | Supabase Edge Function | Not used by the site at present (the Claude panel is switched off with `AI_PANEL` in `web/index.html` in favour of Ask Copilot). Kept so it can be turned back on. |
 | `scripts/logins.mjs` | Your machine | Creates, resets and removes logins with the Supabase service role key. |
 | `scripts/backup.mjs`, `scripts/restore.mjs` | Your machine | Encrypted backup of the tracker to `~/Documents/ascot-deal-desk-backups/`, and restore from it (`npm run backup`, `npm run restore`). See section 10. |
+| `supabase/migrations/0007_kensho_store.sql` | Supabase Postgres | The last Kensho results for the Comps tab and league table, so pages open at once and Kensho is asked only on Refresh. Written by the functions, read by any login. See section 7c. |
 | `supabase/migrations/0006_keepalive.sql`, `.github/workflows/keepalive.yml` | Supabase, GitHub Actions | A daily call that keeps the free-tier project from pausing. Reads no data. See section 10. |
 | `web/auth.html` | GitHub Pages (static) | Return page for "Sign in with Microsoft" in the Ask Copilot panel. Hands the sign-in back to the tracker tab and closes. |
 | `.github/workflows/pages.yml` | GitHub Actions | Writes `web/config.js` from repository variables and publishes `web/` to Pages. |
@@ -148,7 +149,7 @@ Every Monday morning the CEO and Corp Dev get an email with overdue next steps, 
 
 ### 7. Public comps from Kensho and the AGL financials link (optional)
 
-The **Comps** tab shows listed specialty insurance peers (revenue, premiums, premium growth, net income, loss ratio, combined ratio, ROE, book value per share growth, market cap, P/B, P/E, earnings call dates), with medians. A toggle switches between the latest quarter, year to date (YTD) and the last twelve months (LTM); each browser remembers its choice, and the CEO view strip and board pack follow it. The CEO view shows the peer medians and the board pack gets a peers slide. Data comes from S&P Global through Kensho's API (kfinance), fetched when someone opens the page and never written to the database. You need Kensho API access (kfinance) for your firm; ask your S&P Global / Kensho contact.
+The **Comps** tab shows listed specialty insurance peers (revenue, premiums, premium growth, net income, loss ratio, combined ratio, ROE, book value per share growth, market cap, P/B, P/E, earnings call dates), with medians. A toggle switches between the latest quarter, year to date (YTD) and the last twelve months (LTM); each browser remembers its choice, and the CEO view strip and board pack follow it. The CEO view shows the peer medians and the board pack gets a peers slide. Data comes from S&P Global through Kensho's API (kfinance). With section 7c done, the last fetch is saved and pages open from it; Kensho is asked again only when someone clicks **Refresh from Kensho**. You need Kensho API access (kfinance) for your firm; ask your S&P Global / Kensho contact.
 
 1. **SQL editor:** run `supabase/migrations/0004_settings.sql` once. It holds the peer list and the AGL financials link (the link only; AGL's financials are not stored). Without it the page uses a default peer list.
 2. Give the function Kensho credentials, either a refresh token:
@@ -215,7 +216,16 @@ Needs section 7 done (the Kensho secrets apply to every function) and the settin
 supabase functions deploy league --no-verify-jwt
 ```
 
-`--no-verify-jwt` is safe: the function checks the caller's login itself. Results are kept in the function's memory for 6 hours (the Refresh button asks the page again; a fresh Kensho fetch follows once the 6 hours pass or the company list changes) and never written to the database.
+`--no-verify-jwt` is safe: the function checks the caller's login itself. With section 7c done, the table opens from the last fetch, and **Refresh from Kensho** fetches it again.
+
+### 7c. Save Kensho results, refresh on click (recommended with 7 or 7b)
+
+Without this, the Comps tab, the CEO view's peer strip and the league table ask Kensho every time someone opens them, which can take up to a minute. With it, the comps and league functions save each result in a `kensho_store` table, and pages open at once from the last fetch for every login. Kensho is asked again only when someone clicks **Refresh from Kensho**, when a view has never been fetched (a period or year range nobody has opened), or after the peer or company list is saved. If the list changes another way, the saved figures still show, marked out of date, until someone refreshes. The page says when the figures were last fetched.
+
+1. **SQL editor:** run `supabase/migrations/0007_kensho_store.sql`. Every login can read the table; only the functions can write to it (with the service role key Supabase gives every function, so there is no secret to set).
+2. Redeploy both functions: `supabase functions deploy comps --no-verify-jwt` and `supabase functions deploy league --no-verify-jwt`.
+
+The table holds S&P Global data (the Comps rows and the deals and advisors behind the league table), so check that Ascot's Kensho / S&P licence allows keeping it. To clear it, delete its rows in the Table Editor; pages will fetch again on the next visit.
 
 ### 8. Copilot chat in the page (optional)
 
