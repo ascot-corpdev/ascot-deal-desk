@@ -122,10 +122,10 @@ const seed=[
   p=await pg(null,"#bankers");
   ok("reconnect lists Ann (Strong, 75 days) only", (await p.$$eval(".mlist li",l=>l.map(x=>x.dataset.id).join(",")))==="b1", await p.$$eval(".mlist li",l=>l.map(x=>x.dataset.id).join(",")));
   const chips=await p.$$eval('.fchip[data-act="bfilter"]',c=>c.map(x=>x.dataset.v+":"+x.querySelector("b").textContent).join(" "));
-  ok("banker chips", chips==="all:4 Strong:1 Active:1 Developing:1 Dormant:1 cold:2", chips);
+  ok("banker chips", chips==="all:4 live:2 Strong:1 Active:1 Developing:1 Dormant:1 cold:2", chips);
   await p.click('.fchip[data-v="cold"]'); ok("cold filter", (await p.$$eval("tbody tr[data-id]",r=>r.map(x=>x.dataset.id).sort().join(",")))==="b3,b4");
   await p.click('.fchip[data-v="all"]');
-  await p.click('button[data-act="bsort"][data-k="last"]'); ok("sort by last contact, oldest first, blank last", (await p.$$eval("tbody tr[data-id]",r=>r.map(x=>x.dataset.id).join(",")))==="b3,b1,b2,b4", await p.$$eval("tbody tr[data-id]",r=>r.map(x=>x.dataset.id).join(",")));
+  await p.click('button[data-act="bsort"][data-k="last"]'); ok("sort by last contact, oldest first, blank last, within On active deals then Other bankers", (await p.$$eval("tbody tr[data-id]",r=>r.map(x=>x.dataset.id).join(",")))==="b1,b2,b3,b4" && (await p.$$eval("tbody tr.bband",r=>r.map(x=>x.textContent.replace(/\s+/g," ").trim()).join("|")))==="On active deals (2)|Other bankers (2)", await p.$$eval("tbody tr[data-id]",r=>r.map(x=>x.dataset.id).join(",")));
   await p.click('button[data-act="bsort"][data-k="rel"]'); ok("sort by relationship strength", (await p.$$eval("tbody tr[data-id]",r=>r.map(x=>x.dataset.id).join(",")))==="b1,b2,b4,b3");
   await p.fill("#bq","lloyd"); await p.waitForTimeout(100);
   ok("banker note search", (await p.$$eval("tbody tr[data-id]",r=>r.map(x=>x.dataset.id).join(",")))==="b2" && (await txt(p,'tr[data-id="b2"] .hit')).includes("Lloyd"));

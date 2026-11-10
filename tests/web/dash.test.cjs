@@ -35,12 +35,14 @@ const seed=[
 
   // summaries table: metrics and Vision 2030
   const heads=await p.$$eval("#ceoDeals thead th",h=>h.map(x=>x.textContent).join("|"));
-  ok("columns", heads==="Deal|Stage|Valuation ($M)|GWP ($M)|P/BV|Summary|Profile|Other docs", heads);
+  ok("columns", heads==="Deal|Stage|Vision 2030|Valuation ($M)|GWP ($M)|P/BV|Summary|Profile|Other docs", heads);
   const cells=id=>p.$$eval(`#ceoDeals tr[data-id="${id}"] td.num`,t=>t.map(x=>x.textContent.trim()).join("|"));
   ok("Harbor: 150, 260, 1.50x", (await cells("d1"))==="150|260|1.50x", await cells("d1"));
   ok("missing figures read n/d", (await cells("d4"))==="60|n/d|n/d", await cells("d4"));
-  ok("Vision 2030 shown, coloured", (await txt(p,'#ceoDeals tr[data-id="d1"] .vis'))==="Vision 2030: Quick hit" && !!(await p.$('#ceoDeals tr[data-id="d1"] .vis .v-quick')) && !!(await p.$('#ceoDeals tr[data-id="d2"] .vis .v-careful')));
-  ok("NA and unset leave no Vision line", !(await p.$('#ceoDeals tr[data-id="d3"] .vis')) && !(await p.$('#ceoDeals tr[data-id="d4"] .vis')));
+  const vcell=id=>txt(p,`#ceoDeals tr[data-id="${id}"] td.vis`);
+  ok("Vision 2030 in its own column, coloured", (await vcell("d1"))==="Quick hit" && !!(await p.$('#ceoDeals tr[data-id="d1"] td.vis .v-quick')) && !!(await p.$('#ceoDeals tr[data-id="d2"] td.vis .v-careful')));
+  ok("NA shown as entered, unset reads Not set", (await vcell("d3"))==="NA" && (await vcell("d4"))==="Not set");
+  ok("no Vision line under the name on a wide screen", !(await p.isVisible('#ceoDeals tr[data-id="d1"] div.vis')));
   ok("overdue tag on the overdue deal only", (await p.$$("#ceoDeals .odue")).length===1 && !!(await p.$('#ceoDeals tr[data-id="d2"] .odue')));
 
   // timeline
@@ -83,7 +85,7 @@ const seed=[
     ok(`phone ${w}: tiles and timeline visible, table hidden`, await p.isVisible(".tiles") && await p.isVisible(".tl") && !(await p.isVisible("#ceoDeals table")));
     await p.screenshot({path:OUTDIR+`/dash-phone-${w}.png`,fullPage:true});
     await p.click('button[data-act="ceo-fold"][data-k="deals"]'); await p.waitForTimeout(100);
-    ok(`phone ${w}: heading opens the section, metrics on the card`, await p.isVisible("#ceoDeals table") && (await txt(p,'#ceoDeals tr[data-id="d1"] .mob'))==="Valuation $150M · GWP $260M · P/BV 1.50x" && !(await p.isVisible('#ceoDeals tr[data-id="d1"] td.num')));
+    ok(`phone ${w}: heading opens the section, metrics on the card`, await p.isVisible("#ceoDeals table") && (await txt(p,'#ceoDeals tr[data-id="d1"] .summary .mob'))==="Valuation $150M · GWP $260M · P/BV 1.50x" && !(await p.isVisible('#ceoDeals tr[data-id="d1"] td.num')) && (await txt(p,'#ceoDeals tr[data-id="d1"] div.vis'))==="Vision 2030: Quick hit" && !(await p.isVisible('#ceoDeals tr[data-id="d1"] td.vis')));
     const sw2=await p.evaluate(()=>document.documentElement.scrollWidth); ok(`no sideways scroll with cards open at ${w}`, sw2<=w, sw2);
     await p.click('button[data-act="ceo-fold"][data-k="deals"]'); await p.waitForTimeout(100);
     ok(`phone ${w}: and closes it`, !(await p.isVisible("#ceoDeals table")));

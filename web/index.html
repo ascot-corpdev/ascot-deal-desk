@@ -73,7 +73,7 @@ button.tile:hover,button.tile[aria-pressed="true"]{box-shadow:inset 0 -3px 0 var
 .pr.click{cursor:pointer}.pr.click:hover,.pr.on{background:var(--tile)}
 .drillbar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin:0 0 10px;padding:8px 12px;background:var(--tile);font-size:13px}
 .odue{display:inline-block;font-size:10px;font-weight:bold;letter-spacing:.05em;text-transform:uppercase;color:var(--magenta);border:1px solid var(--magenta);padding:0 5px;margin-left:6px;vertical-align:1px}
-.vis .v-quick{color:var(--teal);font-weight:bold}.vis .v-careful{color:var(--orange);font-weight:bold}
+td.vis{white-space:nowrap}.vis .v-quick{color:var(--teal);font-weight:bold}.vis .v-careful{color:var(--orange);font-weight:bold}
 .tl{display:flex;align-items:flex-end;gap:2px;border-bottom:2px solid var(--ink);padding-top:4px}
 .tlc{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;position:relative}
 .tlstack{display:flex;flex-direction:column-reverse;align-items:center;gap:2px;min-height:106px;width:100%;padding-bottom:2px;border-left:1px solid var(--grid)}
@@ -230,6 +230,7 @@ th[aria-sort="none"] .sorth:is(:hover,:focus-visible) .ar::before{content:"↕";
 .mailbox .chk input{width:auto}
 tr.firmrow td{background:var(--tile)!important;border-top:2px solid var(--ink);padding:10px}
 tr.firmrow{cursor:pointer}
+tr.bband td{background:var(--muted)!important;color:#fff;font-weight:bold;padding:6px 10px;border-top:0}tr.bband.live td{background:var(--ink)!important}tr.bband span{font-weight:normal;opacity:.85}
 tr.firmrow:hover td{background:#E4E4EF!important}
 .fold{all:unset;cursor:pointer;width:22px;height:22px;display:inline-grid;place-items:center;flex:none;color:var(--ink);font-size:12px}
 .fold:focus-visible{outline:2px solid var(--magenta);outline-offset:2px}
@@ -475,6 +476,7 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
   table.cards td.c-hide{display:none!important}
   table.cards td[data-label]::before{content:attr(data-label);display:block;font-size:11px;font-weight:bold;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
   table.cards .mob{display:block;margin-top:2px}
+  table.cards tr.bband{display:block;border:0;padding:0;margin:18px 0 0;background:transparent}table.cards tr.bband td{display:block;padding:6px 10px}
   table.cards tr.firmrow{display:block;border:0;border-top:2px solid var(--ink);padding:10px 0 6px;margin:14px 0 8px;background:transparent}
   table.cards tr.firmrow td{display:block;background:transparent!important;border:0;padding:0}
   table.cards tr.inrow td:first-child{padding-left:0}
@@ -923,10 +925,10 @@ function renderCEO(){
   if(mode==="slide") return head+pipelineSlideHTML(deals, ex);
   const metricCell = v => v==="n/d" ? `<span class="t2">n/d</span>` : esc(v);
   const dealsBody = `${drill?`<p class="drillbar" role="status"><span>Showing <b>${esc(drill.label)}</b>: ${sorted.length} of ${active.length} active deal${active.length===1?"":"s"}</span><button type="button" class="btn sm" data-act="ceo-drill-clear">Show all deals</button></p>`:""}
-    ${sorted.length ? `<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr><th>Deal</th><th>Stage</th><th class="num">Valuation ($M)</th><th class="num">GWP ($M)</th><th class="num" title="Valuation / equity">P/BV</th><th>Summary</th><th>Profile</th><th>Other docs</th></tr></thead><tbody>
-    ${sorted.map(d=>{ const vis = d.vision2030 && d.vision2030!=="NA" ? `<div class="t2 vis">Vision 2030: <span class="${visionClass(d.vision2030)}">${esc(d.vision2030)}</span></div>` : "";
+    ${sorted.length ? `<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr><th>Deal</th><th>Stage</th><th>Vision 2030</th><th class="num">Valuation ($M)</th><th class="num">GWP ($M)</th><th class="num" title="Valuation / equity">P/BV</th><th>Summary</th><th>Profile</th><th>Other docs</th></tr></thead><tbody>
+    ${sorted.map(d=>{ const vis = d.vision2030 && d.vision2030!=="NA" ? `<div class="t2 vis mob">Vision 2030: <span class="${visionClass(d.vision2030)}">${esc(d.vision2030)}</span></div>` : "";
       const pb=multS(dealPB(d),2);
-      return `<tr class="click ${TRACK_CLASS[trackOf(d)]}" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${trackPill(d)}${X}${isOverdue(d)?`<span class="odue" title="Next step was due ${fmtDate(d.nextStepDate)}">Overdue</span>`:""}${stallTag(d)}${qTag(d)}</div><div class="t2">${esc(d.target||"")}</div>${vis}</td><td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="num c-hide">${metricCell(mnum(d.ev))}</td><td class="num c-hide">${metricCell(mnum(d.gwp))}</td><td class="num c-hide">${metricCell(pb)}</td><td class="summary c-full"><div class="mob t2">Valuation ${esc(money(d.ev))} · GWP ${esc(money(d.gwp))} · P/BV ${esc(pb)}</div>${d.ceoSummary?`<div class="clamp">${esc(d.ceoSummary)}</div>${d.ceoSummary.length>150?`<span class="more">More</span>`:""}`:'<span class="t2">No summary yet</span>'}</td><td class="c-full" data-label="Profile">${links(profileLinks(d.links),"No profile yet")}</td><td class="c-full" data-label="Other docs">${links(otherLinks(d.links),"None")}</td></tr>`; }).join("")}
+      return `<tr class="click ${TRACK_CLASS[trackOf(d)]}" data-act="view-deal" data-id="${esc(d.id)}" tabindex="0"><td><div class="t1">${esc(d.codename)}${trackPill(d)}${X}${isOverdue(d)?`<span class="odue" title="Next step was due ${fmtDate(d.nextStepDate)}">Overdue</span>`:""}${stallTag(d)}${qTag(d)}</div><div class="t2">${esc(d.target||"")}</div>${vis}</td><td class="c-side">${stagePill(d.stage)}${ageHTML(d)}</td><td class="c-hide vis">${d.vision2030?`<span class="${visionClass(d.vision2030)}">${esc(d.vision2030)}</span>`:'<span class="t2">Not set</span>'}</td><td class="num c-hide">${metricCell(mnum(d.ev))}</td><td class="num c-hide">${metricCell(mnum(d.gwp))}</td><td class="num c-hide">${metricCell(pb)}</td><td class="summary c-full"><div class="mob t2">Valuation ${esc(money(d.ev))} · GWP ${esc(money(d.gwp))} · P/BV ${esc(pb)}</div>${d.ceoSummary?`<div class="clamp">${esc(d.ceoSummary)}</div>${d.ceoSummary.length>150?`<span class="more">More</span>`:""}`:'<span class="t2">No summary yet</span>'}</td><td class="c-full" data-label="Profile">${links(profileLinks(d.links),"No profile yet")}</td><td class="c-full" data-label="Other docs">${links(otherLinks(d.links),"None")}</td></tr>`; }).join("")}
     </tbody></table></div>` : `<div class="empty"><p>${drill?"No deals in this group.":"No active deals."}</p></div>`}`;
   return head+`
   <section class="tiles" aria-label="Headline numbers">
@@ -1042,7 +1044,9 @@ function renderDeals(){
 const REL_ORDER=["Strong","Active","Developing","Dormant"];
 const isColdB = b => !b.lastContact || daysUntil(b.lastContact) < -90;
 const bankerDealCount = b => D().deals.filter(d=>(d.bankerIds||[]).includes(b.id)).length;
-const BANKER_FILTERS = [["all","All",()=>true]].concat(RELS.map(r=>[r,r,b=>b.relationship===r])).concat([["cold","Not contacted in 90 days",isColdB]]);
+/* Bankers on a deal that is still active (Screening to Diligence) are listed first, under their own heading. */
+const onActiveDeal = b => D().deals.some(d=>isActive(d) && (d.bankerIds||[]).includes(b.id));
+const BANKER_FILTERS = [["all","All",()=>true],["live","On active deals",onActiveDeal]].concat(RELS.map(r=>[r,r,b=>b.relationship===r])).concat([["cold","Not contacted in 90 days",isColdB]]);
 const BANKER_SORTS = {
   name:{cmp:(a,b)=>String(a.name||"").localeCompare(String(b.name||"")), dir:1},
   rel:{cmp:(a,b)=>REL_ORDER.indexOf(a.relationship)-REL_ORDER.indexOf(b.relationship), dir:1, blank:b=>!REL_ORDER.includes(b.relationship)},
@@ -1535,9 +1539,12 @@ function renderBankers(){
   </section>
   ${bankerChipsHTML(base)}
   <section>${rows.length?`<div class="tbl-wrap cardwrap"><table class="cards"><thead><tr>${sortTh("Banker","name","","b")}<th class="opt">Coverage</th>${sortTh("Relationship","rel","","b")}${sortTh("Deals shown to us","deals","","b")}${sortTh("Last contact","last","num","b")}<th><span class="sr">Actions</span></th></tr></thead><tbody>
-    ${bankerRows(rows, deals, ex, edit, X)}
+    ${(()=>{ const live=rows.filter(onActiveDeal), rest=rows.filter(b=>!onActiveDeal(b));
+      const band=(l,n,c)=>`<tr class="bband ${c}"><td colspan="6">${l} <span>(${n})</span></td></tr>`;
+      if(!live.length) return bankerRows(rows, deals, ex, edit, X);
+      return band("On active deals",live.length,"live")+bankerRows(live, deals, ex, edit, X)+(rest.length?band("Other bankers",rest.length,"")+bankerRows(rest, deals, ex, edit, X):""); })()}
   </tbody></table></div>`:`<div class="empty"><p>No bankers match.</p></div>`}</section>
-  <p class="source">Source: Corp Dev banker CRM. Last contact in red when older than 90 days.</p>`;
+  <p class="source">Source: Corp Dev banker CRM. Bankers linked to a deal at Screening, NDA signed, LOI or Diligence are listed first. Last contact in red when older than 90 days.</p>`;
 }
 function bankerRows(rows, deals, ex, edit, X){
   const grouped = S.bgroup!==false;

@@ -18,11 +18,11 @@ const seed=[
   await p.addInitScript(s=>{ window.__seed=s; },seed); await p.goto(BASE+"#ceo"); await p.waitForTimeout(600);
   const sec='section:has(h3.sec:text-is("Deal summaries and documents"))';
   const heads=await p.$$eval(sec+" thead th",x=>x.map(e=>e.textContent.trim()));
-  ok("columns: Deal, Stage, key metrics, Summary, Profile, Other docs", JSON.stringify(heads)==='["Deal","Stage","Valuation ($M)","GWP ($M)","P/BV","Summary","Profile","Other docs"]', heads);
+  ok("columns: Deal, Stage, key metrics, Summary, Profile, Other docs", JSON.stringify(heads)==='["Deal","Stage","Vision 2030","Valuation ($M)","GWP ($M)","P/BV","Summary","Profile","Other docs"]', heads);
   const rows=await p.$$eval(sec+" tbody tr",r=>Object.fromEntries(r.map(x=>{ const t=[...x.querySelectorAll("td")]; return [t[0].querySelector(".t1").firstChild.textContent.trim(), t.map(c=>c.textContent.replace(/\s+/g," ").trim())]; })));
-  ok("Harbor: profile and two other docs", rows.Harbor[6]==="PPTHarbor profile" && rows.Harbor[7].includes("IC memo") && rows.Harbor[7].includes("Model") && !rows.Harbor[7].includes("profile"), rows.Harbor);
-  ok("older link labelled profile counts as the profile", rows.Summit[6].includes("Company profile") && rows.Summit[7]==="None", rows.Summit);
-  ok("no links: placeholders", rows.Cedar[6]==="No profile yet" && rows.Cedar[7]==="None", rows.Cedar);
+  ok("Harbor: profile and two other docs", rows.Harbor[7]==="PPTHarbor profile" && rows.Harbor[8].includes("IC memo") && rows.Harbor[8].includes("Model") && !rows.Harbor[8].includes("profile"), rows.Harbor);
+  ok("older link labelled profile counts as the profile", rows.Summit[7].includes("Company profile") && rows.Summit[8]==="None", rows.Summit);
+  ok("no links: placeholders", rows.Cedar[7]==="No profile yet" && rows.Cedar[8]==="None", rows.Cedar);
   const body=await p.textContent(sec);
   ok("no EV label or lead in the table", !body.includes("EV") && !body.includes("A. Chen"), body.slice(0,300));
   // deal drawer and editor
@@ -44,7 +44,7 @@ const seed=[
   ok("saved with types", JSON.stringify(st.map(l=>[l.label,l.type]))==='[["Harbor profile","profile"],["IC memo","other"],["Model","profile"],["Board paper","other"]]', st);
   await p.goto(BASE+"#deals"); await p.waitForTimeout(150); await p.goto(BASE+"#ceo"); await p.waitForTimeout(300);
   const h2=await p.$$eval(sec+' tbody tr:has-text("Harbor") td',t=>t.map(c=>c.textContent.replace(/\s+/g," ").trim()));
-  ok("CEO view updates", h2[6].includes("Harbor profile") && h2[6].includes("Model") && h2[7].includes("Board paper") && !h2[7].includes("Model"), h2);
+  ok("CEO view updates", h2[7].includes("Harbor profile") && h2[7].includes("Model") && h2[8].includes("Board paper") && !h2[8].includes("Model"), h2);
   // new deal starts with a profile row
   await p.goto(BASE+"#deals"); await p.waitForTimeout(150); await p.click('button[data-act="new-deal"]'); await p.waitForSelector("#dealForm");
   ok("new deal: first link row is the profile", (await p.$eval('#linkRows select[data-li="0"]',e=>e.value))==="profile");
