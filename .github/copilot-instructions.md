@@ -22,6 +22,7 @@ An M&A deal tracker and banker CRM for Ascot's Corporate Development team, style
 | `.github/workflows/pages.yml` | On every push to `main`: writes `web/config.js` and publishes `web/` to GitHub Pages. **A merge to `main` is a deploy.** |
 | `supabase/migrations/0001..0004_*.sql` | Schema, roles, RLS, change history trigger, settings table. Run by hand in the Supabase SQL editor. |
 | `supabase/functions/comps/` | Public comps from S&P Global via Kensho (kfinance). `core.ts` is the pure maths (tested), `kensho.ts` is auth and HTTP, `index.ts` is the handler. |
+| `supabase/functions/valuation/` | Valuation exhibits from Kensho for the Valuation tab (see "Valuation tab" below). |
 | `supabase/functions/digest/` | Weekly email digest through Resend, run by `supabase/digest_schedule.sql` (pg_cron). |
 | `supabase/functions/claude/` | Claude assistant backend. **Not used at present** (see "Assistant" below). |
 | `supabase/config.toml` | `verify_jwt = false` for functions that check the login themselves. |
@@ -44,7 +45,7 @@ The patterns used throughout:
 - **State:** one global object `S`. Change `S`, then call `render()` for the main view or `renderDrawer()` for the side drawer. Views are built as template strings.
 - **Clicks:** every button carries `data-act="..."` (and `data-id`, `data-v` and so on). One delegated `switch` in the events section handles them all. Add a new `case` there; don't attach listeners to individual elements.
 - **Escaping:** anything from the database or a user goes through `esc()` before it is put into HTML, and links go through `safeUrl()`. Keep it that way.
-- **Routing:** hash routes `#ceo`, `#deals`, `#bankers`, `#team`, `#comps`, `#deal/<id>`, `#banker/<id>`. Use `goRecord()`, `openRoute()` and `closeDrawer()`.
+- **Routing:** hash routes `#ceo`, `#deals`, `#bankers`, `#team`, `#comps`, `#valuation`, `#deal/<id>`, `#banker/<id>`. Use `goRecord()`, `openRoute()` and `closeDrawer()`.
 - **Data access:** `S.db.collection(table).doc(id).set/update/delete` (section "data"). Tables `deals`, `bankers`, `notes` each hold `{id text, doc jsonb, updated_at, updated_by}`, so new fields need no migration; the database stamps `updated_at` and `updated_by`.
 - **Concurrent editing (don't break this):** `update()` goes through `casWrite()`, a compare-and-set on `updated_at`. The drawer keeps `dr.orig` (record when opened) and `dr.base` (form when first shown) and saves only the fields this user changed, merged onto the latest row. If someone else changed the same field, a conflict panel asks whose value to keep. Presence shows "X is editing" through Realtime. Any new editable field must go into `DEAL_FIELDS` or `BANKER_FIELDS` and `FIELD_LABELS` so diffs, history and conflicts include it.
 - **Questions:** a CEO question is a note `{kind:"Question", dealId, text, authorId}`; replies carry `replyTo` (Corp Dev: kind `"Answer"`; CEO follow-ups: `"Question"`), and Corp Dev can close one with `closedAt`. `qThreads()` works out open/answered. Any login may insert questions only through RLS in `0005_ceo_questions.sql`, so the CEO's writes use a plain `insert`, not `set` (upsert). Question/Answer notes are kept out of "Recent context" and don't count as deal activity.
@@ -71,6 +72,12 @@ The patterns used throughout:
 `supabase/functions/league` returns M&A deals and their advisors for a list of tickers (Kensho `mergers/{company_id}/{start}/none`, then `POST mergers/info` with `include_advisors`); helpers in `league/core.ts`. The page ranks firms (`leagueRank`, `advisorBrand` groups legal entities into one firm, and banker firms go through the same function so they match) and shows the table under Banker CRM > League table (`renderLeague`). Extra companies live in `settings` row `league` (`{companies: [...]}`). It is not a market-wide league table; say so wherever it's described.
 
 Saved Kensho results: both functions write each result to `public.kensho_store` (migration 0007; rows `comps:<period>` and `league:<years>`, doc = the response body including `tickers`) with the service role (`supabase/functions/comps/store.ts`). The page reads that row first (`loadSaved`, `readKenshoStore`) and calls a function only on Refresh, when nothing is saved, or when the table is missing; calls always send `refresh: true`. Logins can only read the table.
+
+## Valuation tab
+
+`supabase/functions/valuation` (maths in `core.ts`, tested in `tests/functions/valuation_test.ts`) returns, for the tickers in the peer groups, an as-at table (`computeValuation`) and each company's daily P/TBV over up to ten years (`ptbvSeries`, `alignSeries`). It uses Kensho `statements/` (balance sheets quarterly and annual, annual income), `market_cap/`, `estimates/` (consensus `net_income_gaap`) and Frankfurter for GBP rates, and saves to `kensho_store` row `valuation:latest` (migration 0008). The page (`renderValuation`, state `S.valuation`, settings row `valuation`: `{asOf, fy, groups, precedents}`) groups the peers, works out means and medians (excluded companies show but don't count), draws the chart as inline SVG and builds the slides (`exportValuationPack`).
+
+**Ascot's own figures (`S.valIn`) never leave the browser tab:** never write them to Supabase, `localStorage`, a function or any request, and never add them to the Copilot brief or the comps chat. They're cleared on sign-out; "Save to file" and "Open file" are the only way to keep them. `tests/web/valuation.test.cjs` checks this.
 
 ## Assistant
 

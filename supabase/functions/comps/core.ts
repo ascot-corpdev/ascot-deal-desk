@@ -25,29 +25,29 @@ export type CompanyOut = {
   notes: string[];
 };
 
-const num = (v: unknown) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : Number(v));
+export const num = (v: unknown) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : Number(v));
 const M = (v: number | null) => (v === null ? null : v / 1e6);
 const round = (v: number | null, dp = 1) => (v === null || !isFinite(v) ? null : Math.round(v * 10 ** dp) / 10 ** dp);
 
-function itemsOf(p?: Period): Map<string, number | null> {
+export function itemsOf(p?: Period): Map<string, number | null> {
   const m = new Map<string, number | null>();
   for (const s of p?.statements ?? []) for (const li of s.line_items ?? []) if (!m.has(li.name)) m.set(li.name, num(li.value));
   return m;
 }
-function pick(m: Map<string, number | null>, patterns: RegExp[]): number | null {
+export function pick(m: Map<string, number | null>, patterns: RegExp[]): number | null {
   for (const re of patterns) for (const [k, v] of m) if (re.test(k) && v !== null) return v;
   return null;
 }
 const REV = [/^Total Revenues?\b/i, /^Revenues?$/i];
-const PREM = [/^Net Premiums Earned/i, /^Premiums Earned/i, /^Premiums and Annuity Revenues/i, /^Premiums\b/i];
-const NI = [/^Net Income - \(IS\)$/i, /^Net Income to Common Incl/i, /^Net Income$/i, /^Net Income to Company$/i];
+export const PREM = [/^Net Premiums Earned/i, /^Premiums Earned/i, /^Premiums and Annuity Revenues/i, /^Premiums\b/i];
+export const NI = [/^Net Income - \(IS\)$/i, /^Net Income to Common Incl/i, /^Net Income$/i, /^Net Income to Company$/i];
 const LOSS = [/^Policy Benefits/i, /Loss(es)? and (Loss )?Adjustment Expenses?/i, /^Losses and LAE/i, /^Net Losses/i];
 // Underwriting expenses: total operating expenses (losses included, interest excluded) less non-insurance businesses
-const OPEX = [/^Total Operating Expenses/i];
-const NONINS = [/^Non-Insurance Activities Expenses/i];
+export const OPEX = [/^Total Operating Expenses/i];
+export const NONINS = [/^Non-Insurance Activities Expenses/i];
 
 /** Equity from a balance sheet: reported total equity, else assets - liabilities - minority interest. */
-function equityOf(bal: Map<string, number | null>): number | null {
+export function equityOf(bal: Map<string, number | null>): number | null {
   const eq = pick(bal, [/^Total Equity$/i, /^Total Common Equity$/i]);
   if (eq !== null) return eq;
   const assets = pick(bal, [/^Total Assets$/i]);

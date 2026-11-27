@@ -21,6 +21,8 @@ npm test
 | `web/qa.test.cjs` | CEO questions, Add to calendar files, the board pack's per-deal slides. |
 | `functions/comps_test.ts` | The comps function's maths on W. R. Berkley's reported figures, and its handling of Kensho answers and errors. |
 | `functions/digest_test.ts` | The weekly email digest. |
+| `functions/valuation_test.ts` | The valuation function: book and tangible book, consensus estimates, exchange rates, P/TBV history, and its handling of Kensho and Frankfurter answers. |
+| `web/valuation.test.cjs` | The Valuation tab's exhibits, settings and slides, and that Ascot's figures never leave the browser tab. |
 | `fixtures/` | Test data. **Every person, email and deal codename in it is made up**; firm names are real (the import tests check firm matching and logos). |
 | `out/` | Screenshots, board packs and calendar files from the last run. Not committed. |
 
