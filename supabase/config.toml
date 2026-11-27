@@ -20,3 +20,7 @@ verify_jwt = false
 # The league table (Banker CRM) checks the caller's login itself, like comps, and uses the same Kensho secrets.
 [functions.league]
 verify_jwt = false
+
+# The valuation exhibits (Valuation tab) check the caller's login themselves, like comps, and use the same Kensho secrets.
+[functions.valuation]
+verify_jwt = false

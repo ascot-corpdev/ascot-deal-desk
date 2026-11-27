@@ -50,6 +50,7 @@ nav.tabs a{padding:10px 16px;text-decoration:none;color:var(--ink);border-bottom
 nav.tabs a[aria-current="page"]{border-bottom-color:var(--magenta);color:var(--magenta)}
 nav.tabs a:hover{background:var(--alt)}
 nav.tabs .tag{font-weight:normal;font-size:11px;color:var(--muted);margin-left:6px}
+nav.tabs .tp{display:none}
 
 main .wrap{padding-block:22px 28px;display:flex;flex-direction:column;gap:26px}
 footer.foot{border-top:1px solid var(--grid)}
@@ -213,6 +214,52 @@ th[aria-sort="none"] .sorth:is(:hover,:focus-visible) .ar::before{content:"↕";
 .comps td{white-space:nowrap}.comps th{white-space:normal;vertical-align:bottom}
 .comps td:first-child{white-space:normal;min-width:180px}
 .comps tr.med td{font-weight:bold;border-top:2px solid var(--ink);background:var(--tile)!important}
+/* Valuation tab */
+.vin{border:1px solid var(--grid);padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.vin-h{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}.vin-h .sec{margin:0}.vin-h .grow{flex:1}
+.vin-g{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.vin-g fieldset{border:0;border-top:2px solid var(--ink);margin:0;padding:6px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;min-width:0}
+.vin-g legend{font-weight:bold;font-size:12px;padding:0 6px 0 0}
+.vin-g input{width:100%;font-variant-numeric:tabular-nums}
+@media (max-width:1100px){.vin-g{grid-template-columns:1fr}}
+@media (max-width:420px){.vin-g fieldset{grid-template-columns:1fr}}
+.valtbl{border-collapse:collapse;width:100%}
+.valtbl th,.valtbl td{padding:5px 8px;border-bottom:1px solid var(--grid);white-space:nowrap;text-align:left}
+.valtbl th{background:var(--head);color:var(--headInk);vertical-align:bottom;font-size:12px;white-space:normal}
+.valtbl th .t2{color:#D9DCE6;font-weight:normal}
+.valtbl th.num,.valtbl td.num{text-align:right}
+.valtbl td:first-child{min-width:200px}
+.valtbl tr.band td{font-weight:bold;text-decoration:underline;padding-top:12px}
+.valtbl tr.stat td{font-weight:bold;background:#DCEBFA}
+.valtbl tr.stat.all td{background:#FBE8D3}
+.valtbl tr.excl td{background:repeating-linear-gradient(135deg,var(--surface) 0 5px,var(--tile) 5px 7px);color:var(--muted)}
+.valtbl tr.ascot td{background:#FFF6B3;font-weight:bold;font-style:italic;border-top:2px solid var(--ink)}
+.valtbl tr.prev td{background:var(--tile);font-style:italic}
+.valtbl tr.key td{font-weight:bold;background:#DCEBFA}.valtbl tr.wu td{font-weight:bold;background:#FFF6B3}
+.valtbl .xtag{font-size:11px;font-weight:normal;font-style:italic;color:var(--muted)}
+.valtbl i.sw{display:inline-block;width:10px;height:3px;margin-right:6px;vertical-align:middle}
+.vsum{max-width:620px}.vsum td:first-child{white-space:normal}
+.vavg{max-width:720px;margin-top:10px}
+.valnotes{margin:8px 0 0;padding-left:18px;font-size:12px;color:var(--muted)}
+.vchart-wrap{overflow-x:auto}
+.vchart{position:relative;min-width:640px}
+.vchart svg{display:block;width:100%;height:auto}
+.vchart svg:focus-visible{outline:2px solid var(--magenta)}
+.vchart .vg{stroke:var(--grid);stroke-width:1}.vchart .vg.base{stroke:var(--muted)}
+.vchart .vt{font-size:12px;fill:var(--muted);font-family:var(--font)}
+.vchart .vend{font-size:12px;font-weight:bold;fill:var(--ink);font-family:var(--font)}
+.vchart .vl{fill:none;stroke-width:2;stroke-linejoin:round}
+.vchart .vhair{stroke:var(--ink);stroke-width:1;stroke-dasharray:3 3}
+.vtip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--grid);box-shadow:var(--shadow);padding:8px 10px;font-size:12px;min-width:150px;z-index:2}
+.vtip b{display:block;margin-bottom:4px}.vtip div{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.vtip i{display:inline-block;width:12px;height:2px}.vtip strong{font-variant-numeric:tabular-nums}.vtip span{color:var(--muted)}
+.vlegend{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;font-size:12px;margin-top:6px}
+.vlegend i{display:inline-block;width:16px;height:2px;margin-right:6px;vertical-align:middle}
+.vapp{display:flex;flex-direction:column;gap:6px;max-width:1000px}.vapp p{margin:0}
+.vapp .lv0{padding-left:14px;text-indent:-14px}.vapp .lv0::before{content:"• ";color:var(--magenta);font-weight:bold}
+.vapp .lv1{padding-left:40px;text-indent:-14px}.vapp .lv1::before{content:"○ "}
+.vapp .lv2{padding-left:66px;text-indent:-14px}.vapp .lv2::before{content:"– "}
+@media print{.vin{display:none}}
 .benchrow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
 @media (max-width:900px){.benchrow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .linkbtn{text-decoration:none}
@@ -456,7 +503,10 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
   .dot{width:34px;height:34px;font-size:13px}
   #copilotBtn,#teamsBtn{padding:7px 10px}
   #teamsBtn .tb-x{display:none}#teamsBtn .tb-s{display:inline}
-  nav.tabs a{padding:10px 7px}
+  nav.tabs{gap:0}
+  nav.tabs a{padding:10px 6px}
+  nav.tabs .tx{display:none}
+  nav.tabs .tp{display:inline}
   nav.tabs .tag{display:none}
   main .wrap{padding-block:16px 22px;gap:18px}
   .action-title{font-size:19px}
@@ -509,11 +559,12 @@ label.f em{font-weight:normal;font-style:normal;color:var(--muted)}
         <button role="menuitem" data-act="change-pw">Change password</button><button role="menuitem" data-act="signout">Sign out</button></div>
     </div>
     <nav class="tabs" aria-label="Views" id="tabs" hidden>
-      <a href="#ceo" data-view="ceo">CEO view<span class="tag">read only</span></a>
+      <a href="#ceo" data-view="ceo">CEO<span class="tx"> view</span><span class="tag">read only</span></a>
       <a href="#deals" data-view="deals" id="tabDeals">Deals<span class="tag" id="tagDeals">production</span></a>
-      <a href="#bankers" data-view="bankers">Banker CRM</a>
+      <a href="#bankers" data-view="bankers">Banker<span class="tx"> CRM</span><span class="tp">s</span></a>
       <a href="#team" data-view="team">Team</a>
       <a href="#comps" data-view="comps">Comps</a>
+      <a href="#valuation" data-view="valuation">Valuation</a>
     </nav>
   </div>
 </header>
@@ -588,7 +639,7 @@ const S = {
   drawer:null, sample:null, toolsOk:false, downloads:true,
   ai:{open:false, msgs:[], api:[], busy:false, ctrl:null}, proposals:{}, cp:cpFresh(), tc:tcFresh(),
   session:null, authChecked:false, started:false, channel:null, loginErr:"", loginBusy:false,
-  presence:null, presenceReady:false, others:[], editing:null, hist:{}, changes:null, chgDays:7, ceoDrill:null, ceoFold:{}, nextAll:false
+  presence:null, presenceReady:false, others:[], editing:null, hist:{}, changes:null, chgDays:7, ceoDrill:null, ceoFold:{}, nextAll:false, valIn:{}
 };
 const ROLES = {ceo:"CEO", corpdev:"Corp Dev"};
 
@@ -698,12 +749,12 @@ function parseHash(){ let h=(location.hash||"").replace(/^#/,""); try{ h=decodeU
 function route(){
   const r=parseHash();
   if(r.kind){
-    S.view = r.kind==="banker" ? "bankers" : (S.routed && ["ceo","team","comps"].includes(S.view)) ? S.view : isCEO() ? "ceo" : "deals";
+    S.view = r.kind==="banker" ? "bankers" : (S.routed && ["ceo","team","comps","valuation"].includes(S.view)) ? S.view : isCEO() ? "ceo" : "deals";
     S.routed=true; render(); openRoute(r); return;
   }
   S.pushed=false;
   if(S.drawer && S.drawer.id && ["deal","view-deal","banker"].includes(S.drawer.kind)) S.drawer=null;
-  let v = ["ceo","deals","bankers","team","comps"].includes(r.view) ? r.view : "ceo";
+  let v = ["ceo","deals","bankers","team","comps","valuation"].includes(r.view) ? r.view : "ceo";
   if(v==="deals" && isCEO()) v="ceo"; S.view=v; S.routed=true; render(); focusBack();
 }
 function openRoute(r){
@@ -759,7 +810,7 @@ function render(){
   document.querySelectorAll("nav.tabs a").forEach(a => a.setAttribute("aria-current", a.dataset.view===S.view ? "page" : "false"));
   document.getElementById("tagDeals").textContent = canEditNow() ? "production" : "view only";
   const v=document.getElementById("view");
-  const html = S.view==="ceo" ? renderCEO() : S.view==="deals" ? renderDeals() : S.view==="team" ? renderTeam() : S.view==="comps" ? renderComps() : renderBankers();
+  const html = S.view==="ceo" ? renderCEO() : S.view==="deals" ? renderDeals() : S.view==="team" ? renderTeam() : S.view==="comps" ? renderComps() : S.view==="valuation" ? renderValuation() : renderBankers();
   const keepCc=keepInputs(["cc_input"]);
   v.innerHTML = statusBanner() + html;
   keepCc(); const ccl=document.getElementById("ccLog"); if(ccl) ccl.scrollTop=ccl.scrollHeight;
@@ -1074,7 +1125,7 @@ async function loadSettings(){
   try{ const {data,error}=await S.sb.from("settings").select("id,doc");
     if(error){ S.settingsMissing=true; } else { S.settingsMissing=false; S.settings=Object.fromEntries((data||[]).map(r=>[r.id, r.doc||{}])); } }
   catch{ S.settingsMissing=true; }
-  if(["comps","ceo"].includes(S.view) && S.session) render();
+  if(["comps","ceo","valuation"].includes(S.view) && S.session) render();
 }
 function benchCfg(){
   const b=(S.settings||{}).benchmark||{};
@@ -1460,6 +1511,472 @@ async function saveLeagueCompanies(){
   toast("Saved"); S.lgEdit=false; S.league=null; S.leagueCache={}; S.leagueForce=true; await loadSettings(); render();
 }
 
+/* ---------- Valuation exhibits (Valuation tab) ----------
+   Five exhibits for the annual Ascot Group valuation: trading comparables, historical P/TBV, precedent transactions,
+   the valuation approach and the Ascot Group valuation summary. Public figures come from S&P Global via Kensho
+   (supabase/functions/valuation; saved to kensho_store row "valuation:latest"). Peer groups and the precedent list
+   live in the settings table (row "valuation"), editable by Corp Dev.
+   Ascot's own figures are confidential: they're typed in on this page and kept in S.valIn only, in this browser tab.
+   They are never written to Supabase, browser storage or any function, and are cleared on sign-out. "Save to file"
+   writes them to a file on the user's own computer, and "Open file" reads it back. */
+const VAL_DEFAULT_GROUPS=[
+  {name:"Lloyd's of London (re)insurers", short:"Lloyd's (re)insurers", role:"primary", companies:[
+    {ticker:"LSE:BEZ",label:"Beazley",exclude:true,note:"agreed offer from Zurich"},{ticker:"LSE:HSX",label:"Hiscox"},{ticker:"LSE:LRE",label:"Lancashire"}]},
+  {name:"Bermuda (re)insurers", short:"Bermuda / offshore (re)insurers", role:"primary", companies:[
+    {ticker:"ACGL",label:"Arch Capital"},{ticker:"EG",label:"Everest Re"},{ticker:"RNR",label:"RenaissanceRe"},{ticker:"AXS",label:"AXIS Capital"},{ticker:"HG",label:"Hamilton"}]},
+  {name:"U.S. specialty", short:"US Specialty", role:"reference", companies:[
+    {ticker:"WRB",label:"W.R. Berkley"},{ticker:"MKL",label:"Markel"},{ticker:"AFG",label:"American Financial"},{ticker:"THG",label:"Hanover"}]}
+];
+/* Public deals with multiples from press releases and press reports (some not officially disclosed). Corp Dev edits the list. */
+const VAL_DEFAULT_PRECEDENTS=[
+  ["2026-02","Beazley","Zurich",11.0,"2.20","2.30"],["2025-12","Vantage","Howard Hughes",2.1,"1.40","1.55"],["2025-10","Convex","AIG (35%) / Onex (63%)",7.0,"~1.90","1.93"],
+  ["2025-10","IQUW","STARR",1.5,"1.50",""],["2025-09","Fortegra","DB Insurance",1.7,"~2.00","~2.00"],["2025-09","Inigo","Radian",1.7,"1.50","1.50"],
+  ["2025-08","Aspen","Sompo",3.5,"1.30","1.30"],["2025-06","Canopius (21%)","Samsung Fire & Marine Ins.",2.7,"1.37","1.55"],["2024-07","Enstar Group","Sixth Street Partners",5.1,"0.87","0.86"],
+  ["2024-08","Allianz (US midcorp)","AIG",3.0,"1.40",""],["2023-09","Direct Line (Commercial Lines)","Intact Financial",0.7,"",""],["2023-05","Validus Re","RenRe",3.0,"1.42","1.42"],
+  ["2023-02","Argo Group","Brookfield Reinsurance",1.1,"0.90","1.02"],["2022-03","Alleghany","Berkshire Hathaway",11.6,"1.26","1.54"],["2021-10","PartnerRe","Covéa Mutual",9.0,"1.29","1.38"],
+  ["2021-01","ProSight Global","Towerbrook/Further Global",0.6,"0.92","0.96"],["2020-10","Watford Holdings","Arch / Warburg Pincus / Kelso",0.7,"0.71","0.71"],["2020-08","Sirius International","Third Point",0.8,"0.54","0.89"]
+].map(([date,target,acquirer,value,pbv,ptbv])=>({date,target,acquirer,value,...multIn(pbv,"pbv"),...multIn(ptbv,"ptbv")}));
+function multIn(s,k){ s=String(s||"").trim(); const n=numIn(s); return {[k]:n, [k+"Approx"]:/^~/.test(s)&&n!=null}; }
+/** "1,234.5", "$1,234", "1.40x", "~2.00", "14.2%" -> number; blank, "n/a", "na", "n.a." -> null */
+function numIn(v){ const s=String(v??"").replace(/[,$x%~\s]/gi,""); if(!s||/^n\.?\/?a\.?$/i.test(s)) return null; const n=Number(s); return isFinite(n)?n:null; }
+const VAL_YEARS=10, VAL_WINDOWS=[1,3,5,10];
+const VAL_COLORS=["#C46A1B","#944599","#262166","#0081C3","#EB008C","#00857C"];
+const VAL_FIELDS=["pbv","ptbv","pePrior","peFwd","robv","rotbv","debtToCap","cr1","cr2"];
+
+function valCfg(){
+  const v=(S.settings||{}).valuation||{};
+  const groups=Array.isArray(v.groups)&&v.groups.length ? v.groups : VAL_DEFAULT_GROUPS;
+  const precedents=Array.isArray(v.precedents) ? v.precedents : VAL_DEFAULT_PRECEDENTS;
+  const asOf=typeof v.asOf==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(v.asOf) ? v.asOf : "";
+  const y=+(asOf||TODAY()).slice(0,4), fy=Number.isInteger(v.fy)&&(v.fy===y||v.fy===y+1) ? v.fy : y;
+  return {groups, precedents, asOf, fy, custom:!!(v.groups||v.precedents)};
+}
+const valTickers = cfg => [...new Set(cfg.groups.flatMap(g=>g.companies.map(c=>c.ticker)))];
+async function loadValuation(force){
+  const cfg=valCfg(), list=valTickers(cfg);
+  if(S.valForce){ force=true; S.valForce=false; }
+  if(!list.length) return;
+  if(!await loadSaved("valuation", "valuation:latest", list, {tickers:list, asOf:cfg.asOf, fy:cfg.fy, years:VAL_YEARS}, force)) return;
+  if(S.view==="valuation") render();
+}
+/* The saved fetch is out of date when the peer list, as-at date or forward year has changed since */
+function valStale(c,cfg){ const d=c&&c.data; return !!d && (c.stale || (d.asOfAsked||"")!==cfg.asOf || d.fy!==cfg.fy); }
+
+/* ---- figures ---- */
+const fmtX = (v,dp=2) => v==null||!isFinite(v) ? "n/d" : `${(+v).toFixed(dp)}x`;
+const fmtP = v => v==null||!isFinite(v) ? "n/d" : `${(+v).toFixed(1)}%`;
+const fmtM = v => v==null||!isFinite(v) ? "n/d" : Math.round(v).toLocaleString("en-US");
+const fmtUSD = (v,dp=0) => v==null||!isFinite(v) ? "n/d" : (v<0?"-":"")+"$"+Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:dp,maximumFractionDigits:dp});
+const fmtLong = s => { const d=new Date(String(s)+"T00:00:00"); return isNaN(d) ? String(s||"") : d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}); };
+const MON3=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fmtMonYY = s => { const m=String(s||"").match(/^(\d{4})-(\d{2})/); return m ? MON3[+m[2]-1]+"-"+m[1].slice(2) : String(s||""); };
+function meanOf(vals){ const v=vals.filter(x=>x!=null&&isFinite(x)); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null; }
+function medianOf(vals){ const v=vals.filter(x=>x!=null&&isFinite(x)).sort((a,b)=>a-b); if(!v.length) return null; const m=v.length>>1; return v.length%2 ? v[m] : (v[m-1]+v[m])/2; }
+function statsOf(rows){ const o={mean:{},median:{}}; for(const f of VAL_FIELDS){ o.mean[f]=meanOf(rows.map(r=>r[f])); o.median[f]=medianOf(rows.map(r=>r[f])); } return o; }
+/* Companies in the fetch, keyed by ticker, with the two combined ratio years as cr1 and cr2 */
+function valRows(d){ const fy=d.fy; return Object.fromEntries((d.companies||[]).map(c=>[c.ticker,{...c, cr1:(c.cr||{})[fy-2]??null, cr2:(c.cr||{})[fy-1]??null}])); }
+const exclNames = companies => companies.filter(c=>c.exclude).map(c=>c.label||c.ticker);
+const exclSuffix = companies => { const x=exclNames(companies); return x.length ? ` - excl. ${x.join(", ")}` : ""; };
+const groupShort = g => g.short||g.name;
+function primaryLabel(cfg){ const p=cfg.groups.filter(g=>g.role==="primary"); return p.map(g=>groupShort(g).replace(/\s*\(re\)insurers$/i,"")).join(" and ")+" peers"; }
+/* Group means and medians, then the primary groups together. Excluded companies show but don't count. */
+function valGroups(d,cfg){
+  const by=valRows(d);
+  const groups=cfg.groups.map((g,gi)=>{ const rows=g.companies.map(c=>({c, r:by[c.ticker]||null}));
+    return {g, gi, rows, st:statsOf(rows.filter(x=>!x.c.exclude&&x.r).map(x=>x.r))}; });
+  const prim=groups.filter(x=>x.g.role==="primary"), pc=prim.flatMap(x=>x.g.companies);
+  return {groups, prim, primary: prim.length>1 ? {label:primaryLabel(cfg)+exclSuffix(pc), st:statsOf(prim.flatMap(x=>x.rows.filter(y=>!y.c.exclude&&y.r).map(y=>y.r)))} : null};
+}
+/* Ascot's figures from the inputs (all in US$M unless noted). Valuation = the amount entered, else multiple x TBV. */
+function ascotCalc(){
+  const I=S.valIn||{}, n=k=>numIn(I[k]), div=(a,b)=>a!=null&&b!=null&&b>0?a/b:null;
+  const tbv=n("tbv"), bv=n("bv"), mult=n("mult"), niF=n("niFwd"), niP=n("niPrior"), sh=n("shares");
+  const val = n("val")!=null ? n("val") : mult!=null&&tbv!=null ? mult*tbv : null;
+  const pps=div(val,sh), prevPps=n("prevPps");
+  const rb=div(niF,bv), rt=div(niF,tbv);
+  return {val, tbv, bv, mult, ptbv:div(val,tbv), pbv:div(val,bv), pePrior:div(val,niP), peFwd:div(val,niF),
+    robv:n("robv")??(rb==null?null:rb*100), robvDerived:n("robv")==null&&rb!=null, rotbv:n("rotbv")??(rt==null?null:rt*100), rotbvDerived:n("rotbv")==null&&rt!=null,
+    debtToCap:n("d2c"), cr1:n("cr1"), cr2:n("cr2"), shares:sh, pps, prevVal:n("prevVal"), prevPbv:n("prevPbv"), prevPtbv:n("prevPtbv"), prevPps,
+    wu: pps!=null&&prevPps!=null ? pps-prevPps : null, wuPct: pps!=null&&prevPps ? (pps/prevPps-1)*100 : null,
+    valDate:String(I.valDate||"").trim(), prevDate:String(I.prevDate||"").trim(), bookDate:String(I.bookDate||"").trim(),
+    any:Object.values(I).some(x=>String(x??"").trim()!=="")};
+}
+const valFY = () => { const d=S.valuation&&S.valuation.data; return d&&d.fy ? d.fy : valCfg().fy; };
+function valInFields(fy){ return [
+  ["Valuation",[{k:"valDate",l:"Valuation date",ph:"e.g. 3/31/26",text:true},{k:"bookDate",l:"Book value as at",ph:"e.g. December 31, 2025",text:true},
+    {k:"tbv",l:"Tangible book value (US$M)",em:"consolidated Ascot Group"},{k:"bv",l:"Book value (US$M)"},
+    {k:"mult",l:"P/TBV multiple applied (x)"},{k:"val",l:"Valuation (US$M)",em:"optional; else multiple x TBV"}]],
+  ["Earnings and ratios",[{k:"niPrior",l:`Net income ${fy-1} (US$M)`},{k:"niFwd",l:`Plan net income ${fy} (US$M)`},
+    {k:"robv",l:`Return on BV ${fy}P (%)`,em:"optional; else plan net income / BV"},{k:"rotbv",l:`Return on TBV ${fy}P (%)`,em:"optional; else plan net income / TBV"},
+    {k:"d2c",l:"LTM debt to capital (%)"},{k:"cr1",l:`Combined ratio ${fy-2} (%)`},{k:"cr2",l:`Combined ratio ${fy-1} (%)`}]],
+  ["Shares and previous valuation",[{k:"shares",l:"Diluted shares (M)",em:"incl. RSUs/PSUs and PSOPs"},{k:"prevDate",l:"Previous valuation date",ph:"e.g. 3/31/25",text:true},
+    {k:"prevVal",l:"Previous valuation (US$M)"},{k:"prevPbv",l:"Previous P/BV (x)"},{k:"prevPtbv",l:"Previous P/TBV (x)"},{k:"prevPps",l:"Previous price per share ($)"}]]
+]; }
+const VAL_IN_KEYS = valInFields(2000).flatMap(([,f])=>f.map(x=>x.k));
+
+/* ---- page ---- */
+function valStatusHTML(cfg){
+  const c=S.valuation, edit=canEditNow();
+  if(!c || c.loading) return `<p class="t2">Loading the peers from Kensho… This can take a minute or two (ten years of daily market caps); after that the figures are saved for everyone until someone clicks Refresh.</p>`;
+  if(c.refreshing) return `<p class="t2 savednote">Refreshing from Kensho (up to two minutes). The figures below are from ${esc(fmtWhen(c.at))} until the new ones arrive.</p>`;
+  if(c.err==="not_configured") return `<div class="banner"><span><b>Kensho isn't connected yet.</b> ${edit?"Set the Kensho credentials (README, section 7).":"Ask the tracker owner to connect it."} Ascot's figures and the precedents below still work.</span></div>`;
+  if(c.err==="not_deployed") return `<div class="banner"><span><b>The valuation function isn't deployed yet.</b> ${edit?"Run <code>supabase functions deploy valuation --no-verify-jwt</code> (README, section 7d).":"Ask the tracker owner to set it up."} Ascot's figures and the precedents below still work.</span></div>`;
+  if(c.err==="network") return `<div class="banner"><span><b>Couldn't reach the valuation function.</b> ${edit?`Check it's deployed with <code>supabase functions deploy valuation --no-verify-jwt</code> and that <code>ALLOWED_ORIGIN</code> is <code>${esc(location.origin)}</code> (README, section 7d).`:"Ask the tracker owner to check the valuation function."}</span><button class="btn sm" data-act="val-refresh">Try again</button></div>`;
+  if(c.err) return `<div class="banner"><span><b>Couldn't load the peers.</b> ${esc(c.msg||c.err)}</span><button class="btn sm" data-act="val-refresh">Try again</button></div>`;
+  const n=[];
+  if(valStale(c,cfg)) n.push(`The peer groups, as-at date or forward year have changed since these figures were fetched. <button type="button" class="btn sm" data-act="val-refresh">Refresh from Kensho</button>`);
+  if(edit && S.storeMissing) n.push(`Kensho is asked on every visit. To keep the last fetch, run <code>supabase/migrations/0007_kensho_store.sql</code> and <code>0008_valuation_store.sql</code> in Supabase.`);
+  else if(edit && c.unsaved) n.push(`This fetch couldn't be saved, so the next visit will ask Kensho again. Run <code>supabase/migrations/0008_valuation_store.sql</code> in Supabase.`);
+  for(const x of (c.data&&c.data.notes)||[]) n.push(esc(x));
+  return n.map(x=>`<p class="t2 savednote">${x}</p>`).join("");
+}
+function renderValuation(){
+  loadValuation(false);
+  const cfg=valCfg(), edit=canEditNow(), c=S.valuation, d=c&&c.data, fy=valFY();
+  const asOf = d ? d.asOf : (cfg.asOf||TODAY());
+  return `
+  <section class="ceohead"><div><h2 class="action-title">Valuation exhibits</h2>
+    <p class="sub">Trading comparables and historical P/TBV from S&amp;P Global via Kensho as at ${esc(fmtLong(asOf))}${cfg.asOf?"":" (latest)"}; precedents kept by Corp Dev; Ascot's figures typed in below. ${d&&c.at?`Last fetched ${esc(fmtWhen(c.at))}; Refresh asks Kensho again.`:""}</p></div>
+    <div class="ceoacts"><button type="button" class="btn sm" data-act="val-refresh"${c&&(c.loading||c.refreshing)?" disabled":""}>Refresh from Kensho</button>${edit?`<button type="button" class="btn sm" data-act="val-settings">Peers, date and precedents</button>`:""}<button type="button" class="btn sm primary" data-act="val-pptx">Download slides (.pptx)</button></div></section>
+  ${S.settingsMissing&&edit?`<div class="banner"><span>Using the default peer groups and precedents. To change them, run <b>supabase/migrations/0004_settings.sql</b> in Supabase.</span></div>`:""}
+  ${valStatusHTML(cfg)}
+  ${valInputsHTML(fy)}
+  <div id="valOut">${valOutHTML()}</div>`;
+}
+function valInputsHTML(fy){
+  const I=S.valIn||{};
+  return `<section class="vin" aria-labelledby="vinH"><div class="vin-h"><h3 class="sec" id="vinH">Ascot figures</h3>
+    <span class="t2">Confidential. Typed in here and kept in this browser tab only: never saved to the tracker, Kensho or any server, and cleared when you sign out or close the tab.</span><span class="grow"></span>
+    <button type="button" class="btn sm" data-act="vi-open">Open file</button><button type="button" class="btn sm" data-act="vi-save">Save to file</button><button type="button" class="btn sm ghost" data-act="vi-clear">Clear</button>
+    <input type="file" id="vi_file" accept=".json,application/json" hidden></div>
+    <div class="vin-g">${valInFields(fy).map(([h,fields])=>`<fieldset><legend>${esc(h)}</legend>${fields.map(f=>`<label class="f">${esc(f.l)}${f.em?` <em>(${esc(f.em)})</em>`:""}<input type="text" id="vi_${f.k}" data-vi="${f.k}" value="${esc(I[f.k]??"")}" ${f.text?"":`inputmode="decimal"`} placeholder="${esc(f.ph||"")}" autocomplete="off" spellcheck="false"></label>`).join("")}</fieldset>`).join("")}</div></section>`;
+}
+function valOutHTML(){
+  const cfg=valCfg(), d=S.valuation&&S.valuation.data;
+  return [valCompsHTML(d,cfg), valChartSectionHTML(d,cfg), valPrecedentsHTML(cfg), valApproachHTML(d,cfg), valSummaryHTML()].join("");
+}
+/* Exhibit 1: trading comparables */
+function valCompsHTML(d,cfg){
+  const fy=valFY(), A=ascotCalc();
+  const cols=["Market cap","P/BV","P/TBV",`P/E ${fy-1}E/A`,`P/E ${fy}F`,`Return on BV ${fy}F`,`Return on TBV ${fy}F`,"LTM debt to capital",`Combined ratio ${fy-2}A`,`Combined ratio ${fy-1}A`];
+  const cells = (r,cap) => [cap, fmtX(r.pbv), fmtX(r.ptbv), fmtX(r.pePrior,1), fmtX(r.peFwd,1), fmtP(r.robv), fmtP(r.rotbv), fmtP(r.debtToCap), fmtP(r.cr1), fmtP(r.cr2)];
+  const statRows = (label,st,cls) => ["mean","median"].map(k=>`<tr class="${cls}"><td>${k==="mean"?"Mean":"Median"} - ${esc(label)}</td><td></td>${VAL_FIELDS.map(f=>`<td class="num">${["pbv","ptbv","pePrior","peFwd"].includes(f)?fmtX(st[k][f],f.startsWith("pe")?1:2):fmtP(st[k][f])}</td>`).join("")}</tr>`).join("");
+  const notes=[];
+  let body="";
+  if(d){
+    const G=valGroups(d,cfg);
+    const groupHTML = x => `<tr class="band"><td colspan="11">${esc(x.g.name)}${x.g.role==="reference"?" (reference)":""}</td></tr>`
+      + x.rows.map(({c,r})=>{ const nm=c.label||(r&&r.name)||c.ticker;
+          if(r) for(const n of r.notes||[]) notes.push(`${nm}: ${n}`);
+          if(!r) notes.push(`${nm}: ${(d.errors||{})[c.ticker]||"not in this fetch; click Refresh"}`);
+          if(r&&r.niPriorKind==="consensus") notes.push(`${nm}: ${fy-1} net income is the consensus estimate (accounts not yet in Kensho)`);
+          const t = r ? cells(r, fmtM(r.marketCap)) : cells({}, "n/d");
+          return `<tr class="${c.exclude?"excl":""}"><td><div class="t1">${esc(nm)}${c.exclude?` <span class="xtag" title="${esc(c.note||"Excluded from the means and medians")}">excluded${c.note?`: ${esc(c.note)}`:""}</span>`:""}</div><div class="t2">${esc(c.ticker)}${r&&r.capCurrency&&r.capCurrency!=="USD"?` · market cap in ${esc(r.capCurrency)}, shown in US$`:""}</div></td>${t.map(v=>`<td class="num">${v}</td>`).join("")}</tr>`; }).join("")
+      + statRows(x.g.name+exclSuffix(x.g.companies), x.st, "stat");
+    body = G.groups.filter(x=>x.g.role==="primary").map(groupHTML).join("")
+      + (G.primary ? statRows(G.primary.label, G.primary.st, "stat all") : "")
+      + G.groups.filter(x=>x.g.role!=="primary").map(groupHTML).join("");
+  }
+  if(A.any){
+    body += `<tr class="ascot"><td>${esc(A.valDate||"Ascot")} valuation</td>${cells(A, A.val==null?"n/d":fmtUSD(A.val)).map(v=>`<td class="num">${v}</td>`).join("")}</tr>`;
+    if(A.prevVal!=null||A.prevPbv!=null||A.prevPtbv!=null) body += `<tr class="prev"><td>Ref: ${esc(A.prevDate||"previous")} valuation</td><td class="num">${A.prevVal==null?"n/d":fmtUSD(A.prevVal)}</td><td class="num">${fmtX(A.prevPbv)}</td><td class="num">${fmtX(A.prevPtbv)}</td><td colspan="7"></td></tr>`;
+  }
+  const head=`<tr><th>${d?`As at ${esc(fmtLong(d.asOf))}`:"Company"}<div class="t2">US$M unless noted</div></th>${cols.map(h=>`<th class="num">${esc(h)}</th>`).join("")}</tr>`;
+  return `<section aria-labelledby="vx1"><h3 class="sec" id="vx1">Trading comparables</h3>
+    ${body?`<div class="tbl-wrap"><table class="valtbl"><thead>${head}</thead><tbody>${body}</tbody></table></div>`:`<div class="empty"><p>The peers appear here once Kensho answers. Ascot's row appears once you type its figures above.</p></div>`}
+    ${notes.length?`<ul class="valnotes">${[...new Set(notes)].map(n=>`<li>${esc(n)}</li>`).join("")}</ul>`:""}
+    <p class="source">Source: ${d?`S&amp;P Global Capital IQ via Kensho, as at ${esc(fmtLong(d.asOf))}; London market caps in US$ at that day's ECB rate`:"S&amp;P Global Capital IQ via Kensho"}. Market cap, BV and TBV in US$M; BV is common equity and TBV is BV less goodwill and other intangibles, from the latest balance sheet (derived). P/E ${fy-1}E/A on reported net income (consensus where not yet reported); P/E and returns ${fy}F on consensus net income (Capital IQ), returns on the latest BV and TBV (derived). Debt to capital = debt / (debt + total equity) (derived). Combined ratio = operating expenses excluding non-insurance businesses / net premiums earned (derived), so it can differ from company-reported ratios. Means and medians leave out excluded companies.${A.any?" Ascot figures as typed in on this page.":""}</p></section>`;
+}
+/* Exhibit 2: historical P/TBV by group (average of the group's companies each day) */
+function valGroupSeries(d,cfg){
+  const h=(d&&d.history)||{dates:[],series:{}};
+  return cfg.groups.map((g,gi)=>{ const ts=g.companies.filter(c=>!c.exclude&&h.series[c.ticker]).map(c=>h.series[c.ticker]);
+    const vals=h.dates.map((_,i)=>{ let s=0,n=0; for(const a of ts){ const v=a[i]; if(v!=null){ s+=v; n++; } } return n?s/n:null; });
+    return {g, color:VAL_COLORS[gi%VAL_COLORS.length], vals, n:ts.length}; }).filter(x=>x.n);
+}
+function valAverages(d,series){
+  const dates=(d&&d.history&&d.history.dates)||[];
+  return VAL_WINDOWS.filter(w=>w<=(d&&d.years||VAL_YEARS)).map(w=>{ const from=`${+d.asOf.slice(0,4)-w}${d.asOf.slice(4)}`;
+    return {w, vals:series.map(s=>meanOf(s.vals.filter((_,i)=>dates[i]>=from)))}; });
+}
+function valChartSectionHTML(d,cfg){
+  const series=d?valGroupSeries(d,cfg):[], dates=(d&&d.history&&d.history.dates)||[];
+  if(!d || !series.length || dates.length<2) return `<section aria-labelledby="vx2"><h3 class="sec" id="vx2">Historical P/TBV</h3><div class="empty"><p>${d?"Kensho returned no price history for these peers.":"The chart appears here once Kensho answers."}</p></div></section>`;
+  const av=valAverages(d,series);
+  return `<section aria-labelledby="vx2"><h3 class="sec" id="vx2">Historical P/TBV</h3>
+    <div class="vchart-wrap"><div class="vchart" id="valChart">${valChartSVG(d,series)}<div class="vtip" id="valTip" hidden></div></div></div>
+    <div class="vlegend">${series.map(s=>`<span><i style="background:${s.color}"></i>${esc(groupShort(s.g))}${exclNames(s.g.companies).length?` (excl. ${esc(exclNames(s.g.companies).join(", "))})`:""}</span>`).join("")}<button type="button" class="btn sm ghost" data-act="val-csv">Download data (CSV)</button></div>
+    <div class="tbl-wrap vavg"><table class="valtbl"><thead><tr><th>Average P/TBV</th>${series.map(s=>`<th class="num"><i class="sw" style="background:${s.color}"></i>${esc(groupShort(s.g))}</th>`).join("")}</tr></thead>
+      <tbody>${av.map(a=>`<tr><td>${a.w}-year average</td>${a.vals.map(v=>`<td class="num">${fmtX(v)}</td>`).join("")}</tr>`).join("")}<tr class="stat"><td>As at ${esc(fmtLong(d.asOf))}</td>${series.map(s=>`<td class="num">${fmtX(lastVal(s.vals))}</td>`).join("")}</tr></tbody></table></div>
+    <p class="source">Source: S&amp;P Global Capital IQ via Kensho. Each line is the average of the group's companies each trading day (companies join the average when they list; excluded companies are left out). P/TBV = market cap / tangible book value of the latest balance sheet, counted from ${45} days after its period end so it was public; London market caps in US$ at each day's ECB rate (derived).</p></section>`;
+}
+const lastVal = a => { for(let i=a.length-1;i>=0;i--) if(a[i]!=null) return a[i]; return null; };
+const VC={W:1000,H:380,L:52,R:78,T:14,B:30};
+function valChartGeom(d,series){
+  const dates=d.history.dates, t=dates.map(x=>Date.parse(x+"T00:00:00Z")), t0=t[0], t1=t[t.length-1];
+  const max=Math.max(...series.flatMap(s=>s.vals.filter(v=>v!=null)), 0.5), top=Math.ceil(max*2)/2;
+  const x=ms=>VC.L+(ms-t0)/(t1-t0||1)*(VC.W-VC.L-VC.R), y=v=>VC.T+(1-v/top)*(VC.H-VC.T-VC.B);
+  return {dates,t,top,x,y};
+}
+function valChartSVG(d,series){
+  const G=valChartGeom(d,series), {x,y,top,t}=G;
+  const grid=[]; for(let v=0; v<=top+1e-9; v+=0.5) grid.push(`<line x1="${VC.L}" x2="${VC.W-VC.R}" y1="${y(v)}" y2="${y(v)}" class="vg${v===0?" base":""}"/><text x="${VC.L-8}" y="${y(v)+4}" text-anchor="end" class="vt">${v.toFixed(2)}x</text>`);
+  const ticks=[]; const end=new Date(d.asOf+"T00:00:00Z");
+  for(let k=0;k<=d.years;k++){ const dt=new Date(Date.UTC(end.getUTCFullYear()-k, end.getUTCMonth(), end.getUTCDate())); const ms=dt.getTime(); if(ms<t[0]-5*86400000) break;
+    ticks.push(`<line x1="${x(ms)}" x2="${x(ms)}" y1="${VC.H-VC.B}" y2="${VC.H-VC.B+4}" class="vg base"/><text x="${x(ms)}" y="${VC.H-8}" text-anchor="middle" class="vt">${MON3[dt.getUTCMonth()]} ${String(dt.getUTCFullYear()).slice(2)}</text>`); }
+  const paths=series.map(s=>{ let p="", pen=false; s.vals.forEach((v,i)=>{ if(v==null){ pen=false; return; } p+=(pen?"L":"M")+x(t[i]).toFixed(1)+","+y(v).toFixed(1); pen=true; }); return `<path d="${p}" stroke="${s.color}" class="vl"/>`; }).join("");
+  // end labels, nudged apart so they don't overlap
+  const ends=series.map(s=>({s, v:lastVal(s.vals)})).filter(e=>e.v!=null).map(e=>({...e, yy:y(e.v)})).sort((a,b)=>a.yy-b.yy);
+  for(let i=1;i<ends.length;i++) if(ends[i].yy-ends[i-1].yy<14) ends[i].yy=ends[i-1].yy+14;
+  const labels=ends.map(e=>`<text x="${VC.W-VC.R+6}" y="${e.yy+4}" class="vend">${fmtX(e.v)}</text>`).join("");
+  const desc=series.map(s=>`${groupShort(s.g)} ${fmtX(lastVal(s.vals))}`).join(", ");
+  return `<svg viewBox="0 0 ${VC.W} ${VC.H}" role="img" aria-label="Historical P/TBV by peer group, ${esc(fmtLong(d.history.dates[0]))} to ${esc(fmtLong(d.asOf))}. Latest: ${esc(desc)}. Averages in the table below." tabindex="0">
+    ${grid.join("")}${ticks.join("")}${paths}${labels}<line id="valHair" class="vhair" x1="0" x2="0" y1="${VC.T}" y2="${VC.H-VC.B}" visibility="hidden"/></svg>`;
+}
+/* Hover and keyboard readout: one tooltip with every group's value at the nearest date */
+function valHover(idx){
+  const el=document.getElementById("valChart"), tip=document.getElementById("valTip"), hair=document.getElementById("valHair");
+  const d=S.valuation&&S.valuation.data; if(!el||!tip||!hair||!d) return;
+  const series=valGroupSeries(d,valCfg()); const G=valChartGeom(d,series);
+  if(idx==null){ tip.hidden=true; hair.setAttribute("visibility","hidden"); S.valIdx=null; return; }
+  idx=Math.max(0,Math.min(G.dates.length-1,idx)); S.valIdx=idx;
+  const X=G.x(G.t[idx]); hair.setAttribute("x1",X); hair.setAttribute("x2",X); hair.setAttribute("visibility","visible");
+  tip.textContent=""; const h=document.createElement("b"); h.textContent=fmtLong(G.dates[idx]); tip.appendChild(h);
+  for(const s of series){ const row=document.createElement("div"); const k=document.createElement("i"); k.style.background=s.color; const v=document.createElement("strong"); v.textContent=fmtX(s.vals[idx]); const n=document.createElement("span"); n.textContent=" "+groupShort(s.g); row.append(k,v,n); tip.appendChild(row); }
+  tip.hidden=false; const r=el.getBoundingClientRect(), px=X/VC.W*r.width;
+  tip.style.left = (px > r.width*0.6 ? Math.max(0,px-tip.offsetWidth-12) : px+12)+"px"; tip.style.top="8px";
+}
+function valIdxAt(clientX){
+  const el=document.getElementById("valChart"), d=S.valuation&&S.valuation.data; if(!el||!d) return null;
+  const r=el.getBoundingClientRect(), xv=(clientX-r.left)/r.width*VC.W;
+  const dates=d.history.dates, t0=Date.parse(dates[0]+"T00:00:00Z"), t1=Date.parse(dates[dates.length-1]+"T00:00:00Z");
+  const ms=t0+(xv-VC.L)/(VC.W-VC.L-VC.R)*(t1-t0); let lo=0, hi=dates.length-1;
+  while(lo<hi){ const m=(lo+hi)>>1; if(Date.parse(dates[m]+"T00:00:00Z")<ms) lo=m+1; else hi=m; }
+  return lo;
+}
+function valCSV(){
+  const d=S.valuation&&S.valuation.data; if(!d) return;
+  const cfg=valCfg(), series=valGroupSeries(d,cfg), h=d.history, tick=cfg.groups.flatMap(g=>g.companies.map(c=>c.ticker)).filter(t=>h.series[t]);
+  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const lines=[["Date",...series.map(s=>groupShort(s.g)+" average P/TBV"),...tick.map(t=>t+" P/TBV")].map(q).join(",")]
+    .concat(h.dates.map((dt,i)=>[dt,...series.map(s=>s.vals[i]==null?"":s.vals[i].toFixed(3)),...tick.map(t=>h.series[t][i]??"")].map(q).join(",")));
+  dlFile(`peer-ptbv-history-${d.asOf}.csv`, "﻿"+lines.join("\r\n"), "text/csv;charset=utf-8");
+}
+function dlFile(name, text, type){ const url=URL.createObjectURL(new Blob([text],{type})); const a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000); }
+/* Exhibit 3: precedent transactions */
+function precStats(list){ return {pbv:{mean:meanOf(list.map(p=>p.pbv)),median:medianOf(list.map(p=>p.pbv))}, ptbv:{mean:meanOf(list.map(p=>p.ptbv)),median:medianOf(list.map(p=>p.ptbv))}}; }
+const precX = (v,approx) => v==null ? "n.a." : (approx?"~":"")+fmtX(v);
+function valPrecedentsHTML(cfg){
+  const list=[...cfg.precedents].sort((a,b)=>String(b.date).localeCompare(String(a.date))), st=precStats(list);
+  return `<section aria-labelledby="vx3"><h3 class="sec" id="vx3">Precedent transactions</h3>
+    ${list.length?`<div class="tbl-wrap"><table class="valtbl prec"><thead><tr><th>Date</th><th>Target</th><th>Acquirer</th><th class="num">Equity value ($B)</th><th class="num">Price / BV</th><th class="num">Price / TBV</th></tr></thead><tbody>
+      ${list.map(p=>`<tr><td>${esc(fmtMonYY(p.date))}</td><td>${esc(p.target)}</td><td>${esc(p.acquirer)}</td><td class="num">${p.value==null?"n.a.":(+p.value).toFixed(1)}</td><td class="num">${precX(p.pbv,p.pbvApprox)}</td><td class="num">${precX(p.ptbv,p.ptbvApprox)}</td></tr>`).join("")}
+      <tr class="stat"><td colspan="4">Mean</td><td class="num">${fmtX(st.pbv.mean)}</td><td class="num">${fmtX(st.ptbv.mean)}</td></tr><tr class="stat"><td colspan="4">Median</td><td class="num">${fmtX(st.pbv.median)}</td><td class="num">${fmtX(st.ptbv.median)}</td></tr>
+      </tbody></table></div>`:`<div class="empty"><p>No precedents listed.${canEditNow()?" Add them under Peers, date and precedents.":""}</p></div>`}
+    <p class="source">Sources: CapIQ, press releases, and rumoured acquisition multiples that are not officially disclosed. Kept by Corp Dev in the tracker; "~" marks an approximate multiple. Mean and median of the deals shown.</p></section>`;
+}
+/* Exhibit 4: valuation approach, worded from the figures */
+function valApproachLines(d,cfg){
+  const A=ascotCalc(), fy=valFY(), G=d?valGroups(d,cfg):null, out=[];
+  const excl=cfg.groups.flatMap(g=>g.companies.filter(c=>c.exclude));
+  const fn=g=>exclNames(g.companies).length?"(1)":"";
+  out.push({t:`Valuation implies price / tangible book value ("P/TBV") multiple of ${fmtX(A.ptbv)}, applied to the tangible book value of the consolidated Ascot Group${A.bookDate?` as at ${A.bookDate}`:""}, and price-to-earnings ("P/E") multiple of ${fmtX(A.peFwd,1)} on FY${fy} plan net income`});
+  out.push({t:"The valuation is supported by trading comparables, and further informed by precedent transactions:"});
+  out.push({t:"Public comparables:", lvl:1, u:true});
+  const prim=cfg.groups.filter(g=>g.role==="primary");
+  if(prim.length) out.push({t:`${prim.map(groupShort).join(" and ")} are viewed as the primary comp set for Ascot today`, lvl:2});
+  if(G){
+    const list=(f,dp)=>G.groups.map((x,i)=>`${i===G.groups.length-1&&G.groups.length>1?"and ":""}${groupShort(x.g)}${fn(x.g)} ${i===0?"trade at an average multiple of ":"at "}~${fmtX(x.st.mean[f],dp)}`).join(", ");
+    out.push({t:`P/TBV: As at ${fmtLong(d.asOf)}, ${list("ptbv",2)} P/TBV`, lvl:2});
+    out.push({t:`P/E (${fy}P): ${list("peFwd",1)} P/E`, lvl:2});
+  } else out.push({t:"P/TBV and P/E: appear once Kensho answers", lvl:2});
+  const pr=cfg.precedents.filter(p=>p.ptbv!=null), from=pr.map(p=>p.date).sort()[0], m=meanOf(pr.map(p=>p.ptbv));
+  out.push({t:`Precedent transactions: Implied average multiple for precedents${from?` since ${fmtMonYY(from)}`:""} is ~${m==null?"n/d":m.toFixed(1)+"x"} P/TBV, though varies widely based on transaction.`, lvl:1, lead:"Precedent transactions:"});
+  out.push({t:"Per-share price is determined using fully diluted share count that incorporates vested and unvested share units and options."});
+  const notes = excl.length ? [`(1) Excluding ${excl.map(c=>`${c.label||c.ticker}${c.note?` (${c.note})`:""}`).join(", ")}`] : [];
+  return {lines:out, notes};
+}
+function valApproachHTML(d,cfg){
+  const {lines,notes}=valApproachLines(d,cfg);
+  const li=l=>l.lead ? `<b><u>${esc(l.lead)}</u></b>${esc(l.t.slice(l.lead.length))}` : l.u ? `<u>${esc(l.t)}</u>` : esc(l.t);
+  return `<section aria-labelledby="vx4"><h3 class="sec" id="vx4">Valuation approach</h3>
+    <div class="vapp">${lines.map(l=>`<p class="lv${l.lvl||0}">${li(l)}</p>`).join("")}</div>
+    ${notes.map(n=>`<p class="source">${esc(n)}</p>`).join("")}
+    <p class="source">Worded from the figures on this page: Ascot's multiples from the figures typed in above, peer group means from Kensho, and the mean P/TBV of the precedents listed. Edit the wording in the slides before you send them.</p></section>`;
+}
+/* Exhibit 5: Ascot Group valuation summary */
+function valSummaryRows(){
+  const A=ascotCalc(), fy=valFY();
+  return [
+    {l:`Ascot Group valuation${A.valDate?` as at ${A.valDate}`:""}`, v:A.val==null?"n/d":fmtUSD(A.val), cls:"key"},
+    {l:"Ascot Group valuation price per share", v:A.pps==null?"n/d":fmtUSD(A.pps,2), cls:"key"},
+    {l:"Valuation methodology", v:"", cls:"head"},
+    {l:"P/TBV", v:fmtX(A.ptbv)}, {l:`Implied P/E (${fy}P)`, v:fmtX(A.peFwd,1)}, {l:"", v:""},
+    {l:`Previous Ascot Group valuation${A.prevDate?` at ${A.prevDate}`:""}`, v:A.prevVal==null?"n/d":fmtUSD(A.prevVal)},
+    {l:"Previous Ascot Group valuation price per share", v:A.prevPps==null?"n/d":fmtUSD(A.prevPps,2)}, {l:"", v:""},
+    {l:"Diluted shares outstanding (including RSUs/PSUs and PSOPs) - #m", v:A.shares==null?"n/d":A.shares.toLocaleString("en-US",{maximumFractionDigits:3})},
+    {l:"Ascot Group valuation price per share", v:A.pps==null?"n/d":fmtUSD(A.pps,2)},
+    {l:"Per share write-up - $", v:A.wu==null?"n/d":fmtUSD(A.wu,2), cls:"wu"}, {l:"Per share write-up - %", v:A.wuPct==null?"n/d":fmtP(A.wuPct), cls:"wu"}];
+}
+function valSummaryHTML(){
+  const A=ascotCalc();
+  return `<section aria-labelledby="vx5"><h3 class="sec" id="vx5">Ascot Group valuation (US$M, unless indicated otherwise)</h3>
+    ${A.any?`<div class="tbl-wrap vsum"><table class="valtbl"><tbody>${valSummaryRows().map(r=>`<tr class="${r.cls||""}"><td>${esc(r.l)}</td><td class="num">${esc(r.v)}</td></tr>`).join("")}</tbody></table></div>`
+      :`<div class="empty"><p>Type Ascot's figures above to fill this in.</p></div>`}
+    <p class="source">Valuation = valuation entered, else P/TBV multiple x tangible book value; price per share = valuation / diluted shares; write-up versus the previous price per share (derived).${A.robvDerived||A.rotbvDerived?` Return on ${A.robvDerived?"BV":""}${A.robvDerived&&A.rotbvDerived?" and ":""}${A.rotbvDerived?"TBV":""} = plan net income / year-end book value (derived).`:""}</p></section>`;
+}
+
+/* ---- Ascot figures: in the page only, or a file on the user's computer ---- */
+function valInSave(){
+  const I=S.valIn||{}; if(!Object.values(I).some(v=>String(v??"").trim())){ toast("Type Ascot's figures first."); return; }
+  dlFile(`ascot-valuation-inputs-${TODAY()}.json`, JSON.stringify({kind:"ascot-valuation-inputs", version:1, savedAt:new Date().toISOString(), inputs:Object.fromEntries(VAL_IN_KEYS.map(k=>[k,I[k]??""]))},null,2), "application/json");
+  toast("Saved to your downloads. Keep the file somewhere confidential.");
+}
+async function valInOpen(input){
+  const f=input.files&&input.files[0]; input.value=""; if(!f) return;
+  try{ const j=JSON.parse(await f.text()); if(!j||j.kind!=="ascot-valuation-inputs"||typeof j.inputs!=="object") throw 0;
+    S.valIn=Object.fromEntries(VAL_IN_KEYS.map(k=>[k, String(j.inputs[k]??"").slice(0,60)])); render(); toast("Figures loaded into this tab"); }
+  catch{ toast("That isn't a saved Ascot figures file."); }
+}
+
+/* ---- settings: peer groups, as-at date, forward year, precedents (Corp Dev) ---- */
+function groupsText(groups){ return groups.map(g=>[`## ${g.name} | ${g.short||g.name} | ${g.role==="primary"?"primary":"reference"}`, ...g.companies.map(c=>[c.ticker, c.label||"", ...(c.exclude?["exclude"]:[]), ...(c.exclude&&c.note?[c.note]:[])].join(" | "))].join("\n")).join("\n\n"); }
+function parseGroups(text){
+  const groups=[]; let g=null;
+  for(const raw of String(text||"").split(/\r?\n/)){ const line=raw.trim(); if(!line) continue;
+    if(line.startsWith("#")){ const [name,short,role]=line.replace(/^#+/,"").split("|").map(s=>s.trim()); if(!name) return {err:"A group heading needs a name, like: ## Bermuda (re)insurers | Bermuda | primary"};
+      g={name:name.slice(0,80), short:(short||name).slice(0,60), role:/^ref/i.test(role||"")?"reference":"primary", companies:[]}; groups.push(g); continue; }
+    if(!g) return {err:"Start with a group heading line beginning ##."};
+    const [t,label,flag,...note]=line.split("|").map(s=>s.trim()); const ticker=String(t||"").toUpperCase();
+    if(!TICKER_RE.test(ticker)) return {err:`"${t}" doesn't look like a ticker. Use letters, numbers and a colon, like LSE:HSX.`};
+    g.companies.push({ticker, label:(label||"").slice(0,60), ...(/^excl/i.test(flag||"")?{exclude:true, note:note.join(" | ").slice(0,120)}:{})}); }
+  const all=groups.flatMap(x=>x.companies.map(c=>c.ticker));
+  if(!groups.length||groups.some(x=>!x.companies.length)) return {err:"Each group needs at least one company."};
+  if(new Set(all).size>25) return {err:"List up to 25 companies in all."};
+  return {groups};
+}
+function precText(list){ return [...list].sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(p=>[fmtMonYY(p.date), p.target, p.acquirer, p.value==null?"n.a.":(+p.value).toFixed(1), precX(p.pbv,p.pbvApprox), precX(p.ptbv,p.ptbvApprox)].join(" | ")).join("\n"); }
+function parseMonth(s){ s=String(s||"").trim(); let m=s.match(/^(\d{4})-(\d{1,2})$/); if(m) return `${m[1]}-${m[2].padStart(2,"0")}`;
+  m=s.match(/^([A-Za-z]{3})[a-z]*[-\s']+(\d{2}|\d{4})$/); if(!m) return null; const mi=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].indexOf(m[1].toLowerCase()); if(mi<0) return null;
+  return `${m[2].length===2?"20"+m[2]:m[2]}-${String(mi+1).padStart(2,"0")}`; }
+function parsePrecedents(text){
+  const out=[];
+  for(const raw of String(text||"").split(/\r?\n/)){ const line=raw.trim(); if(!line) continue;
+    const p=line.split(/\s*\|\s*|\t/); if(p.length<6) return {err:`Each precedent needs six parts (date | target | acquirer | equity value $B | P/BV | P/TBV): "${line.slice(0,60)}"`};
+    const date=parseMonth(p[0]); if(!date) return {err:`"${p[0]}" isn't a month like Feb-26 or 2026-02.`};
+    out.push({date, target:p[1].slice(0,80), acquirer:p[2].slice(0,80), value:numIn(p[3]), ...multIn(p[4],"pbv"), ...multIn(p[5],"ptbv")}); }
+  if(out.length>60) return {err:"List up to 60 precedents."};
+  return {list:out};
+}
+function valSettingsHTML(){
+  const cfg=valCfg(), y=+(cfg.asOf||TODAY()).slice(0,4);
+  return `<div class="drawer-h"><div style="flex:1;min-width:0"><div class="kicker">Valuation</div><h2 id="drTitle">Peers, date and precedents</h2></div><button class="btn ghost" data-act="close" aria-label="Close">Close</button></div>
+  <form class="drawer-b" id="valForm" novalidate>
+    <div class="fgrid"><label class="f">As-at date <em>(blank = latest)</em><input type="date" id="vs_asof" value="${esc(cfg.asOf)}" max="${TODAY()}"></label>
+      <label class="f">Forward fiscal year<select id="vs_fy">${[y,y+1].map(v=>`<option value="${v}"${v===cfg.fy?" selected":""}>${v} (P/E ${v-1}E/A and ${v}F)</option>`).join("")}</select></label></div>
+    <label class="f full">Peer groups <em>(a heading line "## Name | Short name | primary or reference", then one company a line: "Ticker | Label", adding "| exclude | reason" to show it but leave it out of the means; up to 25 companies)</em><textarea id="vs_groups" rows="16" spellcheck="false">${esc(groupsText(cfg.groups))}</textarea></label>
+    <label class="f full">Precedent transactions <em>(one a line: "Date | Target | Acquirer | Equity value $B | P/BV | P/TBV", e.g. "Feb-26 | Target | Buyer | 1.2 | 1.40x | ~1.55x"; n.a. where not known)</em><textarea id="vs_prec" rows="12" spellcheck="false">${esc(precText(cfg.precedents))}</textarea></label>
+    <p class="t2" style="margin:0">Only public information goes here. Ascot's own figures stay on the Valuation tab, in your browser tab.</p>
+    ${S.settingsMissing?`<p class="over" style="margin:0">Saving needs the settings table: run supabase/migrations/0004_settings.sql in Supabase first.</p>`:""}
+  </form>
+  <div class="drawer-f"><button type="button" class="btn ghost" data-act="val-defaults">Reset to defaults</button><span class="sp"></span><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="val-save">Save</button></div>`;
+}
+async function saveValSettings(){
+  const g=parseGroups(val("vs_groups")); if(g.err){ toast(g.err); return; }
+  const p=parsePrecedents(val("vs_prec")); if(p.err){ toast(p.err); return; }
+  const asOf=val("vs_asof"); if(asOf && (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)||asOf>TODAY())){ toast("The as-at date can't be in the future."); return; }
+  const y=+(asOf||TODAY()).slice(0,4); let fy=+val("vs_fy"); if(fy!==y&&fy!==y+1) fy=y;
+  const doc={asOf, fy, groups:g.groups, precedents:p.list, updatedAt:Date.now(), updatedBy:S.meId||"", updatedByName:S.session?.name||""};
+  const {error}=await S.sb.from("settings").upsert({id:"valuation", doc});
+  if(error){ toast(/settings|PGRST205|42P01/i.test(String(error.code||"")+String(error.message||"")) ? "Run supabase/migrations/0004_settings.sql in Supabase first, then save again." : "Couldn't save: "+(error.message||"try again")); return; }
+  const changed=!sameList(valTickers(valCfg()), valTickers({groups:g.groups})) || asOf!==valCfg().asOf || fy!==valCfg().fy;
+  toast("Saved"); closeDrawer(); await loadSettings();
+  if(changed){ S.valuation=null; S.valuationCache={}; S.valForce=true; }
+  render();
+}
+
+/* ---- slides: the five exhibits as four 16:9 slides in Ascot house style ---- */
+async function exportValuationPack(){
+  toast("Building the slides…");
+  if(!window.PptxGenJS) await loadScript(PPTX_SRC);
+  const cfg=valCfg(), d=S.valuation&&S.valuation.data, A=ascotCalc(), fy=valFY();
+  const C={navy:"262166",mag:"EB008C",grey:"666666",grid:"D9DCE6",white:"FFFFFF",band:"DCEBFA",all:"FBE8D3",ascot:"FFF6B3",prev:"E6E6E6",red:"E00000",excl:"F0F0F0"}, F="Arial";
+  const pptx=new window.PptxGenJS(); pptx.layout="LAYOUT_WIDE"; pptx.author=S.session?.name||"Corp Dev"; pptx.title="Ascot Group valuation exhibits";
+  const yr=new Date().getFullYear();
+  const stripe=[C.navy,"944599",C.mag,"0081C3","00539E","00857C"].map((c,i)=>({rect:{x:i*13.333/6,y:0,w:13.333/6+0.01,h:0.09,fill:{color:c},line:{color:c}}}));
+  pptx.defineSlideMaster({title:"VAL",background:{color:C.white},objects:[...stripe,{text:{text:yr+" Ascot Group | Confidential",options:{x:0.52,y:7.02,w:5,h:0.3,fontFace:F,fontSize:10,color:C.grey}}}],
+    slideNumber:{x:12.3,y:7.02,w:0.5,h:0.3,fontFace:F,fontSize:10,color:C.grey,align:"right"}});
+  const slide=(t)=>{ const sl=pptx.addSlide({masterName:"VAL"}); sl.addText(t,{x:0.52,y:0.3,w:10.4,h:0.75,fontFace:F,fontSize:26,color:C.mag,valign:"middle",margin:0});
+    sl.addText("Draft, subject to finalization",{x:10.6,y:0.3,w:2.2,h:0.75,fontFace:F,fontSize:12,bold:true,color:C.red,align:"right",valign:"middle",margin:0}); return sl; };
+  const src=(sl,t)=>sl.addText(t,{x:0.52,y:6.55,w:12.28,h:0.42,fontFace:F,fontSize:8,italic:true,color:C.grey,margin:0,valign:"bottom"});
+  const tbl=(sl,rows,o)=>sl.addTable(rows,{fontFace:F,fontSize:9,color:C.navy,border:{type:"solid",pt:0.5,color:C.grid},margin:[2,4,2,4],autoPage:false,...o});
+  const H=(t,num)=>({text:t,options:{bold:true,color:C.white,fill:{color:C.navy},align:num?"right":"left",valign:"bottom"}});
+  const cell=(t,o={})=>({text:String(t),options:{align:"right",...o}});
+
+  // 1. Trading comparables
+  let sl=slide("Trading comparables");
+  const head=[H(d?`As at ${fmtLong(d.asOf)} (US$M unless noted)`:"US$M unless noted"),H("Market cap",1),H("P/BV",1),H("P/TBV",1),H(`P/E ${fy-1}E/A`,1),H(`P/E ${fy}F`,1),H(`Return on BV ${fy}F`,1),H(`Return on TBV ${fy}F`,1),H("LTM debt to capital",1),H(`Combined ratio ${fy-2}A`,1),H(`Combined ratio ${fy-1}A`,1)];
+  const rows=[head];
+  const vals=(r,cap)=>[cap,fmtX(r.pbv),fmtX(r.ptbv),fmtX(r.pePrior,1),fmtX(r.peFwd,1),fmtP(r.robv),fmtP(r.rotbv),fmtP(r.debtToCap),fmtP(r.cr1),fmtP(r.cr2)];
+  const stat=(label,st,fill)=>["mean","median"].map(k=>[{text:`${k==="mean"?"Mean":"Median"} - ${label}`,options:{bold:true,fill:{color:fill}}},{text:"",options:{fill:{color:fill}}},...VAL_FIELDS.map(f=>cell(["pbv","ptbv","pePrior","peFwd"].includes(f)?fmtX(st[k][f],f.startsWith("pe")?1:2):fmtP(st[k][f]),{bold:true,fill:{color:fill}}))]);
+  if(d){ const G=valGroups(d,cfg);
+    const grp=x=>{ rows.push([{text:x.g.name+(x.g.role==="reference"?" (reference)":""),options:{colspan:11,bold:true,underline:true}}]);
+      for(const {c,r} of x.rows){ const o=c.exclude?{fill:{color:C.excl},color:C.grey,italic:true}:{}; rows.push([{text:(c.label||(r&&r.name)||c.ticker)+(c.exclude?" (excluded)":""),options:o}, ...vals(r||{}, r?fmtM(r.marketCap):"n/d").map(v=>cell(v,o))]); }
+      rows.push(...stat(x.g.name+exclSuffix(x.g.companies), x.st, C.band)); };
+    G.groups.filter(x=>x.g.role==="primary").forEach(grp);
+    if(G.primary) rows.push(...stat(G.primary.label, G.primary.st, C.all));
+    G.groups.filter(x=>x.g.role!=="primary").forEach(grp); }
+  if(A.any){ const o={bold:true,italic:true,fill:{color:C.ascot}};
+    rows.push([{text:`${A.valDate||"Ascot"} valuation`,options:o}, ...vals(A, A.val==null?"n/d":fmtUSD(A.val)).map(v=>cell(v,o))]);
+    if(A.prevVal!=null||A.prevPtbv!=null){ const p={italic:true,fill:{color:C.prev}}; rows.push([{text:`Ref: ${A.prevDate||"previous"} valuation`,options:{...p,bold:true}},cell(A.prevVal==null?"n/d":fmtUSD(A.prevVal),p),cell(fmtX(A.prevPbv),p),cell(fmtX(A.prevPtbv),p),{text:"",options:{colspan:7}}]); } }
+  if(rows.length===1) rows.push([{text:"The peers appear once Kensho answers.",options:{colspan:11}}]);
+  const fs=rows.length>34?7:rows.length>28?8:9;
+  tbl(sl,rows,{x:0.52,y:1.15,w:12.28,colW:[3.18,0.95,0.8,0.8,0.9,0.9,0.95,0.95,0.95,0.95,0.95],fontSize:fs,rowH:Math.min(0.24,5.3/rows.length)});
+  src(sl,`Source: ${d?`S&P Global Capital IQ via Kensho as at ${fmtLong(d.asOf)}; London market caps in US$ at the ECB rate`:"S&P Global Capital IQ via Kensho"}. P/E ${fy}F and returns on consensus net income; returns on latest BV and TBV; combined ratio = operating expenses excl. non-insurance / net premiums earned; debt to capital = debt / (debt + total equity) (derived). Means and medians exclude companies marked excluded.${A.any?" Ascot: internal figures.":""}`);
+
+  // 2. Historical P/TBV
+  sl=slide("Trading comparables (cont'd): historical P/TBV");
+  const series=d?valGroupSeries(d,cfg):[];
+  if(d && series.length && d.history.dates.length>1){
+    const idx=[]; let last=""; d.history.dates.forEach((dt,i)=>{ const wk=Math.floor(Date.parse(dt)/604800000); if(String(wk)!==last||i===d.history.dates.length-1){ if(String(wk)===last) idx.pop(); idx.push(i); last=String(wk); } });
+    sl.addChart(pptx.ChartType.line, series.map(s=>({name:groupShort(s.g), labels:idx.map(i=>d.history.dates[i]), values:idx.map(i=>s.vals[i]==null?null:Math.round(s.vals[i]*100)/100)})),
+      {x:0.52,y:1.2,w:8.6,h:5.2,chartColors:series.map(s=>s.color.slice(1)),lineSize:1.5,lineDataSymbol:"none",showLegend:true,legendPos:"b",legendFontFace:F,legendFontSize:10,legendColor:C.navy,
+       catAxisLabelFontFace:F,catAxisLabelFontSize:9,catAxisLabelColor:C.navy,catAxisLabelFrequency:52,catAxisLineShow:true,valAxisLabelFontFace:F,valAxisLabelFontSize:9,valAxisLabelColor:C.navy,valAxisLabelFormatCode:'0.00"x"',valAxisMinVal:0,valGridLine:{color:C.grid,size:0.5},catGridLine:{style:"none"}});
+    const av=valAverages(d,series);
+    tbl(sl,[[H(""),...series.map(s=>({text:groupShort(s.g),options:{bold:true,color:C.white,fill:{color:s.color.slice(1)},align:"right",valign:"bottom"}}))],
+      ...av.map(a=>[{text:`${a.w}-year avg`},...a.vals.map(v=>cell(fmtX(v)))]),[{text:`As at ${fmtLong(d.asOf)}`,options:{bold:true}},...series.map(s=>cell(fmtX(lastVal(s.vals)),{bold:true}))]],
+      {x:9.3,y:1.3,w:3.5,colW:[1.1,...series.map(()=>2.4/series.length)],fontSize:9});
+  } else sl.addText("The chart appears once Kensho answers.",{x:0.52,y:1.3,w:12,h:0.4,fontFace:F,fontSize:12,color:C.navy});
+  src(sl,"Source: S&P Global Capital IQ via Kensho. Daily average of each group's P/TBV (market cap / latest public tangible book value, counted 45 days after period end), excluding companies marked excluded; London market caps in US$ at each day's ECB rate (derived). Chart shows one point a week.");
+
+  // 3. Precedent transactions
+  sl=slide("Precedent transactions");
+  const pl=[...cfg.precedents].sort((a,b)=>String(b.date).localeCompare(String(a.date))), ps=precStats(pl);
+  const prow=[[H("Date"),H("Target"),H("Acquirer"),H("Equity value ($B)",1),H("Price / BV",1),H("Price / TBV",1)],
+    ...pl.map(p=>[{text:fmtMonYY(p.date)},{text:p.target},{text:p.acquirer},cell(p.value==null?"n.a.":(+p.value).toFixed(1)),cell(precX(p.pbv,p.pbvApprox)),cell(precX(p.ptbv,p.ptbvApprox))]),
+    ...[["Mean","mean"],["Median","median"]].map(([l,k])=>[{text:l,options:{bold:true,colspan:4,fill:{color:C.band}}},cell(fmtX(ps.pbv[k]),{bold:true,fill:{color:C.band}}),cell(fmtX(ps.ptbv[k]),{bold:true,fill:{color:C.band}})])];
+  tbl(sl,prow,{x:2.2,y:1.15,w:9.0,colW:[0.9,2.6,2.6,1.1,0.9,0.9],fontSize:pl.length>20?8:10,rowH:Math.min(0.26,5.2/prow.length)});
+  src(sl,"Sources: CapIQ, press releases, and rumored acquisition multiples that are not officially disclosed. \"~\" marks an approximate multiple.");
+
+  // 4. Valuation approach and Ascot Group valuation
+  sl=slide("Ascot Group valuation");
+  const {lines,notes}=valApproachLines(d,cfg);
+  const runs=lines.flatMap((l,i)=>{ const lvl=l.lvl||0, o={bullet:lvl===0?true:lvl===1?{characterCode:"25CB"}:{characterCode:"2013"},indentLevel:lvl,breakLine:i<lines.length-1,paraSpaceAfter:4};
+    if(l.lead) return [{text:l.lead,options:{...o,breakLine:false,underline:true}},{text:l.t.slice(l.lead.length),options:o}];
+    return [{text:l.t,options:{...o,underline:!!l.u}}]; });
+  sl.addText("Valuation approach",{x:0.52,y:1.15,w:7.6,h:0.32,fontFace:F,fontSize:13,bold:true,color:C.navy,margin:0});
+  sl.addText(runs,{x:0.52,y:1.5,w:7.6,h:4.8,fontFace:F,fontSize:11,color:C.navy,valign:"top",margin:0});
+  if(A.any){ const sr=valSummaryRows().filter(r=>r.l||r.v);
+    tbl(sl,[[{text:"Ascot Group valuation (US$M, unless indicated otherwise)",options:{colspan:2,bold:true,color:C.white,fill:{color:"000000"}}}],
+      ...sr.map(r=>{ const o=r.cls==="key"?{bold:true,fill:{color:C.band}}:r.cls==="wu"?{bold:true,fill:{color:C.ascot}}:r.cls==="head"?{bold:true,underline:true}:{}; return [{text:r.l,options:o},cell(r.v,o)]; })],
+      {x:8.4,y:1.15,w:4.4,colW:[3.3,1.1],fontSize:9});
+  } else sl.addText("Type Ascot's figures on the Valuation tab to fill in the valuation summary.",{x:8.4,y:1.15,w:4.4,h:0.6,fontFace:F,fontSize:11,color:C.grey});
+  src(sl,[...notes,"Ascot figures: internal, as typed in on the Valuation tab. Peer multiples: S&P Global Capital IQ via Kensho; precedents: CapIQ, press releases and press reports."].join(" "));
+
+  await pptx.writeFile({fileName:`Ascot-valuation-exhibits-${TODAY()}.pptx`});
+  toast("Slides downloaded");
+}
+
 /* ---------- team: who is working on which deal ----------
    A person is on a deal as Lead (the deal's lead names them) or Team (ticked under Deal team). */
 function teamMembers(){
@@ -1601,6 +2118,7 @@ function renderDrawer(){
   else if(dr.kind==="deal") body=dealFormHTML(dr);
   else if(dr.kind==="import") body=importHTML();
   else if(dr.kind==="comps-settings") body=compsSettingsHTML();
+  else if(dr.kind==="val-settings") body=valSettingsHTML();
   else if(dr.kind==="copilot") body=copilotHTML(dr);
   else body=bankerFormHTML(dr);
   // The read-only deal drawer is rebuilt when data changes: keep the scroll position, anything half-typed
@@ -3041,6 +3559,15 @@ document.addEventListener("click", async e=>{
     case "comps-settings": if(!canEditNow()) return; S.lastFocusEl=t; S.drawer={kind:"comps-settings"}; renderDrawer(); break;
     case "comps-save": t.disabled=true; await saveCompsSettings(); if(t.isConnected) t.disabled=false; break;
     case "csort": setSort("c",t.dataset.k); break;
+    case "val-refresh": loadValuation(true); render(); break;
+    case "val-settings": if(!canEditNow()) return; S.lastFocusEl=t; S.drawer={kind:"val-settings"}; renderDrawer(); break;
+    case "val-save": if(!canEditNow()) return; t.disabled=true; await saveValSettings(); if(t.isConnected) t.disabled=false; break;
+    case "val-defaults": { const a=document.getElementById("vs_groups"), b=document.getElementById("vs_prec"); if(a) a.value=groupsText(VAL_DEFAULT_GROUPS); if(b) b.value=precText(VAL_DEFAULT_PRECEDENTS); break; }
+    case "val-pptx": t.disabled=true; try{ await exportValuationPack(); }catch(err){ toast("Couldn't build the slides: "+((err&&err.message)||"unknown error")); } if(t.isConnected) t.disabled=false; break;
+    case "val-csv": valCSV(); break;
+    case "vi-save": valInSave(); break;
+    case "vi-open": document.getElementById("vi_file")?.click(); break;
+    case "vi-clear": S.valIn={}; render(); toast("Ascot figures cleared from this tab"); break;
     case "team-closed": S.teamClosed=!S.teamClosed; render(); document.querySelector('[data-act="team-closed"]')?.focus(); break;
     case "bmode": setBankerMode(t.dataset.v); render(); document.querySelector(`[data-act="bmode"][data-v="${bankerMode()}"]`)?.focus(); break;
     case "lg-side": S.lgSide=t.dataset.v; S.lgOpen=null; render(); document.querySelector(`[data-act="lg-side"][data-v="${t.dataset.v}"]`)?.focus(); break;
@@ -3085,7 +3612,13 @@ document.addEventListener("click", async e=>{
     case "p-discard": S.proposals[id].status="discarded"; renderAI(); break;
   }
 });
+/* Valuation chart: crosshair and one tooltip for every group, by pointer or arrow keys */
+document.addEventListener("pointermove", e=>{ const c=e.target.closest&&e.target.closest("#valChart"); if(c) valHover(valIdxAt(e.clientX)); else if(S.valIdx!=null) valHover(null); });
+document.addEventListener("focusout", e=>{ if(e.target.closest&&e.target.closest("#valChart")) valHover(null); });
 document.addEventListener("keydown", e=>{
+  if(e.target.closest && e.target.closest("#valChart") && ["ArrowLeft","ArrowRight","Home","End","Escape"].includes(e.key)){ e.preventDefault();
+    const n=((S.valuation&&S.valuation.data&&S.valuation.data.history.dates)||[]).length;
+    if(e.key==="Escape") valHover(null); else valHover(e.key==="Home"?0:e.key==="End"?n-1:(S.valIdx??n-1)+(e.key==="ArrowLeft"?-5:5)); return; }
   if(e.target.id==="cc_input" && e.key==="Enter" && !e.shiftKey && !e.isComposing){ e.preventDefault(); document.querySelector('button[data-act="cc-send"]')?.click(); return; }
   if(e.key==="Tab" && S.drawer){
     const d=document.querySelector("#drawerRoot .drawer"); const ai=document.querySelector("#aiRoot .ai"), cp=document.querySelector("#cpRoot .ai");
@@ -3109,6 +3642,7 @@ document.addEventListener("submit", e=>{ e.preventDefault();
   if(e.target.id==="aiForm"){ const i=document.getElementById("aiInput"); const v=i.value; i.value=""; askAI(v); return; }
   if(e.target.id==="cpForm") cpSubmit(); });
 document.addEventListener("input", e=>{
+  if(e.target.dataset && e.target.dataset.vi){ S.valIn=S.valIn||{}; S.valIn[e.target.dataset.vi]=e.target.value.slice(0,60); const o=document.getElementById("valOut"); if(o) o.innerHTML=valOutHTML(); return; }
   if(["f_ev","f_equity","f_netIncome"].includes(e.target.id)){ const el=document.getElementById("f_multiples"); if(el) el.textContent=multiplesLine({ev:val("f_ev"),equity:val("f_equity"),netIncome:val("f_netIncome")}); }
   if(e.target.id==="b_email"){ const el=document.getElementById("mailTo"); const v=e.target.value.trim(); if(el) el.innerHTML = isEmail(v) ? `To: <a href="mailto:${esc(v)}">${esc(v)}</a>` : `<span class="t2">No email address yet. Add it under Contact above, then write here.</span>`; }
   if(e.target.id==="q"){ S.q=e.target.value; const pos=e.target.selectionStart; render(); const n=document.getElementById("q"); n.focus(); n.setSelectionRange(pos,pos); }
@@ -3116,6 +3650,7 @@ document.addEventListener("input", e=>{
 });
 document.addEventListener("change", e=>{
   if(e.target.id==="im_file"){ importFile(e.target); return; }
+  if(e.target.id==="vi_file"){ valInOpen(e.target); return; }
   if(e.target.id==="cpWeb"){ S.cp.web=e.target.checked; return; }
   if(e.target.matches && e.target.matches("input[data-imi]")){ const p=S.drawer&&S.drawer.im&&S.drawer.im.people[+e.target.dataset.imi]; if(p){ p.take=e.target.checked; renderImportPreview(); } return; }
   if(e.target.id==="chgDays"){ S.chgDays=+e.target.value; S.changes=null; render(); document.getElementById("chgDays")?.focus(); return; }
@@ -3223,7 +3758,7 @@ async function doLogin(){
 async function signOut(){
   try{ await S.sb.auth.signOut(); }catch{}
   stopData(); S.session=null; S.drawer=null; S.ai.open=false; S.ai.msgs=[]; S.ai.api=[]; S.sample=null;
-  if(S.cp.ctrl) S.cp.ctrl.abort(); if(S.cp.cancelSignIn) S.cp.cancelSignIn(); S.cp=cpFresh(); S.tc=tcFresh(); if(S.cc&&S.cc.ctrl) S.cc.ctrl.abort(); S.cc=null; S.league=null; S.leagueCache=null; S.leagueDefault=null; S.lgEdit=false; S.lgOpen=null; S.comps=null; S.compsCache=null; S.storeMissing=false;
+  if(S.cp.ctrl) S.cp.ctrl.abort(); if(S.cp.cancelSignIn) S.cp.cancelSignIn(); S.cp=cpFresh(); S.tc=tcFresh(); if(S.cc&&S.cc.ctrl) S.cc.ctrl.abort(); S.cc=null; S.league=null; S.leagueCache=null; S.leagueDefault=null; S.lgEdit=false; S.lgOpen=null; S.comps=null; S.compsCache=null; S.storeMissing=false; S.valIn={}; S.valuation=null; S.valuationCache=null; S.valIdx=null;
   document.getElementById("whoDot").hidden=true; history.replaceState(null,"",location.pathname); render();
 }
 function loginHTML(){
